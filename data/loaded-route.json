@@ -1,0 +1,152 @@
+{
+  "type": "route-state",
+  "routeName": "Guam_to_Pearl_Harbor_Storm_Avoidance_9_5kt",
+  "waypoints": [
+    {
+      "id": "1",
+      "name": "Victor P",
+      "lat": 13.42255,
+      "lon": 144.6653
+    },
+    {
+      "id": "2",
+      "name": "Outbound",
+      "lat": 13.4249,
+      "lon": 144.6667
+    },
+    {
+      "id": "3",
+      "name": "Harbor G",
+      "lat": 13.444467,
+      "lon": 144.665517
+    },
+    {
+      "id": "4",
+      "name": "Apra Out",
+      "lat": 13.455433,
+      "lon": 144.65645
+    },
+    {
+      "id": "5",
+      "name": "Pihlippi",
+      "lat": 13.450467,
+      "lon": 144.611233
+    },
+    {
+      "id": "6",
+      "name": "SE Dog L",
+      "lat": 13.447117,
+      "lon": 144.583867
+    },
+    {
+      "id": "7",
+      "name": "Waypoint 7",
+      "lat": 13.359967,
+      "lon": 144.5068
+    },
+    {
+      "id": "8",
+      "name": "Waypoint 8",
+      "lat": 13.2062,
+      "lon": 144.514483
+    },
+    {
+      "id": "9",
+      "name": "Discharg",
+      "lat": 13.09005,
+      "lon": 144.86195
+    },
+    {
+      "id": "10",
+      "name": "Waypoint 10",
+      "lat": 11.194217,
+      "lon": 149.847317
+    },
+    {
+      "id": "11",
+      "name": "Waypoint 11",
+      "lat": 11.014683,
+      "lon": 156.845217
+    },
+    {
+      "id": "12",
+      "name": "Waypoint 12",
+      "lat": 13.432817,
+      "lon": 160
+    },
+    {
+      "id": "13",
+      "name": "Waypoint 13",
+      "lat": 13.683367,
+      "lon": 165
+    },
+    {
+      "id": "14",
+      "name": "Waypoint 14",
+      "lat": 13.8988,
+      "lon": 169.299033
+    },
+    {
+      "id": "15",
+      "name": "Waypoint 15",
+      "lat": 14.286583,
+      "lon": 175
+    },
+    {
+      "id": "16",
+      "name": "Waypoint 16",
+      "lat": 14.626683,
+      "lon": 180
+    },
+    {
+      "id": "17",
+      "name": "Waypoint 17",
+      "lat": 14.9668,
+      "lon": -175
+    },
+    {
+      "id": "18",
+      "name": "Waypoint 18",
+      "lat": 15.3069,
+      "lon": -170
+    },
+    {
+      "id": "19",
+      "name": "Waypoint 19",
+      "lat": 15.570833,
+      "lon": -164.119933
+    },
+    {
+      "id": "20",
+      "name": "Waypoint 20",
+      "lat": 20.858167,
+      "lon": -158.434133
+    },
+    {
+      "id": "21",
+      "name": "No Disch",
+      "lat": 21.10085,
+      "lon": -158.143033
+    },
+    {
+      "id": "22",
+      "name": "Waypoint 22",
+      "lat": 21.268633,
+      "lon": -157.940083
+    },
+    {
+      "id": "23",
+      "name": "Waypoint 23",
+      "lat": 21.32215,
+      "lon": -157.96865
+    },
+    {
+      "id": "24",
+      "name": "Waypoint 24",
+      "lat": 21.32835,
+      "lon": -157.9679
+    }
+  ],
+  "activeWaypointIndex": 9,
+  "savedAt": "2026-08-18T06:20:26.257Z"
+}
