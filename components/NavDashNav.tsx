@@ -29,7 +29,6 @@ const navGroups: NavGroup[] = [
     label: "Weather",
     items: [
       { label: "Weather", href: "/wx" },
-      { label: "Weather Map", href: "/wx-map" },
       { label: "WX Routing", href: "/wx-routing" },
       { label: "Official Weather", href: "/official-weather" },
     ],
@@ -39,7 +38,6 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Position Report", href: "/position-report" },
       { label: "Nav Brief", href: "/nav-brief" },
-      { label: "Deck Log", href: "/deck-log" },
     ],
   },
   {

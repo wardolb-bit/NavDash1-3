@@ -5,7 +5,7 @@ import { NavDashNav } from '../components/NavDashNav';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
-  description: 'M/V MB480 navigation dashboard with AIS, route, weather, deck log, and watch tools.',
+  description: 'M/V MB480 navigation dashboard with AIS, route, weather, and watch tools.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

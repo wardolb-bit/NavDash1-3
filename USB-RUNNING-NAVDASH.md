@@ -41,7 +41,6 @@ The important shared files are:
 
 ```text
 NavDash\data\loaded-route.json
-NavDash\data\deck-log.json
 ```
 
 ## Start NavDash

@@ -30,17 +30,6 @@ type AisTarget = {
   lastSeen: number;
 };
 
-type DeckLogEntry = {
-  id: string;
-  timeUtc: string;
-  timeLocal?: string;
-  category: string;
-  text: string;
-  author: string;
-  createdAt: string;
-  queued?: boolean;
-};
-
 type FragmentBuffer = {
   total: number;
   parts: string[];
@@ -48,10 +37,8 @@ type FragmentBuffer = {
   firstSeen: number;
 };
 
-const QUEUE_KEY = "navdash-phone-deck-log-queue";
 const TARGET_STALE_MS = 10 * 60 * 1000;
 const FRAGMENT_TTL_MS = 15 * 1000;
-const DECK_LOG_CATEGORIES = ["Deck", "Cargo", "Mooring", "Gangway", "Weather", "Security", "Engineering", "Other"];
 
 function wsUrl() {
   return getAisWebSocketUrl();
@@ -235,44 +222,6 @@ function extractNmeaLine(message: any) {
   return "";
 }
 
-function readQueuedEntries() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]");
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is DeckLogEntry => typeof entry?.id === "string" && typeof entry?.text === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveQueuedEntries(entries: DeckLogEntry[]) {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(entries));
-}
-
-function mergeEntries(saved: DeckLogEntry[], queued: DeckLogEntry[]) {
-  const byId = new Map<string, DeckLogEntry>();
-  [...queued.map((entry) => ({ ...entry, queued: true })), ...saved].forEach((entry) => {
-    if (!byId.has(entry.id)) byId.set(entry.id, entry);
-  });
-  return Array.from(byId.values()).sort((a, b) => new Date(b.timeUtc).getTime() - new Date(a.timeUtc).getTime());
-}
-
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function queuedTime(date: Date) {
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())} Queued`;
-}
-
-function displayTime(entry: DeckLogEntry) {
-  if (entry.timeLocal) return entry.timeLocal;
-  const date = new Date(entry.timeUtc);
-  if (Number.isNaN(date.getTime())) return entry.timeUtc || "--";
-  return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-}
-
 function formatNumber(value?: number | null, suffix = "") {
   if (value === undefined || value === null || !Number.isFinite(value)) return "--";
   return `${value.toFixed(1)}${suffix}`;
@@ -390,15 +339,8 @@ export default function PhonePage() {
   const [connection, setConnection] = useState("Connecting");
   const [targets, setTargets] = useState<Record<number, AisTarget>>({});
   const [messageCount, setMessageCount] = useState(0);
-  const [entries, setEntries] = useState<DeckLogEntry[]>([]);
-  const [queuedEntries, setQueuedEntries] = useState<DeckLogEntry[]>([]);
-  const [logStatus, setLogStatus] = useState("Loading deck log");
-  const [category, setCategory] = useState("Deck");
-  const [author, setAuthor] = useState("Phone");
-  const [text, setText] = useState("");
-  const [activeTab, setActiveTab] = useState<"status" | "log" | "ais">("status");
+  const [activeTab, setActiveTab] = useState<"status" | "ais">("status");
   const fragments = useRef<Map<string, FragmentBuffer>>(new Map());
-  const syncing = useRef(false);
 
   const targetList = useMemo(
     () =>
@@ -420,103 +362,6 @@ export default function PhonePage() {
     return `${route.waypoints[endIndex - 1].id} to ${route.waypoints[endIndex].id}`;
   }, [route, ownShip]);
 
-  function storeQueue(nextQueue: DeckLogEntry[]) {
-    saveQueuedEntries(nextQueue);
-    setQueuedEntries(nextQueue);
-  }
-
-  async function postEntry(entry: DeckLogEntry) {
-    const response = await fetch("/api/deck-log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...entry, queued: undefined }),
-    });
-    if (!response.ok) throw new Error(`Deck log API returned ${response.status}`);
-    return response.json();
-  }
-
-  async function syncQueue() {
-    if (syncing.current) return;
-    const queue = readQueuedEntries();
-    if (!queue.length) return;
-
-    syncing.current = true;
-    setLogStatus(`Syncing ${queue.length} queued`);
-
-    try {
-      let latest: DeckLogEntry[] = [];
-      const synced = new Set<string>();
-      for (const entry of queue) {
-        const data = await postEntry(entry);
-        synced.add(entry.id);
-        if (Array.isArray(data?.entries)) latest = data.entries;
-      }
-      const remaining = queue.filter((entry) => !synced.has(entry.id));
-      storeQueue(remaining);
-      setEntries(mergeEntries(latest, remaining));
-      setLogStatus(remaining.length ? `${remaining.length} still queued` : "Queued entries synced");
-    } catch {
-      setLogStatus(`${queue.length} queued offline`);
-    } finally {
-      syncing.current = false;
-    }
-  }
-
-  async function loadDeckLog() {
-    try {
-      setLogStatus("Loading deck log");
-      const response = await fetch("/api/deck-log", { cache: "no-store" });
-      if (!response.ok) throw new Error(`Deck log API returned ${response.status}`);
-      const data = await response.json();
-      const queue = readQueuedEntries();
-      setQueuedEntries(queue);
-      setEntries(mergeEntries(Array.isArray(data?.entries) ? data.entries : [], queue));
-      setLogStatus(queue.length ? `${queue.length} queued` : "Deck log loaded");
-      syncQueue();
-    } catch {
-      const queue = readQueuedEntries();
-      setQueuedEntries(queue);
-      setEntries((current) => mergeEntries(current.filter((entry) => !entry.queued), queue));
-      setLogStatus(queue.length ? `${queue.length} queued offline` : "Deck log unavailable");
-    }
-  }
-
-  async function addEntry() {
-    if (!text.trim()) return;
-    const now = new Date();
-    const entry: DeckLogEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      timeUtc: now.toISOString(),
-      timeLocal: queuedTime(now),
-      category,
-      text: text.trim(),
-      author: author.trim() || "Phone",
-      createdAt: now.toISOString(),
-    };
-
-    try {
-      setLogStatus("Saving entry");
-      const data = await postEntry(entry);
-      setEntries(Array.isArray(data?.entries) ? data.entries : [entry, ...entries]);
-      setText("");
-      setLogStatus("Entry saved");
-    } catch {
-      const queue = mergeEntries([], [entry, ...readQueuedEntries()]).filter((item) => item.queued);
-      storeQueue(queue);
-      setEntries((current) => mergeEntries(current.filter((item) => !item.queued), queue));
-      setText("");
-      setLogStatus(`${queue.length} queued offline`);
-    }
-  }
-
-  function removeQueuedEntry(id: string) {
-    const queue = readQueuedEntries();
-    const remaining = queue.filter((entry) => entry.id !== id);
-    storeQueue(remaining);
-    setEntries((current) => current.filter((entry) => entry.id !== id));
-    setLogStatus(remaining.length ? `${remaining.length} still queued` : "Queued entry removed");
-  }
-
   useEffect(() => {
     fetch("/api/route-state", { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
@@ -527,14 +372,9 @@ export default function PhonePage() {
       })
       .catch(() => setRouteStatus("Route unavailable"));
 
-    loadDeckLog();
-
     let closed = false;
     const ws = new WebSocket(wsUrl());
-    ws.onopen = () => {
-      setConnection("Connected");
-      syncQueue();
-    };
+    ws.onopen = () => setConnection("Connected");
     ws.onerror = () => setConnection("AIS error");
     ws.onclose = () => {
       if (!closed) setConnection("Disconnected");
@@ -579,13 +419,9 @@ export default function PhonePage() {
       });
     };
 
-    const handleOnline = () => syncQueue();
-    window.addEventListener("online", handleOnline);
-
     return () => {
       closed = true;
       ws.close();
-      window.removeEventListener("online", handleOnline);
     };
   }, []);
 
@@ -604,22 +440,20 @@ export default function PhonePage() {
           </div>
         </header>
 
-        <section className="mb-3 grid grid-cols-3 gap-2">
+        <section className="mb-3 grid grid-cols-2 gap-2">
           <PhoneStat label="AIS" value={connection} />
           <PhoneStat label="Route" value={route ? "Loaded" : "None"} />
-          <PhoneStat label="Log" value={queuedEntries.length ? `${queuedEntries.length} queued` : "Ready"} />
         </section>
 
-        <nav className="sticky top-0 z-10 mb-3 grid grid-cols-3 gap-2 bg-[#071019]/95 py-2 backdrop-blur">
+        <nav className="sticky top-0 z-10 mb-3 grid grid-cols-2 gap-2 bg-[#071019]/95 py-2 backdrop-blur">
           {[
             ["status", "Status"],
-            ["log", "Deck Log"],
             ["ais", "AIS"],
           ].map(([key, label]) => (
             <button
               key={key}
               type="button"
-              onClick={() => setActiveTab(key as "status" | "log" | "ais")}
+              onClick={() => setActiveTab(key as "status" | "ais")}
               className={activeTab === key ? "rounded-xl bg-[#c9a227] px-3 py-3 text-sm font-black text-[#111827]" : "rounded-xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}
             >
               {label}
@@ -646,58 +480,6 @@ export default function PhonePage() {
               </div>
             </PhoneCard>
 
-            <PhoneCard title="Quick Deck Log">
-              <QuickLogForm
-                category={category}
-                author={author}
-                text={text}
-                logStatus={logStatus}
-                onCategory={setCategory}
-                onAuthor={setAuthor}
-                onText={setText}
-                onAdd={addEntry}
-              />
-            </PhoneCard>
-          </section>
-        )}
-
-        {activeTab === "log" && (
-          <section className="grid gap-3">
-            <PhoneCard title="New Entry">
-              <QuickLogForm
-                category={category}
-                author={author}
-                text={text}
-                logStatus={logStatus}
-                onCategory={setCategory}
-                onAuthor={setAuthor}
-                onText={setText}
-                onAdd={addEntry}
-              />
-            </PhoneCard>
-
-            <PhoneCard title="Recent Entries">
-              <div className="grid gap-3">
-                {entries.slice(0, 25).map((entry) => (
-                  <article key={entry.id} className={entry.queued ? "rounded-xl border border-amber-300/30 bg-amber-300/10 p-3" : "rounded-xl border border-white/10 bg-black/20 p-3"}>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-black text-[#c9a227]">{entry.category}</div>
-                        <div className="mt-1 font-mono text-xs text-slate-400">{displayTime(entry)} / {entry.author}</div>
-                      </div>
-                      {entry.queued && (
-                        <button type="button" onClick={() => removeQueuedEntry(entry.id)} className="rounded-lg border border-red-300/30 bg-red-500/10 px-2 py-1 text-xs font-black text-red-100">
-                          Remove
-                        </button>
-                      )}
-                    </div>
-                    {entry.queued && <div className="mt-2 text-xs font-black uppercase tracking-[0.18em] text-amber-200">Pending sync</div>}
-                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-100">{entry.text}</p>
-                  </article>
-                ))}
-                {!entries.length && <div className="rounded-xl border border-white/10 bg-black/20 p-5 text-center text-sm text-slate-400">No deck log entries yet.</div>}
-              </div>
-            </PhoneCard>
           </section>
         )}
 
@@ -754,56 +536,6 @@ function Metric({ label, value, wide = false }: { label: string; value: string; 
     <div className={wide ? "col-span-2 rounded-xl border border-white/10 bg-black/20 p-3" : "rounded-xl border border-white/10 bg-black/20 p-3"}>
       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</div>
       <div className="mt-1 break-words font-mono text-sm font-black text-slate-100">{value}</div>
-    </div>
-  );
-}
-
-function QuickLogForm({
-  category,
-  author,
-  text,
-  logStatus,
-  onCategory,
-  onAuthor,
-  onText,
-  onAdd,
-}: {
-  category: string;
-  author: string;
-  text: string;
-  logStatus: string;
-  onCategory: (value: string) => void;
-  onAuthor: (value: string) => void;
-  onText: (value: string) => void;
-  onAdd: () => void;
-}) {
-  return (
-    <div className="grid gap-3">
-      <div className="grid grid-cols-2 gap-2">
-        <label className="grid gap-1">
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Category</span>
-          <select value={category} onChange={(event) => onCategory(event.target.value)} className="min-w-0 rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-base font-bold text-white">
-            {DECK_LOG_CATEGORIES.map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">Source</span>
-          <input value={author} onChange={(event) => onAuthor(event.target.value)} className="min-w-0 rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-base font-bold text-white" />
-        </label>
-      </div>
-      <textarea
-        value={text}
-        onChange={(event) => onText(event.target.value)}
-        rows={4}
-        placeholder="Deck log entry..."
-        className="min-h-[120px] resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-base font-bold leading-6 text-white placeholder:text-slate-500"
-      />
-      <button type="button" onClick={onAdd} disabled={!text.trim()} className="rounded-xl bg-[#c9a227] px-4 py-4 text-base font-black text-[#111827] disabled:opacity-40">
-        Add Entry
-      </button>
-      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-bold text-slate-300">{logStatus}</div>
     </div>
   );
 }

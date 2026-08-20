@@ -326,8 +326,6 @@ export default function WxTestPage() {
     ? "rounded-2xl bg-cyan-300 px-8 py-5 text-2xl font-black text-slate-950 shadow-lg shadow-cyan-950/20 hover:bg-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
     : "rounded-2xl bg-slate-900 px-8 py-5 text-2xl font-black text-white shadow-lg shadow-slate-900/20 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60";
 
-  const [lat, setLat] = useState("13.4443");
-  const [lon, setLon] = useState("144.7937");
   const [data, setData] = useState<WxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -372,8 +370,6 @@ export default function WxTestPage() {
           };
 
           setOwnShip(parsedOwnShip);
-          setLat(parsedLat.toFixed(6));
-          setLon(parsedLon.toFixed(6));
           return;
         }
 
@@ -389,8 +385,6 @@ export default function WxTestPage() {
 
           if (decoded?.lat !== undefined && decoded?.lon !== undefined) {
             setOwnShip(decoded);
-            setLat(decoded.lat.toFixed(6));
-            setLon(decoded.lon.toFixed(6));
           }
         }
       } catch {
@@ -402,6 +396,11 @@ export default function WxTestPage() {
   }, []);
 
   useEffect(() => {
+    if (ownShip.lat === undefined || ownShip.lon === undefined) {
+      setNextAutoRefresh(null);
+      return;
+    }
+
     const schedule = () => {
       const next = nextNoaaCycleRefresh(new Date());
       setNextAutoRefresh(next);
@@ -418,7 +417,7 @@ export default function WxTestPage() {
     }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [lat, lon]);
+  }, [ownShip.lat, ownShip.lon]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -444,10 +443,16 @@ export default function WxTestPage() {
 
 
   async function loadWx(mode: "manual" | "auto" = "manual") {
+    if (ownShip.lat === undefined || ownShip.lon === undefined) {
+      setError("Current own-ship position is not available yet. Weather refresh waits for live AIS position.");
+      setData(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/wx?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`, { cache: "no-store" });
+      const res = await fetch(`/api/wx?lat=${encodeURIComponent(ownShip.lat.toFixed(6))}&lon=${encodeURIComponent(ownShip.lon.toFixed(6))}`, { cache: "no-store" });
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
       const json = (await res.json()) as WxData;
       setData(json);
@@ -528,7 +533,7 @@ export default function WxTestPage() {
         </section>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button onClick={() => loadWx("manual")} disabled={loading} className={refreshButtonClass}>
+          <button onClick={() => loadWx("manual")} disabled={loading || ownShip.lat === undefined || ownShip.lon === undefined} className={refreshButtonClass}>
             {loading ? "Loading..." : "Refresh WX"}
           </button>
           <div className={compactPanelClass}>
