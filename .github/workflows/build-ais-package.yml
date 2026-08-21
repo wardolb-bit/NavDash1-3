@@ -1,0 +1,88 @@
+name: Build portable AIS server package
+
+on:
+  push:
+    branches:
+      - feature/vercel-wheelhouse-ais
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build portable package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $PWD 'NavDash-AIS-Server'
+          New-Item -ItemType Directory -Force -Path $root, (Join-Path $root 'node'), (Join-Path $root 'server'), (Join-Path $root 'data') | Out-Null
+
+          Copy-Item 'server/ais-server.js' (Join-Path $root 'server/ais-server.js')
+          Copy-Item (Get-Command node).Source (Join-Path $root 'node/node.exe')
+
+          Push-Location $root
+          npm init -y | Out-Null
+          npm install --omit=dev serialport@12.0.0 @serialport/parser-readline@12.0.0 ws@8.21.0
+          Pop-Location
+
+          @'
+          @echo off
+          setlocal
+          title NavDash AIS Server
+          cd /d "%~dp0"
+
+          echo ========================================
+          echo        NAVDASH AIS SERVER
+          echo ========================================
+          echo.
+          echo AIS serial port: COM4
+          echo AIS baud rate:   38400
+          echo WebSocket port:  8081
+          echo.
+
+          set "AIS_PORT=COM4"
+          set "AIS_BAUD=38400"
+          set "AIS_WS_PORT=8081"
+          set "NAVDASH_DATA_DIR=%~dp0data"
+          set "NAV_ROUTE_STATE_PATH=%~dp0data\loaded-route.json"
+          set "NAV_POSITION_HISTORY_PATH=%~dp0data\position-history.json"
+
+          "%~dp0node\node.exe" "%~dp0server\ais-server.js"
+
+          echo.
+          echo AIS server stopped.
+          pause
+          endlocal
+          '@ | Set-Content -Encoding ASCII (Join-Path $root 'START-AIS-SERVER.bat')
+
+          @'
+          NavDash AIS Server - Portable Windows Package
+
+          1. Copy this entire folder to the wheelhouse USB/computer.
+          2. Double-click START-AIS-SERVER.bat.
+          3. Default serial port is COM4 at 38400 baud.
+          4. WebSocket listens on port 8081 on all network interfaces.
+          5. Shared route file is data\loaded-route.json.
+          6. The server broadcasts AIS/NMEA plus shared route state to connected NavDash clients.
+
+          No Node installation or npm install is required on the wheelhouse computer.
+          '@ | Set-Content -Encoding UTF8 (Join-Path $root 'README.txt')
+
+          & (Join-Path $root 'node/node.exe') --check (Join-Path $root 'server/ais-server.js')
+          Push-Location $root
+          & (Join-Path $root 'node/node.exe') -e "require('serialport'); require('@serialport/parser-readline'); require('ws'); console.log('Dependency check passed')"
+          Pop-Location
+
+          Compress-Archive -Path $root -DestinationPath (Join-Path $PWD 'NavDash-AIS-Server.zip') -Force
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: NavDash-AIS-Server
+          path: NavDash-AIS-Server.zip
+          if-no-files-found: error
