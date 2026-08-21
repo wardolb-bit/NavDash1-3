@@ -9,6 +9,213 @@ html, body { height: 100%; margin: 0; background: #071019; }
 .map-glow { box-shadow: 0 0 0 1px rgba(201,162,39,.18), 0 26px 80px rgba(0,0,0,.5); }
 .no-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
 
+/* Bridge Console UI experiment: desktop-only visual treatment for the NavDash main screen. */
+@media (min-width: 1280px) {
+  .navdash-v12-day,
+  .navdash-v12-night {
+    padding: 0.75rem !important;
+  }
+
+  .navdash-v12-day > header,
+  .navdash-v12-night > header {
+    margin-bottom: 0.5rem !important;
+    border-radius: 0.85rem !important;
+    padding: 0.55rem 0.75rem !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,.18) !important;
+    backdrop-filter: blur(10px) !important;
+  }
+
+  .navdash-v12-day > header > div,
+  .navdash-v12-night > header > div {
+    gap: 0.75rem !important;
+  }
+
+  .navdash-v12-day > header .h-16.w-16,
+  .navdash-v12-night > header .h-16.w-16 {
+    width: 2.6rem !important;
+    height: 2.6rem !important;
+    border-radius: 0.6rem !important;
+    font-size: 1.1rem !important;
+  }
+
+  .navdash-v12-day > header h1,
+  .navdash-v12-night > header h1 {
+    margin-top: 0 !important;
+    font-size: 1.55rem !important;
+    line-height: 1.7rem !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  .navdash-v12-day > header h1 + div,
+  .navdash-v12-night > header h1 + div {
+    display: none !important;
+  }
+
+  .navdash-v12-day > header h1 + div + div,
+  .navdash-v12-night > header h1 + div + div {
+    margin-top: 0.15rem !important;
+    max-width: 48rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.7rem !important;
+    line-height: 1rem !important;
+    letter-spacing: 0.12em !important;
+  }
+
+  .navdash-v12-day > header label,
+  .navdash-v12-day > header button,
+  .navdash-v12-night > header label,
+  .navdash-v12-night > header button {
+    width: auto !important;
+    min-width: 7.25rem !important;
+    height: 2.35rem !important;
+    padding: 0 0.85rem !important;
+    border-radius: 0.6rem !important;
+    font-size: 0.78rem !important;
+    line-height: 1rem !important;
+    box-shadow: none !important;
+  }
+
+  .navdash-v12-day > header + div,
+  .navdash-v12-night > header + div {
+    display: flex !important;
+    grid-template-columns: none !important;
+    gap: 0.4rem !important;
+    margin-bottom: 0.5rem !important;
+  }
+
+  .navdash-v12-day > header + div > button,
+  .navdash-v12-night > header + div > button {
+    flex: 0 0 auto;
+    border-radius: 0.55rem !important;
+    padding: 0.55rem 0.8rem !important;
+    font-size: 0.76rem !important;
+    letter-spacing: 0.02em;
+  }
+
+  .navdash-v12-day > header + div + div,
+  .navdash-v12-night > header + div + div {
+    grid-template-columns: minmax(0, 1fr) 20rem !important;
+    gap: 0.65rem !important;
+    align-items: start !important;
+  }
+
+  #v12-section-chart {
+    border-radius: 0.8rem !important;
+    padding: 0.7rem !important;
+  }
+
+  #v12-section-chart > div:first-child {
+    margin-bottom: 0.5rem !important;
+    gap: 0.5rem !important;
+  }
+
+  #v12-section-chart h2 {
+    margin-top: 0 !important;
+    font-size: 1.2rem !important;
+    line-height: 1.4rem !important;
+  }
+
+  #v12-section-chart h2 + p {
+    display: none !important;
+  }
+
+  #v12-section-chart > div:first-child button {
+    border-radius: 0.55rem !important;
+    padding: 0.5rem 0.7rem !important;
+    font-size: 0.72rem !important;
+    line-height: 1rem !important;
+  }
+
+  #v12-map {
+    height: calc(100vh - 12.25rem) !important;
+    min-height: 34rem !important;
+    border-radius: 0.7rem !important;
+  }
+
+  #v12-map + div {
+    margin-top: 0.5rem !important;
+    border-radius: 0.55rem !important;
+    padding: 0.5rem 0.65rem !important;
+    font-size: 0.72rem !important;
+    line-height: 1.05rem !important;
+  }
+
+  .navdash-v12-day > header + div + div > aside,
+  .navdash-v12-night > header + div + div > aside {
+    gap: 0.6rem !important;
+  }
+
+  #v12-section-route,
+  #v12-section-route + section {
+    border-radius: 0.8rem !important;
+    padding: 0.7rem !important;
+  }
+
+  #v12-section-route .rounded-3xl,
+  #v12-section-route + section .rounded-3xl,
+  #v12-section-route .rounded-2xl,
+  #v12-section-route + section .rounded-2xl {
+    border-radius: 0.55rem !important;
+  }
+
+  #v12-section-route .p-4,
+  #v12-section-route + section .p-4 {
+    padding: 0.65rem !important;
+  }
+
+  #v12-section-route .mt-4 {
+    margin-top: 0.55rem !important;
+  }
+
+  #v12-section-route .gap-3,
+  #v12-section-route + section .gap-3 {
+    gap: 0.45rem !important;
+  }
+
+  #v12-section-route .text-xl {
+    font-size: 1.05rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  #v12-section-route .text-2xl,
+  #v12-section-route + section .text-2xl {
+    font-size: 1.55rem !important;
+    line-height: 1.7rem !important;
+  }
+
+  #v12-section-route .text-lg {
+    font-size: 0.95rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  #v12-section-route .text-xs,
+  #v12-section-route + section .text-xs {
+    font-size: 0.68rem !important;
+    line-height: 0.95rem !important;
+  }
+
+  .navdash-v12-night {
+    background: #050b11 !important;
+  }
+
+  .navdash-v12-night > header,
+  .navdash-v12-night #v12-section-chart,
+  .navdash-v12-night #v12-section-route,
+  .navdash-v12-night #v12-section-route + section {
+    background: rgba(8, 16, 24, .94) !important;
+    border-color: rgba(148, 163, 184, .18) !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.025), 0 10px 28px rgba(0,0,0,.28) !important;
+    backdrop-filter: none !important;
+  }
+
+  .navdash-v12-night #v12-section-route .bg-black\/25,
+  .navdash-v12-night #v12-section-route + section .bg-black\/25 {
+    background: rgba(3, 8, 13, .92) !important;
+  }
+}
+
 @media (max-width: 640px) {
   html, body {
     width: 100%;
