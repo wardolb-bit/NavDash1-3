@@ -5,7 +5,7 @@ import Script from 'next/script';
 import { NavDashNav } from '../components/NavDashNav';
 import { BridgeConsolePreview } from '../components/BridgeConsolePreview';
 import { BridgeQuickAccess } from '../components/BridgeQuickAccess';
-import { BridgeOwnShipUpgrade } from '../components/BridgeOwnShipUpgrade';
+import { BridgeOwnShipEnhancer } from '../components/BridgeOwnShipEnhancer';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -65,7 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <NavDashNav />
         {children}
         <BridgeConsolePreview />
-        <BridgeOwnShipUpgrade />
+        <BridgeOwnShipEnhancer />
         <BridgeQuickAccess />
       </body>
     </html>
