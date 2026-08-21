@@ -1,4 +1,5 @@
 import './globals.css';
+import './bridge-console.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { NavDashNav } from '../components/NavDashNav';
