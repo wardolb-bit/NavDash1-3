@@ -1,17 +1,36 @@
-/* NavDash bridge-console preview overrides. Scoped to the main NavDash shell. */
+/* NavDash bridge-console preview overrides. Loaded only on the UI preview branch. */
+body::before {
+  content: "BRIDGE CONSOLE PREVIEW";
+  position: fixed;
+  top: 0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  pointer-events: none;
+  padding: 0.35rem 0.8rem;
+  border: 1px solid #c9a227;
+  border-radius: 0.45rem;
+  background: #071019;
+  color: #f5d76e;
+  font: 800 0.72rem/1 system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+}
+
+.navdash-v12-day,
+.navdash-v12-night {
+  padding: 0.6rem !important;
+}
+
+.navdash-v12-day > header,
+.navdash-v12-night > header {
+  margin-bottom: 0.45rem !important;
+  padding: 0.45rem 0.65rem !important;
+  border-radius: 0.7rem !important;
+  outline: 1px solid rgba(201,162,39,.35);
+}
+
 @media (min-width: 768px) and (orientation: landscape) {
-  .navdash-v12-day,
-  .navdash-v12-night {
-    padding: 0.6rem !important;
-  }
-
-  .navdash-v12-day > header,
-  .navdash-v12-night > header {
-    margin-bottom: 0.45rem !important;
-    padding: 0.45rem 0.65rem !important;
-    border-radius: 0.7rem !important;
-  }
-
   .navdash-v12-day > header .h-16.w-16,
   .navdash-v12-night > header .h-16.w-16 {
     width: 2.4rem !important;
