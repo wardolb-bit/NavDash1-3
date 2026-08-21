@@ -3,6 +3,7 @@ import './bridge-console.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { NavDashNav } from '../components/NavDashNav';
+import { BridgeConsolePreview } from '../components/BridgeConsolePreview';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -59,6 +60,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
 
+        <BridgeConsolePreview />
         <NavDashNav />
         {children}
       </body>
