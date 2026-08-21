@@ -22,6 +22,7 @@ export function BridgeQuickAccess() {
       <Link href="/wx" className="bc-quick-link">WEATHER</Link>
       <Link href="/position-report" className="bc-quick-link">POSITION REPORT</Link>
       <Link href="/official-weather" className="bc-quick-link bc-quick-secondary">OFFICIAL WX</Link>
+      <Link href="/ecr" className="bc-quick-link bc-quick-secondary">ECR</Link>
       <button type="button" onClick={enterFullscreen} className="bc-quick-link bc-quick-secondary">FULLSCREEN</button>
     </div>
   );
