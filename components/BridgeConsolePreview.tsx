@@ -19,7 +19,41 @@ export function BridgeConsolePreview() {
   useEffect(() => {
     let attempts = 0, retryTimer = 0, syncTimer = 0, mapResizeTimer = 0;
     let mapObserver: ResizeObserver | null = null;
-    const recoverMapTiles = (_map: HTMLElement) => { window.clearTimeout(mapResizeTimer); mapResizeTimer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 180); };
+    let overlayObserver: MutationObserver | null = null;
+    let projectionVisible = true;
+    let aisVisible = true;
+
+    const recoverMapTiles = (_map: HTMLElement) => {
+      window.clearTimeout(mapResizeTimer);
+      mapResizeTimer = window.setTimeout(() => window.dispatchEvent(new Event("resize")), 180);
+    };
+
+    const applyOverlayVisibility = (map: HTMLElement) => {
+      const cyanShapes = Array.from(map.querySelectorAll<SVGElement>("path, circle"))
+        .filter((el) => (el.getAttribute("stroke") || "").toLowerCase() === "#22d3ee");
+
+      cyanShapes.forEach((el) => {
+        const dash = el.getAttribute("stroke-dasharray") || "";
+        const isProjection = dash.trim().length > 0;
+        const shouldShow = aisVisible && (!isProjection || projectionVisible);
+        el.style.display = shouldShow ? "" : "none";
+      });
+    };
+
+    const updateChartButtons = () => {
+      const projectionButton = document.getElementById("bc-chart-projection");
+      const aisButton = document.getElementById("bc-chart-ais");
+      if (projectionButton) {
+        projectionButton.textContent = `PROJECTION ${projectionVisible ? "ON" : "OFF"}`;
+        projectionButton.style.color = projectionVisible ? "#e7c95c" : "#8294a5";
+        projectionButton.style.borderColor = projectionVisible ? "rgba(201,162,39,.6)" : "rgba(148,163,184,.25)";
+      }
+      if (aisButton) {
+        aisButton.textContent = `AIS ${aisVisible ? "ON" : "OFF"}`;
+        aisButton.style.color = aisVisible ? "#42d3c8" : "#8294a5";
+        aisButton.style.borderColor = aisVisible ? "rgba(66,211,200,.55)" : "rgba(148,163,184,.25)";
+      }
+    };
 
     const apply = () => {
       attempts += 1;
@@ -52,10 +86,53 @@ export function BridgeConsolePreview() {
 
       if(header){const row=header.firstElementChild as HTMLElement|null; const branding=row?.firstElementChild as HTMLElement|null; if(branding)setImportant(branding,"display","none"); [["padding","4px 6px"],["margin","0 0 5px"],["border-radius","0"],["background","#071019"],["box-shadow","none"]].forEach(([p,v])=>setImportant(header,p,v)); if(row){setImportant(row,"display","flex");setImportant(row,"justify-content","flex-end");setImportant(row,"align-items","center");setImportant(row,"gap","5px");} header.querySelectorAll<HTMLElement>("button,label").forEach((c)=>{setImportant(c,"width","auto");setImportant(c,"min-width","86px");setImportant(c,"height","30px");setImportant(c,"padding","0 8px");setImportant(c,"border-radius","3px");setImportant(c,"font-size","10px");setImportant(c,"box-shadow","none");});}
       if(mainGrid){setImportant(mainGrid,"display","grid");setImportant(mainGrid,"grid-template-columns","minmax(0,1fr) 330px");setImportant(mainGrid,"gap","5px");setImportant(mainGrid,"align-items","stretch");}
-      setImportant(chart,"padding","0");setImportant(chart,"margin","0");setImportant(chart,"border-radius","0");setImportant(chart,"border","1px solid rgba(148,163,184,.14)");setImportant(chart,"background","#071019");setImportant(chart,"box-shadow","none");
+      setImportant(chart,"padding","0");setImportant(chart,"margin","0");setImportant(chart,"border-radius","0");setImportant(chart,"border","1px solid rgba(148,163,184,.14)");setImportant(chart,"background","#071019");setImportant(chart,"box-shadow","none");setImportant(chart,"position","relative");
       const chartHead=chart.firstElementChild as HTMLElement|null;if(chartHead)setImportant(chartHead,"display","none"); const note=map.nextElementSibling as HTMLElement|null;if(note)setImportant(note,"display","none");
       setImportant(map,"width","100%");setImportant(map,"height","calc(100vh - 122px)");setImportant(map,"min-height","650px");setImportant(map,"border-radius","0");setImportant(map,"border","0");setImportant(map,"background","#0a141d");
       if(oldRail){setImportant(oldRail,"display","block");setImportant(oldRail,"width","330px");setImportant(oldRail,"min-width","330px");} setImportant(route,"display","none");if(activeLeg)setImportant(activeLeg,"display","none");
+
+      let chartTools=document.getElementById("bc-chart-tools") as HTMLElement|null;
+      if(!chartTools){
+        chartTools=document.createElement("div");
+        chartTools.id="bc-chart-tools";
+        chartTools.innerHTML=`<button id="bc-chart-ownship" type="button">OWN SHIP</button><button id="bc-chart-routefit" type="button">ROUTE FIT</button><button id="bc-chart-projection" type="button">PROJECTION ON</button><button id="bc-chart-ais" type="button">AIS ON</button>`;
+        chart.appendChild(chartTools);
+      }
+      chartTools.style.cssText="position:absolute;top:8px;left:8px;z-index:1100;display:flex;gap:4px;padding:4px;border:1px solid rgba(148,163,184,.2);background:rgba(4,8,12,.88);backdrop-filter:blur(4px);pointer-events:auto";
+      chartTools.querySelectorAll<HTMLButtonElement>("button").forEach((button)=>button.style.cssText="height:28px;padding:0 10px;border:1px solid rgba(148,163,184,.3);background:#071019;color:#c7d2dc;font:800 9px system-ui;letter-spacing:.08em;cursor:pointer");
+
+      const ownShipButton=document.getElementById("bc-chart-ownship") as HTMLButtonElement|null;
+      if(ownShipButton) ownShipButton.onclick=()=>{
+        const original=Array.from(document.querySelectorAll<HTMLButtonElement>("button")).find((button)=>button.textContent?.trim()==="Center Own Ship");
+        original?.click();
+      };
+
+      const routeFitButton=document.getElementById("bc-chart-routefit") as HTMLButtonElement|null;
+      if(routeFitButton) routeFitButton.onclick=()=>{
+        const zoomOut=map.querySelector<HTMLElement>(".leaflet-control-zoom-out");
+        if(!zoomOut) return;
+        let steps=0;
+        const fitStep=()=>{
+          const mapRect=map.getBoundingClientRect();
+          const goldShapes=Array.from(map.querySelectorAll<SVGGraphicsElement>("path, circle")).filter((el)=>(el.getAttribute("stroke")||"").toLowerCase()==="#c9a227");
+          if(!goldShapes.length||steps>=12) return;
+          const rects=goldShapes.map((el)=>el.getBoundingClientRect()).filter((rect)=>rect.width>0||rect.height>0);
+          if(!rects.length) return;
+          const left=Math.min(...rects.map((r)=>r.left)); const right=Math.max(...rects.map((r)=>r.right)); const top=Math.min(...rects.map((r)=>r.top)); const bottom=Math.max(...rects.map((r)=>r.bottom));
+          const padding=28;
+          const fits=left>=mapRect.left+padding&&right<=mapRect.right-padding&&top>=mapRect.top+padding&&bottom<=mapRect.bottom-padding;
+          if(fits) return;
+          steps+=1; zoomOut.click(); window.setTimeout(fitStep,140);
+        };
+        fitStep();
+      };
+
+      const projectionButton=document.getElementById("bc-chart-projection") as HTMLButtonElement|null;
+      if(projectionButton) projectionButton.onclick=()=>{ projectionVisible=!projectionVisible; updateChartButtons(); applyOverlayVisibility(map); };
+      const aisButton=document.getElementById("bc-chart-ais") as HTMLButtonElement|null;
+      if(aisButton) aisButton.onclick=()=>{ aisVisible=!aisVisible; updateChartButtons(); applyOverlayVisibility(map); };
+      updateChartButtons();
+      overlayObserver?.disconnect(); overlayObserver=new MutationObserver(()=>applyOverlayVisibility(map)); overlayObserver.observe(map,{childList:true,subtree:true}); applyOverlayVisibility(map);
 
       let instruments=document.getElementById("bc-v2-instruments") as HTMLElement|null;
       if(!instruments&&oldRail){instruments=document.createElement("section");instruments.id="bc-v2-instruments";oldRail.insertBefore(instruments,oldRail.firstChild);}
@@ -88,7 +165,7 @@ export function BridgeConsolePreview() {
       document.getElementById("bridge-console-runtime-badge")?.remove();for(const delay of [0,100,350,900])window.setTimeout(()=>window.dispatchEvent(new Event("resize")),delay);
     };
     apply();
-    return()=>{window.clearTimeout(retryTimer);window.clearTimeout(mapResizeTimer);window.clearInterval(syncTimer);mapObserver?.disconnect();const map=document.getElementById("v12-map") as any;if(map?.__bcRecoverOnWindowResize)window.removeEventListener("resize",map.__bcRecoverOnWindowResize);};
+    return()=>{window.clearTimeout(retryTimer);window.clearTimeout(mapResizeTimer);window.clearInterval(syncTimer);mapObserver?.disconnect();overlayObserver?.disconnect();const map=document.getElementById("v12-map") as any;if(map?.__bcRecoverOnWindowResize)window.removeEventListener("resize",map.__bcRecoverOnWindowResize);};
   },[]);
   return null;
 }
