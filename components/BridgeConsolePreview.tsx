@@ -23,16 +23,10 @@ export function BridgeConsolePreview() {
     let mapResizeTimer = 0;
     let mapObserver: ResizeObserver | null = null;
 
-    const recoverMapTiles = (map: HTMLElement) => {
+    const recoverMapTiles = (_map: HTMLElement) => {
       window.clearTimeout(mapResizeTimer);
       mapResizeTimer = window.setTimeout(() => {
         window.dispatchEvent(new Event("resize"));
-        map.querySelectorAll<HTMLImageElement>(".leaflet-tile-pane img.leaflet-tile").forEach((tile) => {
-          if (!tile.src) return;
-          const src = tile.src;
-          tile.removeAttribute("src");
-          window.requestAnimationFrame(() => { tile.src = src; });
-        });
       }, 180);
     };
 
@@ -144,7 +138,7 @@ export function BridgeConsolePreview() {
       (map as any).__bcRecoverOnWindowResize = recoverOnWindowResize;
 
       const oldBadge=document.getElementById("bridge-console-runtime-badge"); oldBadge?.remove();
-      for(const delay of [0,100,350,900]) window.setTimeout(()=>{window.dispatchEvent(new Event("resize"));recoverMapTiles(map);},delay);
+      for(const delay of [0,100,350,900]) window.setTimeout(()=>{window.dispatchEvent(new Event("resize"));},delay);
     };
 
     apply();
