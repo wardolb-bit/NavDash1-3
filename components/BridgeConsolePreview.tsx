@@ -7,209 +7,233 @@ function setImportant(el: HTMLElement | null, property: string, value: string) {
   el.style.setProperty(property, value, "important");
 }
 
-function findTextBlock(root: HTMLElement, label: string) {
-  return Array.from(root.querySelectorAll<HTMLElement>("div")).find((el) => el.textContent?.trim() === label) || null;
+function valueFor(root: HTMLElement, label: string) {
+  const labelEl = Array.from(root.querySelectorAll<HTMLElement>("div")).find((el) => el.textContent?.trim() === label);
+  const box = labelEl?.parentElement as HTMLElement | null;
+  if (!box) return "--";
+  const lines = Array.from(box.children)
+    .map((el) => (el as HTMLElement).textContent?.trim() || "")
+    .filter((text) => text && text !== label);
+  return lines.join(" ") || "--";
 }
 
 export function BridgeConsolePreview() {
   useEffect(() => {
     let attempts = 0;
-    let timer = 0;
+    let retryTimer = 0;
+    let syncTimer = 0;
 
     const apply = () => {
       attempts += 1;
-
       const shell = document.querySelector<HTMLElement>(".navdash-v12-day, .navdash-v12-night");
       const chart = document.getElementById("v12-section-chart") as HTMLElement | null;
       const map = document.getElementById("v12-map") as HTMLElement | null;
       const route = document.getElementById("v12-section-route") as HTMLElement | null;
-
       if (!shell || !chart || !map || !route) {
-        if (attempts < 60) timer = window.setTimeout(apply, 100);
+        if (attempts < 80) retryTimer = window.setTimeout(apply, 100);
         return;
       }
 
-      shell.dataset.bridgeConsole = "active";
-      setImportant(shell, "padding", "8px");
-      setImportant(shell, "background", "#05090e");
+      const globalNav = document.querySelector<HTMLElement>("body > nav");
+      if (globalNav) setImportant(globalNav, "display", "none");
 
-      const shellChildren = Array.from(shell.children) as HTMLElement[];
-      const header = shellChildren.find((el) => el.tagName === "HEADER") || null;
+      setImportant(shell, "padding", "6px");
+      setImportant(shell, "background", "#04080c");
+
+      const children = Array.from(shell.children) as HTMLElement[];
+      const header = children.find((el) => el.tagName === "HEADER") || null;
       const navStrip = header?.nextElementSibling as HTMLElement | null;
       const mainGrid = navStrip?.nextElementSibling as HTMLElement | null;
-      const rail = route.parentElement as HTMLElement | null;
+      const oldRail = route.parentElement as HTMLElement | null;
+      const activeLeg = route.nextElementSibling as HTMLElement | null;
 
-      // Purpose-built top status bar.
-      let statusBar = document.getElementById("bridge-console-statusbar") as HTMLElement | null;
-      if (!statusBar) {
-        statusBar = document.createElement("div");
-        statusBar.id = "bridge-console-statusbar";
-        statusBar.innerHTML = `
-          <div class="bc-brand"><span class="bc-mark">N</span><span><b>NAVDASH 1.3</b><small>M/V MB480</small></span></div>
-          <div class="bc-status"><span class="bc-chip"><i></i>AIS</span><span class="bc-chip">ROUTE</span><span class="bc-chip">WX</span></div>
-          <div class="bc-mode">BRIDGE CONSOLE</div>
-        `;
-        shell.insertBefore(statusBar, shell.firstChild);
+      let topbar = document.getElementById("bc-v2-topbar") as HTMLElement | null;
+      if (!topbar) {
+        topbar = document.createElement("div");
+        topbar.id = "bc-v2-topbar";
+        topbar.innerHTML = `
+          <div class="bc2-brand"><span class="bc2-logo">N</span><span><b>NAVDASH</b><small>M/V MB480 · BRIDGE CONSOLE</small></span></div>
+          <div class="bc2-center"><span class="live"><i></i>AIS LIVE</span><span>ROUTE ACTIVE</span><span>WX NORMAL</span></div>
+          <div class="bc2-clock">NAVIGATION</div>`;
+        shell.insertBefore(topbar, shell.firstChild);
       }
-      statusBar.style.cssText = "height:54px;display:flex;align-items:center;justify-content:space-between;gap:18px;padding:0 14px;margin-bottom:6px;border:1px solid rgba(201,162,39,.28);border-radius:8px;background:#08111a;color:#e5edf5;box-shadow:inset 0 1px 0 rgba(255,255,255,.025);font-family:system-ui,sans-serif";
-      const brand = statusBar.querySelector<HTMLElement>(".bc-brand");
-      if (brand) brand.style.cssText = "display:flex;align-items:center;gap:9px;letter-spacing:.08em";
-      const mark = statusBar.querySelector<HTMLElement>(".bc-mark");
-      if (mark) mark.style.cssText = "display:grid;place-items:center;width:32px;height:32px;border:1px solid #c9a227;border-radius:5px;color:#e7c95c;font-weight:900";
-      const brandText = statusBar.querySelector<HTMLElement>(".bc-brand span:last-child");
-      if (brandText) brandText.style.cssText = "display:flex;flex-direction:column;line-height:1.05";
-      const small = statusBar.querySelector<HTMLElement>("small");
-      if (small) small.style.cssText = "font-size:9px;color:#8fa3b6;margin-top:4px;letter-spacing:.18em";
-      const status = statusBar.querySelector<HTMLElement>(".bc-status");
-      if (status) status.style.cssText = "display:flex;align-items:center;gap:8px;flex:1;justify-content:center";
-      statusBar.querySelectorAll<HTMLElement>(".bc-chip").forEach((chip) => {
-        chip.style.cssText = "padding:6px 10px;border:1px solid rgba(148,163,184,.18);border-radius:4px;background:#050b11;color:#b9c7d4;font-size:10px;font-weight:800;letter-spacing:.12em";
-      });
-      const dot = statusBar.querySelector<HTMLElement>(".bc-chip i");
-      if (dot) dot.style.cssText = "display:inline-block;width:7px;height:7px;margin-right:6px;border-radius:50%;background:#34d399;box-shadow:0 0 10px rgba(52,211,153,.5)";
-      const mode = statusBar.querySelector<HTMLElement>(".bc-mode");
-      if (mode) mode.style.cssText = "font-size:10px;font-weight:900;letter-spacing:.16em;color:#e7c95c";
+      topbar.style.cssText = "height:46px;display:grid;grid-template-columns:260px 1fr 180px;align-items:center;padding:0 12px;margin-bottom:5px;border:1px solid rgba(201,162,39,.3);background:#071019;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
+      const topBrand = topbar.querySelector<HTMLElement>(".bc2-brand");
+      if (topBrand) topBrand.style.cssText = "display:flex;align-items:center;gap:9px";
+      const logo = topbar.querySelector<HTMLElement>(".bc2-logo");
+      if (logo) logo.style.cssText = "display:grid;place-items:center;width:28px;height:28px;border:1px solid #c9a227;color:#e7c95c;font-size:15px;font-weight:900";
+      const brandStack = topbar.querySelector<HTMLElement>(".bc2-brand span:last-child");
+      if (brandStack) brandStack.style.cssText = "display:flex;flex-direction:column;line-height:1";
+      const brandSmall = topbar.querySelector<HTMLElement>("small");
+      if (brandSmall) brandSmall.style.cssText = "margin-top:4px;font-size:8px;color:#8294a5;letter-spacing:.14em";
+      const topCenter = topbar.querySelector<HTMLElement>(".bc2-center");
+      if (topCenter) topCenter.style.cssText = "display:flex;justify-content:center;gap:8px";
+      topbar.querySelectorAll<HTMLElement>(".bc2-center span").forEach((chip) => chip.style.cssText = "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px");
+      const liveDot = topbar.querySelector<HTMLElement>(".live i");
+      if (liveDot) liveDot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;background:#34d399;margin-right:6px;box-shadow:0 0 8px rgba(52,211,153,.55)";
+      const clock = topbar.querySelector<HTMLElement>(".bc2-clock");
+      if (clock) clock.style.cssText = "text-align:right;color:#e7c95c;font-size:9px;letter-spacing:.16em";
 
       if (header) {
-        header.dataset.bridgeRole = "utilities";
-        setImportant(header, "margin-bottom", "6px");
-        setImportant(header, "padding", "6px 8px");
-        setImportant(header, "border-radius", "6px");
-        setImportant(header, "background", "#091119");
-        setImportant(header, "box-shadow", "none");
-        const firstRow = header.firstElementChild as HTMLElement | null;
-        if (firstRow) {
-          setImportant(firstRow, "display", "flex");
-          setImportant(firstRow, "justify-content", "flex-end");
-          setImportant(firstRow, "align-items", "center");
-          setImportant(firstRow, "gap", "6px");
-        }
-        const branding = firstRow?.firstElementChild as HTMLElement | null;
+        const row = header.firstElementChild as HTMLElement | null;
+        const branding = row?.firstElementChild as HTMLElement | null;
         if (branding) setImportant(branding, "display", "none");
-        header.querySelectorAll<HTMLElement>("button, label").forEach((control) => {
+        setImportant(header, "padding", "4px 6px");
+        setImportant(header, "margin", "0 0 5px");
+        setImportant(header, "border-radius", "0");
+        setImportant(header, "background", "#071019");
+        setImportant(header, "box-shadow", "none");
+        if (row) {
+          setImportant(row, "display", "flex");
+          setImportant(row, "justify-content", "flex-end");
+          setImportant(row, "align-items", "center");
+          setImportant(row, "gap", "5px");
+        }
+        header.querySelectorAll<HTMLElement>("button,label").forEach((control) => {
           setImportant(control, "width", "auto");
-          setImportant(control, "min-width", "92px");
-          setImportant(control, "height", "34px");
-          setImportant(control, "padding", "0 10px");
-          setImportant(control, "border-radius", "5px");
-          setImportant(control, "font-size", "11px");
+          setImportant(control, "min-width", "86px");
+          setImportant(control, "height", "30px");
+          setImportant(control, "padding", "0 8px");
+          setImportant(control, "border-radius", "3px");
+          setImportant(control, "font-size", "10px");
           setImportant(control, "box-shadow", "none");
         });
       }
 
       if (mainGrid) {
-        mainGrid.dataset.bridgeRole = "main-grid";
         setImportant(mainGrid, "display", "grid");
-        setImportant(mainGrid, "grid-template-columns", "minmax(0, 1fr) 292px");
-        setImportant(mainGrid, "gap", "8px");
+        setImportant(mainGrid, "grid-template-columns", "minmax(0,1fr) 330px");
+        setImportant(mainGrid, "gap", "5px");
         setImportant(mainGrid, "align-items", "stretch");
       }
 
-      // Move primary nav below the map/rail like the mockup.
-      if (navStrip && mainGrid && navStrip.previousElementSibling === header) {
-        mainGrid.insertAdjacentElement("afterend", navStrip);
-      }
-      if (navStrip) {
-        navStrip.dataset.bridgeRole = "nav";
-        setImportant(navStrip, "display", "grid");
-        setImportant(navStrip, "grid-template-columns", "repeat(4,minmax(0,1fr))");
-        setImportant(navStrip, "gap", "6px");
-        setImportant(navStrip, "margin", "6px 0 0");
-        navStrip.querySelectorAll<HTMLElement>("button").forEach((button) => {
-          setImportant(button, "padding", "9px 10px");
-          setImportant(button, "border-radius", "5px");
-          setImportant(button, "font-size", "11px");
-        });
-      }
-
-      chart.dataset.bridgeRole = "chart";
-      setImportant(chart, "padding", "6px");
-      setImportant(chart, "border-radius", "7px");
-      setImportant(chart, "background", "#08111a");
+      setImportant(chart, "padding", "0");
+      setImportant(chart, "margin", "0");
+      setImportant(chart, "border-radius", "0");
+      setImportant(chart, "border", "1px solid rgba(148,163,184,.14)");
+      setImportant(chart, "background", "#071019");
       setImportant(chart, "box-shadow", "none");
       const chartHead = chart.firstElementChild as HTMLElement | null;
       if (chartHead) setImportant(chartHead, "display", "none");
-      const navNote = map.nextElementSibling as HTMLElement | null;
-      if (navNote) setImportant(navNote, "display", "none");
-
-      map.dataset.bridgeRole = "map";
-      setImportant(map, "display", "block");
+      const note = map.nextElementSibling as HTMLElement | null;
+      if (note) setImportant(note, "display", "none");
       setImportant(map, "width", "100%");
-      setImportant(map, "height", "calc(100vh - 178px)");
-      setImportant(map, "min-height", "600px");
-      setImportant(map, "border-radius", "5px");
-      setImportant(map, "background", "#0b1722");
-      setImportant(map, "position", "relative");
-      setImportant(map, "z-index", "1");
+      setImportant(map, "height", "calc(100vh - 122px)");
+      setImportant(map, "min-height", "650px");
+      setImportant(map, "border-radius", "0");
+      setImportant(map, "border", "0");
+      setImportant(map, "background", "#0a141d");
 
-      if (rail) {
-        rail.dataset.bridgeRole = "rail";
-        setImportant(rail, "display", "grid");
-        setImportant(rail, "grid-template-rows", "auto 1fr");
-        setImportant(rail, "gap", "6px");
-        setImportant(rail, "width", "292px");
+      if (oldRail) {
+        setImportant(oldRail, "display", "block");
+        setImportant(oldRail, "width", "330px");
+        setImportant(oldRail, "min-width", "330px");
+      }
+      setImportant(route, "display", "none");
+      if (activeLeg) setImportant(activeLeg, "display", "none");
+
+      let instruments = document.getElementById("bc-v2-instruments") as HTMLElement | null;
+      if (!instruments && oldRail) {
+        instruments = document.createElement("section");
+        instruments.id = "bc-v2-instruments";
+        oldRail.insertBefore(instruments, oldRail.firstChild);
+      }
+      if (instruments) {
+        instruments.style.cssText = "height:100%;min-height:650px;display:flex;flex-direction:column;border:1px solid rgba(148,163,184,.14);background:#071019;color:#dbe5ee;font-family:system-ui,sans-serif";
+        instruments.innerHTML = `
+          <div class="bc2-rail-title"><span>VOYAGE</span><b id="bc2-route">--</b><small id="bc2-dest">--</small></div>
+          <div class="bc2-pos"><label>OWN SHIP</label><strong id="bc2-pos">--</strong><small id="bc2-motion">--</small></div>
+          <div class="bc2-big-grid">
+            <div><label>COG</label><strong id="bc2-cog">--</strong></div>
+            <div><label>SOG</label><strong id="bc2-sog">--</strong></div>
+            <div><label>HDG</label><strong id="bc2-hdg">--</strong></div>
+            <div><label>XTE</label><strong id="bc2-xte">--</strong></div>
+          </div>
+          <div class="bc2-leg"><label>ACTIVE LEG</label><strong id="bc2-leg">--</strong><small id="bc2-legname">--</small></div>
+          <div class="bc2-small-grid"><div><label>DTG</label><strong id="bc2-dtg">--</strong></div><div><label>ETA</label><strong id="bc2-eta">--</strong></div><div><label>BRG</label><strong id="bc2-brg">--</strong></div><div><label>CORRIDOR</label><strong>2.0 NM</strong></div></div>
+          <div class="bc2-wx"><span>WX</span><b>NORMAL</b><small>Open Weather for operational detail</small></div>`;
+
+        instruments.querySelectorAll<HTMLElement>("label").forEach((el) => el.style.cssText = "display:block;margin-bottom:4px;color:#708496;font-size:8px;font-weight:900;letter-spacing:.16em");
+        const railTitle = instruments.querySelector<HTMLElement>(".bc2-rail-title");
+        if (railTitle) railTitle.style.cssText = "padding:12px;border-bottom:1px solid rgba(148,163,184,.14)";
+        const rtSpan = railTitle?.querySelector<HTMLElement>("span"); if (rtSpan) rtSpan.style.cssText = "display:block;color:#c9a227;font-size:8px;font-weight:900;letter-spacing:.16em;margin-bottom:7px";
+        const rtB = railTitle?.querySelector<HTMLElement>("b"); if (rtB) rtB.style.cssText = "display:block;font-size:16px;color:#e7c95c;line-height:1.1";
+        const rtS = railTitle?.querySelector<HTMLElement>("small"); if (rtS) rtS.style.cssText = "display:block;margin-top:5px;color:#9aabba;font-size:10px";
+        const posBox = instruments.querySelector<HTMLElement>(".bc2-pos"); if (posBox) posBox.style.cssText = "padding:12px;border-bottom:1px solid rgba(148,163,184,.14)";
+        const posStrong = posBox?.querySelector<HTMLElement>("strong"); if (posStrong) posStrong.style.cssText = "display:block;color:#42d3c8;font-size:15px;line-height:1.2";
+        const posSmall = posBox?.querySelector<HTMLElement>("small"); if (posSmall) posSmall.style.cssText = "display:block;margin-top:5px;color:#8fa0af;font-size:9px";
+        const big = instruments.querySelector<HTMLElement>(".bc2-big-grid"); if (big) big.style.cssText = "display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid rgba(148,163,184,.14)";
+        big?.querySelectorAll<HTMLElement>(":scope > div").forEach((cell, i) => cell.style.cssText = `padding:13px 12px;min-height:86px;${i % 2 === 0 ? "border-right:1px solid rgba(148,163,184,.14);" : ""}${i < 2 ? "border-bottom:1px solid rgba(148,163,184,.14);" : ""}`);
+        big?.querySelectorAll<HTMLElement>("strong").forEach((el) => el.style.cssText = "display:block;font-size:28px;line-height:1;color:#edf4fa;font-weight:800");
+        const leg = instruments.querySelector<HTMLElement>(".bc2-leg"); if (leg) leg.style.cssText = "padding:12px;border-bottom:1px solid rgba(148,163,184,.14)";
+        const legStrong = leg?.querySelector<HTMLElement>("strong"); if (legStrong) legStrong.style.cssText = "display:block;color:#e7c95c;font-size:21px;line-height:1";
+        const legSmall = leg?.querySelector<HTMLElement>("small"); if (legSmall) legSmall.style.cssText = "display:block;margin-top:5px;color:#aab8c4;font-size:9px";
+        const smallGrid = instruments.querySelector<HTMLElement>(".bc2-small-grid"); if (smallGrid) smallGrid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid rgba(148,163,184,.14)";
+        smallGrid?.querySelectorAll<HTMLElement>(":scope > div").forEach((cell, i) => cell.style.cssText = `padding:10px 12px;${i % 2 === 0 ? "border-right:1px solid rgba(148,163,184,.14);" : ""}${i < 2 ? "border-bottom:1px solid rgba(148,163,184,.14);" : ""}`);
+        smallGrid?.querySelectorAll<HTMLElement>("strong").forEach((el) => el.style.cssText = "font-size:16px;color:#edf4fa");
+        const wx = instruments.querySelector<HTMLElement>(".bc2-wx"); if (wx) wx.style.cssText = "margin-top:auto;padding:12px;background:#050b10";
+        const wxSpan = wx?.querySelector<HTMLElement>("span"); if (wxSpan) wxSpan.style.cssText = "color:#708496;font-size:8px;font-weight:900;letter-spacing:.16em;margin-right:8px";
+        const wxB = wx?.querySelector<HTMLElement>("b"); if (wxB) wxB.style.cssText = "color:#34d399;font-size:11px";
+        const wxSmall = wx?.querySelector<HTMLElement>("small"); if (wxSmall) wxSmall.style.cssText = "display:block;margin-top:5px;color:#728596;font-size:9px";
       }
 
-      setImportant(route, "padding", "8px");
-      setImportant(route, "border-radius", "7px");
-      setImportant(route, "background", "#08111a");
-      setImportant(route, "box-shadow", "none");
-
-      // Flatten voyage snapshot cards into instrument readouts.
-      const snapshotGrid = route.children[1] as HTMLElement | undefined;
-      if (snapshotGrid) {
-        setImportant(snapshotGrid, "display", "grid");
-        setImportant(snapshotGrid, "grid-template-columns", "1fr 1fr");
-        setImportant(snapshotGrid, "gap", "6px");
-        setImportant(snapshotGrid, "margin-top", "6px");
-        Array.from(snapshotGrid.children).forEach((child, index) => {
-          const el = child as HTMLElement;
-          setImportant(el, "border-radius", "5px");
-          setImportant(el, "padding", "8px");
-          setImportant(el, "background", "#050b11");
-          setImportant(el, "border", "1px solid rgba(148,163,184,.14)");
-          if (index < 2) setImportant(el, "grid-column", "1 / -1");
+      if (navStrip && mainGrid) {
+        mainGrid.insertAdjacentElement("afterend", navStrip);
+        setImportant(navStrip, "display", "grid");
+        setImportant(navStrip, "grid-template-columns", "repeat(4,minmax(0,1fr))");
+        setImportant(navStrip, "gap", "4px");
+        setImportant(navStrip, "margin", "5px 0 0");
+        navStrip.querySelectorAll<HTMLElement>("button").forEach((button) => {
+          setImportant(button, "padding", "7px 8px");
+          setImportant(button, "border-radius", "0");
+          setImportant(button, "font-size", "9px");
         });
       }
-      route.querySelectorAll<HTMLElement>(".text-2xl").forEach((value) => {
-        setImportant(value, "font-size", "24px");
-        setImportant(value, "line-height", "1.1");
-      });
-      route.querySelectorAll<HTMLElement>(".text-xl,.text-lg").forEach((value) => {
-        setImportant(value, "font-size", "15px");
-        setImportant(value, "line-height", "1.2");
-      });
 
-      // Make the active-leg control read like a compact console module.
-      const activeLeg = route.nextElementSibling as HTMLElement | null;
-      if (activeLeg) {
-        setImportant(activeLeg, "padding", "8px");
-        setImportant(activeLeg, "border-radius", "7px");
-        setImportant(activeLeg, "background", "#08111a");
-        setImportant(activeLeg, "box-shadow", "none");
-        activeLeg.querySelectorAll<HTMLElement>("button").forEach((button) => {
-          setImportant(button, "border-radius", "4px");
-          setImportant(button, "padding", "8px 6px");
-          setImportant(button, "font-size", "10px");
-        });
-      }
+      const sync = () => {
+        const routeName = route.querySelector<HTMLElement>(".text-wardGold")?.textContent?.trim() || "No route loaded";
+        const destination = valueFor(route, "Route / Destination").replace(routeName, "").trim() || "--";
+        const own = valueFor(route, "Own Ship Position");
+        const dtg = valueFor(route, "DTG");
+        const eta = valueFor(route, "ETA");
+        const xte = valueFor(route, "XTE");
+        const brg = valueFor(route, "Leg BRG");
+        const activeText = activeLeg?.querySelector<HTMLElement>(".text-wardGold")?.textContent?.trim() || "--";
+        const activeName = activeLeg ? Array.from(activeLeg.querySelectorAll<HTMLElement>("div")).map((el) => el.textContent?.trim() || "").find((t) => t.includes("→") && t !== activeText) || "--" : "--";
+        const ownParts = own.split("/").map((s) => s.trim());
+        const motion = ownParts.slice(1).join(" / ") || "--";
+        const cog = own.match(/([0-9.]+)° COG/)?.[1];
+        const sog = own.match(/([0-9.]+) kt/)?.[1];
+        const hdg = own.match(/HDG ([0-9.]+)°/)?.[1];
+        const position = ownParts[0] || own;
+        const setText = (id: string, text: string) => { const el = document.getElementById(id); if (el) el.textContent = text || "--"; };
+        setText("bc2-route", routeName);
+        setText("bc2-dest", destination);
+        setText("bc2-pos", position);
+        setText("bc2-motion", motion);
+        setText("bc2-cog", cog ? `${cog}°` : "--");
+        setText("bc2-sog", sog ? `${sog} KT` : "--");
+        setText("bc2-hdg", hdg ? `${hdg}°` : "--");
+        setText("bc2-xte", xte);
+        setText("bc2-leg", activeText);
+        setText("bc2-legname", activeName);
+        setText("bc2-dtg", dtg);
+        setText("bc2-eta", eta);
+        setText("bc2-brg", brg);
+      };
+      sync();
+      syncTimer = window.setInterval(sync, 1000);
 
-      let badge = document.getElementById("bridge-console-runtime-badge") as HTMLElement | null;
-      if (!badge) {
-        badge = document.createElement("div");
-        badge.id = "bridge-console-runtime-badge";
-        badge.textContent = "BRIDGE CONSOLE LAYOUT ACTIVE";
-        document.body.appendChild(badge);
-      }
-      badge.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:100000;background:#c9a227;color:#071019;padding:7px 10px;border-radius:5px;font:800 10px system-ui;letter-spacing:.08em;box-shadow:0 6px 20px rgba(0,0,0,.45)";
-
-      for (const delay of [0, 100, 350, 900]) {
-        window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay);
-      }
+      const oldBadge = document.getElementById("bridge-console-runtime-badge");
+      oldBadge?.remove();
+      for (const delay of [0, 100, 350, 900]) window.setTimeout(() => window.dispatchEvent(new Event("resize")), delay);
     };
 
     apply();
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(retryTimer);
+      window.clearInterval(syncTimer);
+    };
   }, []);
 
   return null;
