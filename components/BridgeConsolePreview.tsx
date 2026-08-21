@@ -74,7 +74,7 @@ export function BridgeConsolePreview() {
         const row = header.firstElementChild as HTMLElement | null;
         const branding = row?.firstElementChild as HTMLElement | null;
         if (branding) setImportant(branding, "display", "none");
-        [ ["padding","4px 6px"],["margin","0 0 5px"],["border-radius","0"],["background","#071019"],["box-shadow","none"] ].forEach(([p,v]) => setImportant(header,p,v));
+        [["padding","4px 6px"],["margin","0 0 5px"],["border-radius","0"],["background","#071019"],["box-shadow","none"]].forEach(([p,v]) => setImportant(header,p,v));
         if (row) { setImportant(row,"display","flex"); setImportant(row,"justify-content","flex-end"); setImportant(row,"align-items","center"); setImportant(row,"gap","5px"); }
         header.querySelectorAll<HTMLElement>("button,label").forEach((control) => { setImportant(control,"width","auto"); setImportant(control,"min-width","86px"); setImportant(control,"height","30px"); setImportant(control,"padding","0 8px"); setImportant(control,"border-radius","3px"); setImportant(control,"font-size","10px"); setImportant(control,"box-shadow","none"); });
       }
@@ -116,7 +116,8 @@ export function BridgeConsolePreview() {
         const wxSmall = wx?.querySelector<HTMLElement>("small"); if (wxSmall) wxSmall.style.cssText = "display:block;margin-top:5px;color:#728596;font-size:9px";
       }
 
-      if (navStrip && mainGrid) { mainGrid.insertAdjacentElement("afterend",navStrip); setImportant(navStrip,"display","grid"); setImportant(navStrip,"grid-template-columns","repeat(4,minmax(0,1fr))"); setImportant(navStrip,"gap","4px"); setImportant(navStrip,"margin","5px 0 0"); navStrip.querySelectorAll<HTMLElement>("button").forEach((button)=>{setImportant(button,"padding","7px 8px");setImportant(button,"border-radius","0");setImportant(button,"font-size","9px");}); }
+      // Bridge Console uses the top quick-access controls; remove the legacy button strip below the map.
+      if (navStrip) setImportant(navStrip,"display","none");
 
       const sync = () => {
         const routeName = route.querySelector<HTMLElement>(".text-wardGold")?.textContent?.trim() || "No route loaded";
