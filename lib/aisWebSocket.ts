@@ -24,16 +24,16 @@ export function getAisWebSocketUrl() {
     return url;
   }
 
-  const storedUrl = window.localStorage.getItem(AIS_WS_HOST_KEY);
-  if (storedUrl) return storedUrl;
-
-  // The Vercel-hosted ECR display runs on a separate shipboard computer, so
-  // localhost would point at the ECR itself. Seed it to the wheelhouse AIS
-  // server while leaving the existing main-page/default behavior unchanged.
+  // The Vercel-hosted ECR display always uses the wheelhouse AIS server.
+  // Do this before reading the stored override so a stale localhost value
+  // from another NavDash page cannot strand the ECR display on itself.
   if (window.location.pathname === "/ecr" || window.location.pathname.startsWith("/ecr/")) {
     window.localStorage.setItem(AIS_WS_HOST_KEY, ECR_DEFAULT_AIS_WS_URL);
     return ECR_DEFAULT_AIS_WS_URL;
   }
+
+  const storedUrl = window.localStorage.getItem(AIS_WS_HOST_KEY);
+  if (storedUrl) return storedUrl;
 
   return LOCAL_AIS_WS_URL;
 }
