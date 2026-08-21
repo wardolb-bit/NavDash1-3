@@ -23,16 +23,8 @@ section:has(> #v12-section-weather):has(> #v12-section-status) { display: none !
   z-index: 1200 !important;
 }
 
-/* Match the preferred 80% browser-density at normal 100% browser zoom.
-   Width compensation keeps the console filling the viewport. Desktop preview only. */
+/* Bridge Console UI experiment: desktop-only visual treatment for the NavDash main screen. */
 @media (min-width: 1280px) {
-  .navdash-v12-day,
-  .navdash-v12-night {
-    zoom: 0.8;
-    width: 125% !important;
-    min-height: 125vh;
-  }
-
   .navdash-v12-day,
   .navdash-v12-night { padding: 0.75rem !important; }
   .navdash-v12-day > header,
