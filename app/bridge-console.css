@@ -1,0 +1,103 @@
+/* NavDash bridge-console preview overrides. Scoped to the main NavDash shell. */
+@media (min-width: 768px) and (orientation: landscape) {
+  .navdash-v12-day,
+  .navdash-v12-night {
+    padding: 0.6rem !important;
+  }
+
+  .navdash-v12-day > header,
+  .navdash-v12-night > header {
+    margin-bottom: 0.45rem !important;
+    padding: 0.45rem 0.65rem !important;
+    border-radius: 0.7rem !important;
+  }
+
+  .navdash-v12-day > header .h-16.w-16,
+  .navdash-v12-night > header .h-16.w-16 {
+    width: 2.4rem !important;
+    height: 2.4rem !important;
+    border-radius: 0.5rem !important;
+    font-size: 1rem !important;
+  }
+
+  .navdash-v12-day > header h1,
+  .navdash-v12-night > header h1 {
+    font-size: 1.45rem !important;
+    line-height: 1.55rem !important;
+  }
+
+  .navdash-v12-day > header h1 + div,
+  .navdash-v12-night > header h1 + div {
+    display: none !important;
+  }
+
+  .navdash-v12-day > header label,
+  .navdash-v12-day > header button,
+  .navdash-v12-night > header label,
+  .navdash-v12-night > header button {
+    width: auto !important;
+    min-width: 6.4rem !important;
+    height: 2.2rem !important;
+    padding: 0 0.7rem !important;
+    border-radius: 0.5rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .navdash-v12-day > header + div,
+  .navdash-v12-night > header + div {
+    display: flex !important;
+    gap: 0.35rem !important;
+    margin-bottom: 0.45rem !important;
+  }
+
+  .navdash-v12-day > header + div > button,
+  .navdash-v12-night > header + div > button {
+    padding: 0.45rem 0.7rem !important;
+    border-radius: 0.5rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .navdash-v12-day > header + div + div,
+  .navdash-v12-night > header + div + div {
+    grid-template-columns: minmax(0, 1fr) 18rem !important;
+    gap: 0.55rem !important;
+  }
+
+  #v12-section-chart,
+  #v12-section-route,
+  #v12-section-route + section {
+    border-radius: 0.7rem !important;
+    padding: 0.6rem !important;
+  }
+
+  #v12-section-chart h2 {
+    font-size: 1.1rem !important;
+    line-height: 1.25rem !important;
+  }
+
+  #v12-section-chart h2 + p {
+    display: none !important;
+  }
+
+  #v12-map {
+    height: calc(100vh - 11rem) !important;
+    min-height: 30rem !important;
+    border-radius: 0.55rem !important;
+  }
+
+  #v12-section-route .rounded-3xl,
+  #v12-section-route .rounded-2xl,
+  #v12-section-route + section .rounded-3xl,
+  #v12-section-route + section .rounded-2xl {
+    border-radius: 0.5rem !important;
+  }
+
+  #v12-section-route .p-4,
+  #v12-section-route + section .p-4 {
+    padding: 0.55rem !important;
+  }
+
+  .navdash-v12-night {
+    background: #05090e !important;
+  }
+}
