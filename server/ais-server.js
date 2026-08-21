@@ -19,6 +19,7 @@ let serialPort = null;
 let lastLineAt = null;
 let lastError = null;
 let lastRouteState = loadRouteState();
+let routeFileExists = fs.existsSync(ROUTE_STATE_PATH);
 let positionHistory = loadPositionHistory();
 
 function normalizeRouteState(payload) {
@@ -71,6 +72,7 @@ function saveRouteState(routeState) {
   try {
     fs.mkdirSync(path.dirname(ROUTE_STATE_PATH), { recursive: true });
     fs.writeFileSync(ROUTE_STATE_PATH, JSON.stringify(routeState, null, 2), 'utf8');
+    routeFileExists = true;
     console.log(`[AIS] Saved shared route "${routeState.routeName}" to ${ROUTE_STATE_PATH}`);
   } catch (error) {
     console.log(`[AIS] Could not save shared route: ${error.message}`);
@@ -80,6 +82,7 @@ function saveRouteState(routeState) {
 function clearRouteState() {
   try {
     if (fs.existsSync(ROUTE_STATE_PATH)) fs.unlinkSync(ROUTE_STATE_PATH);
+    routeFileExists = false;
     console.log(`[AIS] Cleared shared route at ${ROUTE_STATE_PATH}`);
   } catch (error) {
     console.log(`[AIS] Could not clear shared route: ${error.message}`);
@@ -230,6 +233,31 @@ function broadcast(payload) {
   });
 }
 
+fs.watchFile(ROUTE_STATE_PATH, { interval: 2000 }, (current, previous) => {
+  const existsNow = current.nlink > 0;
+
+  if (existsNow) {
+    const diskRouteState = loadRouteState();
+    if (diskRouteState && JSON.stringify(diskRouteState) !== JSON.stringify(lastRouteState)) {
+      lastRouteState = diskRouteState;
+      broadcast(lastRouteState);
+      console.log(`[AIS] Broadcast refreshed shared route "${lastRouteState.routeName}" from disk.`);
+    }
+  } else if (routeFileExists && lastRouteState?.waypoints?.length) {
+    lastRouteState = {
+      type: 'route-state',
+      routeName: '',
+      waypoints: [],
+      activeWaypointIndex: 0,
+      savedAt: new Date().toISOString()
+    };
+    broadcast(lastRouteState);
+    console.log('[AIS] Broadcast shared route clear from disk.');
+  }
+
+  routeFileExists = existsNow;
+});
+
 wss.on('connection', ws => {
   ws.send(JSON.stringify({
     type: 'status',
@@ -239,6 +267,9 @@ wss.on('connection', ws => {
     lastLineAt,
     lastError
   }));
+
+  const diskRouteState = loadRouteState();
+  if (diskRouteState) lastRouteState = diskRouteState;
 
   if (lastRouteState) {
     ws.send(JSON.stringify(lastRouteState));
