@@ -62,7 +62,11 @@ export function BridgeRailPolish() {
         const strong = leg.querySelector<HTMLElement>("strong");
         if (strong) strong.style.cssText = "display:block;color:#f0d568;font-size:24px;line-height:1.05;font-weight:850;font-variant-numeric:tabular-nums";
         const small = leg.querySelector<HTMLElement>("small");
-        if (small) small.style.cssText = "display:block;margin-top:8px;color:#c2ced8;font-size:11px;font-weight:700;letter-spacing:.03em";
+        if (small) {
+          const cleaned = (small.textContent || "").replace(/\s*[|·•-]?\s*mode\s*:\s*auto\s+logical\s+leg\s*/ig, " ").replace(/\s{2,}/g, " ").trim();
+          small.textContent = cleaned;
+          small.style.cssText = "display:block;margin-top:8px;color:#c2ced8;font-size:11px;font-weight:700;letter-spacing:.03em";
+        }
       }
 
       const smallGrid = rail.querySelector<HTMLElement>(".bc2-small-grid");
