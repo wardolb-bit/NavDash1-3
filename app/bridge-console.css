@@ -1,122 +1,236 @@
-/* NavDash bridge-console preview overrides. Loaded only on the UI preview branch. */
+/* NavDash bridge-console preview. This file exists only on the UI preview branch. */
 body::before {
   content: "BRIDGE CONSOLE PREVIEW";
   position: fixed;
-  top: 0.55rem;
+  top: .45rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 99999;
   pointer-events: none;
-  padding: 0.35rem 0.8rem;
+  padding: .3rem .7rem;
   border: 1px solid #c9a227;
-  border-radius: 0.45rem;
-  background: #071019;
+  border-radius: .35rem;
+  background: #05090e;
   color: #f5d76e;
-  font: 800 0.72rem/1 system-ui, sans-serif;
-  letter-spacing: 0.14em;
-  box-shadow: 0 6px 20px rgba(0,0,0,.45);
+  font: 800 .68rem/1 system-ui, sans-serif;
+  letter-spacing: .14em;
 }
 
-.navdash-v12-day,
-.navdash-v12-night {
-  padding: 0.6rem !important;
+.bridge-console-shell {
+  padding: .55rem !important;
+  background: #05090e !important;
 }
 
-.navdash-v12-day > header,
-.navdash-v12-night > header {
-  margin-bottom: 0.45rem !important;
-  padding: 0.45rem 0.65rem !important;
-  border-radius: 0.7rem !important;
-  outline: 1px solid rgba(201,162,39,.35);
+.bridge-console-header {
+  margin-bottom: .4rem !important;
+  padding: .45rem .65rem !important;
+  border-radius: .55rem !important;
+  background: #091119 !important;
+  border-color: rgba(201,162,39,.28) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
 }
 
-@media (min-width: 768px) and (orientation: landscape) {
-  .navdash-v12-day > header .h-16.w-16,
-  .navdash-v12-night > header .h-16.w-16 {
-    width: 2.4rem !important;
-    height: 2.4rem !important;
-    border-radius: 0.5rem !important;
-    font-size: 1rem !important;
+.bridge-console-header > div {
+  gap: .65rem !important;
+}
+
+.bridge-console-header .h-16.w-16 {
+  width: 2.35rem !important;
+  height: 2.35rem !important;
+  border-radius: .45rem !important;
+  font-size: 1rem !important;
+}
+
+.bridge-console-header h1 {
+  font-size: 1.4rem !important;
+  line-height: 1.5rem !important;
+}
+
+.bridge-console-header h1 + div {
+  display: none !important;
+}
+
+.bridge-console-header h1 + div + div {
+  margin-top: .1rem !important;
+  max-width: 46rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: .66rem !important;
+  line-height: .9rem !important;
+}
+
+.bridge-console-header label,
+.bridge-console-header button {
+  width: auto !important;
+  min-width: 6.5rem !important;
+  height: 2.2rem !important;
+  padding: 0 .7rem !important;
+  border-radius: .45rem !important;
+  font-size: .72rem !important;
+  line-height: 1rem !important;
+  box-shadow: none !important;
+}
+
+.bridge-console-navstrip {
+  display: flex !important;
+  grid-template-columns: none !important;
+  gap: .35rem !important;
+  margin-bottom: .4rem !important;
+}
+
+.bridge-console-navstrip > button {
+  flex: 0 0 auto !important;
+  padding: .45rem .7rem !important;
+  border-radius: .4rem !important;
+  font-size: .72rem !important;
+}
+
+.bridge-console-main {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 18.5rem !important;
+  gap: .55rem !important;
+  align-items: start !important;
+}
+
+.bridge-console-chart {
+  padding: .55rem !important;
+  border-radius: .55rem !important;
+  background: #08111a !important;
+  border-color: rgba(148,163,184,.16) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.bridge-console-chart > div:first-child {
+  margin-bottom: .4rem !important;
+  gap: .45rem !important;
+}
+
+.bridge-console-chart h2 {
+  margin-top: 0 !important;
+  font-size: 1.05rem !important;
+  line-height: 1.2rem !important;
+}
+
+.bridge-console-chart h2 + p {
+  display: none !important;
+}
+
+.bridge-console-chart > div:first-child button {
+  padding: .42rem .62rem !important;
+  border-radius: .4rem !important;
+  font-size: .7rem !important;
+  line-height: .95rem !important;
+}
+
+.bridge-console-map {
+  width: 100% !important;
+  height: calc(100vh - 12.5rem) !important;
+  min-height: 520px !important;
+  border-radius: .45rem !important;
+  background: #0b1722 !important;
+  overflow: hidden !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.bridge-console-map .leaflet-pane,
+.bridge-console-map .leaflet-map-pane,
+.bridge-console-map .leaflet-tile-pane,
+.bridge-console-map .leaflet-overlay-pane,
+.bridge-console-map .leaflet-marker-pane {
+  visibility: visible !important;
+}
+
+.bridge-console-chart > .bridge-console-map + div {
+  margin-top: .4rem !important;
+  padding: .42rem .55rem !important;
+  border-radius: .4rem !important;
+  font-size: .68rem !important;
+  line-height: .95rem !important;
+}
+
+.bridge-console-rail {
+  display: grid !important;
+  gap: .45rem !important;
+}
+
+.bridge-console-route,
+.bridge-console-route + section {
+  padding: .55rem !important;
+  border-radius: .55rem !important;
+  background: #08111a !important;
+  border-color: rgba(148,163,184,.16) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.bridge-console-route .rounded-3xl,
+.bridge-console-route .rounded-2xl,
+.bridge-console-route + section .rounded-3xl,
+.bridge-console-route + section .rounded-2xl {
+  border-radius: .4rem !important;
+}
+
+.bridge-console-route .p-4,
+.bridge-console-route + section .p-4 {
+  padding: .48rem !important;
+}
+
+.bridge-console-route .gap-3,
+.bridge-console-route + section .gap-3 {
+  gap: .35rem !important;
+}
+
+.bridge-console-route .mt-4,
+.bridge-console-route + section .mt-4 {
+  margin-top: .45rem !important;
+}
+
+.bridge-console-route .text-2xl,
+.bridge-console-route + section .text-2xl {
+  font-size: 1.45rem !important;
+  line-height: 1.55rem !important;
+}
+
+.bridge-console-route .text-xl {
+  font-size: 1rem !important;
+  line-height: 1.2rem !important;
+}
+
+.bridge-console-route .text-lg {
+  font-size: .9rem !important;
+  line-height: 1.15rem !important;
+}
+
+.bridge-console-route .text-xs,
+.bridge-console-route + section .text-xs {
+  font-size: .66rem !important;
+  line-height: .9rem !important;
+}
+
+@media (max-width: 1100px) {
+  .bridge-console-main {
+    grid-template-columns: minmax(0,1fr) 16rem !important;
   }
 
-  .navdash-v12-day > header h1,
-  .navdash-v12-night > header h1 {
-    font-size: 1.45rem !important;
-    line-height: 1.55rem !important;
+  .bridge-console-map {
+    min-height: 430px !important;
   }
+}
 
-  .navdash-v12-day > header h1 + div,
-  .navdash-v12-night > header h1 + div {
-    display: none !important;
+@media (max-width: 760px) {
+  body::before { display: none; }
+  .bridge-console-main {
+    display: block !important;
   }
-
-  .navdash-v12-day > header label,
-  .navdash-v12-day > header button,
-  .navdash-v12-night > header label,
-  .navdash-v12-night > header button {
-    width: auto !important;
-    min-width: 6.4rem !important;
-    height: 2.2rem !important;
-    padding: 0 0.7rem !important;
-    border-radius: 0.5rem !important;
-    font-size: 0.72rem !important;
+  .bridge-console-rail {
+    margin-top: .6rem !important;
   }
-
-  .navdash-v12-day > header + div,
-  .navdash-v12-night > header + div {
-    display: flex !important;
-    gap: 0.35rem !important;
-    margin-bottom: 0.45rem !important;
-  }
-
-  .navdash-v12-day > header + div > button,
-  .navdash-v12-night > header + div > button {
-    padding: 0.45rem 0.7rem !important;
-    border-radius: 0.5rem !important;
-    font-size: 0.72rem !important;
-  }
-
-  .navdash-v12-day > header + div + div,
-  .navdash-v12-night > header + div + div {
-    grid-template-columns: minmax(0, 1fr) 18rem !important;
-    gap: 0.55rem !important;
-  }
-
-  #v12-section-chart,
-  #v12-section-route,
-  #v12-section-route + section {
-    border-radius: 0.7rem !important;
-    padding: 0.6rem !important;
-  }
-
-  #v12-section-chart h2 {
-    font-size: 1.1rem !important;
-    line-height: 1.25rem !important;
-  }
-
-  #v12-section-chart h2 + p {
-    display: none !important;
-  }
-
-  #v12-map {
-    height: calc(100vh - 11rem) !important;
-    min-height: 30rem !important;
-    border-radius: 0.55rem !important;
-  }
-
-  #v12-section-route .rounded-3xl,
-  #v12-section-route .rounded-2xl,
-  #v12-section-route + section .rounded-3xl,
-  #v12-section-route + section .rounded-2xl {
-    border-radius: 0.5rem !important;
-  }
-
-  #v12-section-route .p-4,
-  #v12-section-route + section .p-4 {
-    padding: 0.55rem !important;
-  }
-
-  .navdash-v12-night {
-    background: #05090e !important;
+  .bridge-console-map {
+    height: 58vh !important;
+    min-height: 22rem !important;
   }
 }
