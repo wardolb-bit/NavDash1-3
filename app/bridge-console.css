@@ -116,7 +116,7 @@ body::before {
   line-height: .95rem !important;
 }
 
-/* Force the map to dominate the bridge screen. */
+/* Force the map to dominate the bridge screen, but leave Leaflet's internal panes alone. */
 #v12-map {
   display: block !important;
   width: 100% !important;
@@ -126,19 +126,6 @@ body::before {
   background: #13212d !important;
   overflow: hidden !important;
   position: relative !important;
-}
-
-#v12-map.leaflet-container {
-  visibility: visible !important;
-  opacity: 1 !important;
-}
-
-#v12-map .leaflet-map-pane,
-#v12-map .leaflet-tile-pane,
-#v12-map .leaflet-overlay-pane,
-#v12-map .leaflet-marker-pane {
-  visibility: visible !important;
-  opacity: 1 !important;
 }
 
 #v12-section-chart > #v12-map + div {
