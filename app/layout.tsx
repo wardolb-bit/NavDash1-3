@@ -91,7 +91,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 if (lat >= 5 && lat <= 9 && lon >= 156 && lon < 161) return "Pacific/Pohnpei";
                 if (lat >= 4 && lat <= 7 && lon >= 161 && lon < 164.5) return "Pacific/Kosrae";
                 if (lat >= 4 && lat <= 15 && lon >= 164.5 && lon <= 173.5) return "Pacific/Majuro";
-                if (lat >= 18 && lat <= 23.5 && lon >= -161.5 && lon <= -154.5) return "Pacific/Honolulu";
                 if (lat >= 30 && lat <= 50 && lon >= -126 && lon <= -114) return "America/Los_Angeles";
                 if (lat >= 24 && lat <= 50 && lon > -114 && lon <= -101) return "America/Denver";
                 if (lat >= 24 && lat <= 50 && lon > -101 && lon <= -84) return "America/Chicago";
@@ -100,7 +99,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
                 const offset = Math.max(-12, Math.min(14, Math.round(lon / 15)));
                 const etcSign = offset > 0 ? "-" : offset < 0 ? "+" : "";
-                return offset === 0 ? "UTC" : `Etc/GMT${etcSign}${Math.abs(offset)}`;
+                return offset === 0 ? "UTC" : "Etc/GMT" + etcSign + Math.abs(offset);
               }
 
               function zonePart(date, timeZone, style) {
@@ -162,7 +161,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   const offset = normalizeOffset(zonePart(arrival, timeZone, "longOffset"));
 
                   label.textContent = "ETA · Destination Local";
-                  value.textContent = `${dateText} ${timeText}`;
+                  value.textContent = dateText + " " + timeText;
 
                   let zoneLine = card.querySelector("[data-destination-eta-zone]");
                   if (!zoneLine) {
@@ -171,7 +170,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     zoneLine.className = "mt-1 text-xs font-black text-slate-400";
                     card.appendChild(zoneLine);
                   }
-                  zoneLine.textContent = `${shortZone} · ${offset}`;
+                  zoneLine.textContent = shortZone + " · " + offset;
 
                   let descriptionLine = card.querySelector("[data-destination-eta-description]");
                   if (!descriptionLine) {
@@ -180,7 +179,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     descriptionLine.className = "mt-1 text-xs text-slate-400";
                     card.appendChild(descriptionLine);
                   }
-                  descriptionLine.textContent = `${longZone} · ${timeZone}`;
+                  descriptionLine.textContent = longZone + " · " + timeZone;
                 }
               }
 
