@@ -20,6 +20,14 @@ section:has(> #v12-section-weather):has(> #v12-section-status) {
   display: none !important;
 }
 
+/* Keep the quick-access control header available while the bridge console scrolls. */
+.navdash-v12-day > header,
+.navdash-v12-night > header {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 1200 !important;
+}
+
 /* Bridge Console UI experiment: desktop-only visual treatment for the NavDash main screen. */
 @media (min-width: 1280px) {
   .navdash-v12-day,
