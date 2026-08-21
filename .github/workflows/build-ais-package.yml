@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - feature/vercel-wheelhouse-ais
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
