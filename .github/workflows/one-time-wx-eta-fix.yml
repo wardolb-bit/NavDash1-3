@@ -1,0 +1,195 @@
+name: One-time WX ETA source fix
+
+on:
+  push:
+    branches:
+      - preview/navmap-isolation
+    paths:
+      - .github/workflows/one-time-wx-eta-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[wx-eta-patched]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: preview/navmap-isolation
+          fetch-depth: 0
+
+      - name: Patch WX Routing ETA logic
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/wx-routing/page.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          def replace_once(old: str, new: str, label: str):
+              global text
+              if old not in text:
+                  raise SystemExit(f'Expected snippet not found: {label}')
+              text = text.replace(old, new, 1)
+
+          replace_once(
+              '  etaLabel: string;\n  weatherTimeLabel: string;',
+              '  etaLabel: string;\n  etaZoneLabel?: string;\n  weatherTimeLabel: string;',
+              'RouteLegForecast etaZoneLabel',
+          )
+
+          helper_marker = 'function riskFlagsForLeg(row: GribTimelineRow | null, legBearingDeg: number, nextRow?: GribTimelineRow | null): RiskFlag[] {'
+          helpers = '''function waypointUtcOffsetHours(lon: number) {
+            if (!Number.isFinite(lon)) return 0;
+            const normalized = normalizedLongitude(lon);
+            return Math.max(-12, Math.min(12, Math.round(normalized / 15)));
+          }
+
+          function signedZoneHours(value: number) {
+            if (value === 0) return "0";
+            return `${value > 0 ? "+" : ""}${value}`;
+          }
+
+          function formatWaypointLocalEta(etaUtc: Date | null, waypointLon: number) {
+            if (!etaUtc || Number.isNaN(etaUtc.getTime())) return null;
+            const utcOffsetHours = waypointUtcOffsetHours(waypointLon);
+            const zoneDescription = -utcOffsetHours;
+            const local = new Date(etaUtc.getTime() + utcOffsetHours * 3600000);
+            const month = String(local.getUTCMonth() + 1).padStart(2, "0");
+            const day = String(local.getUTCDate()).padStart(2, "0");
+            const hour = String(local.getUTCHours()).padStart(2, "0");
+            const minute = String(local.getUTCMinutes()).padStart(2, "0");
+            const utcLabel = utcOffsetHours === 0 ? "UTC" : `UTC${signedZoneHours(utcOffsetHours)}`;
+            return {
+              dateTime: `${month}/${day} ${hour}${minute}`,
+              zoneLabel: `LT · ZD ${signedZoneHours(zoneDescription)} · ${utcLabel}`,
+            };
+          }
+
+          '''
+          replace_once(helper_marker, helpers + helper_marker, 'waypoint local ETA helpers')
+
+          replace_once(
+              '  const useAisOrigin = projectionMode === "current";',
+              '  const useAisOrigin = projectionMode !== "departure";',
+              'AIS origin mode',
+          )
+
+          replace_once(
+              '    const originProgress = planningOriginProgress(route, ownShip, useAisOrigin);\n    let cumulativeEndNm = 0;',
+              '''    const originProgress = projectionMode === "departure"
+              ? projectionOriginProgress(route, departurePosition)
+              : routeProgressNearestPosition(route, ownShip);
+            const etaBaseDate = projectionMode === "departure"
+              ? (departureTime ? new Date(departureTime) : null)
+              : ownShip?.receivedAt
+                ? new Date(ownShip.receivedAt)
+                : new Date();
+            let cumulativeEndNm = 0;''',
+              'route exposure origin and ETA base',
+          )
+
+          replace_once(
+              '      const etaDate = dateFromDepartureHours(departureTime, etaHours);',
+              '      const etaDate = etaBaseDate && etaHours !== null ? new Date(etaBaseDate.getTime() + Math.max(0, etaHours) * 3600000) : null;',
+              'route exposure ETA date',
+          )
+
+          replace_once(
+              '      const sourcePoint = point ? `${point.id} ${point.name}`.trim() : "No route sample";\n      const legForecast: RouteLegForecast = {',
+              '      const sourcePoint = point ? `${point.id} ${point.name}`.trim() : "No route sample";\n      const etaDisplay = isPassed ? null : formatWaypointLocalEta(etaDate, to.lon);\n      const legForecast: RouteLegForecast = {',
+              'route exposure ETA display',
+          )
+
+          replace_once(
+              '        etaLabel: isPassed ? "Passed" : formatEtaLabel(departureTime, etaHours),\n        weatherTimeLabel:',
+              '        etaLabel: isPassed ? "Passed" : etaDisplay?.dateTime || "--",\n        etaZoneLabel: isPassed ? undefined : etaDisplay?.zoneLabel,\n        weatherTimeLabel:',
+              'route exposure ETA label',
+          )
+
+          replace_once(
+              '          etaLabel: legForecast.etaLabel,\n          weatherTimeLabel:',
+              '          etaLabel: legForecast.etaLabel,\n          etaZoneLabel: legForecast.etaZoneLabel || "",\n          weatherTimeLabel:',
+              'route feature ETA zone',
+          )
+
+          replace_once(
+              '  }, [departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, route, selectedIndex, selectedTime?.valid, useAisOrigin]);',
+              '  }, [departurePosition, departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, projectionMode, route, selectedIndex, selectedTime?.valid]);',
+              'route exposure dependencies',
+          )
+
+          replace_once(
+              '          etaLabel: props.etaLabel || "--",\n          weatherTimeLabel:',
+              '          etaLabel: props.etaLabel || "--",\n          etaZoneLabel: props.etaZoneLabel || undefined,\n          weatherTimeLabel:',
+              'selected map leg ETA zone',
+          )
+
+          replace_once(
+              '                            <div className="font-black">{leg.etaLabel}</div>',
+              '''                            <div className="font-black">{leg.etaLabel}</div>
+                            {leg.etaZoneLabel ? (
+                              <div className={`text-[0.65rem] font-bold ${mutedClass}`}>{leg.etaZoneLabel}</div>
+                            ) : null}''',
+              'leg card ETA zone display',
+          )
+
+          replace_once(
+              '                  <div>ETA WPT: <span className="font-bold">{selectedRouteLeg.etaLabel}</span></div>',
+              '''                  <div>ETA WPT: <span className="font-bold">{selectedRouteLeg.etaLabel}</span></div>
+                  {selectedRouteLeg.etaZoneLabel ? (
+                    <div>Zone: <span className="font-bold">{selectedRouteLeg.etaZoneLabel}</span></div>
+                  ) : null}''',
+              'selected leg ETA zone display',
+          )
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove temporary ETA DOM override from bridge skin
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('components/WxRoutingBridgeSkin.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          # Remove the temporary ETA engine added while diagnosing this issue.
+          text = re.sub(r'\ntype RouteWaypoint = .*?\nexport function WxRoutingBridgeSkin\(\) \{', '\nexport function WxRoutingBridgeSkin() {', text, count=1, flags=re.S)
+          text = re.sub(r'\n    let etaTimer = 0;', '', text, count=1)
+          text = re.sub(r'\n    let routeRefreshTimer = 0;', '', text, count=1)
+          text = re.sub(r'\n    let correctionQueued = false;', '', text, count=1)
+          text = re.sub(r'\n    let routeState: RouteStatePayload \| null = null;', '', text, count=1)
+          text = re.sub(r'\n    const loadRouteState = async \(\) => \{.*?\n    const apply = \(\) => \{', '\n    const apply = () => {', text, count=1, flags=re.S)
+          text = re.sub(r'\n      loadRouteState\(\).*?\n      if \(!observer\) \{', '\n      if (!observer) {', text, count=1, flags=re.S)
+          text = text.replace('          hideTechnicalWxDetails(shell);\n          correctLegEtas(shell);', '          hideTechnicalWxDetails(shell);')
+          text = text.replace('      window.clearInterval(etaTimer);\n', '')
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Verify expected changes
+        shell: bash
+        run: |
+          grep -q 'etaZoneLabel' app/wx-routing/page.tsx
+          grep -q 'formatWaypointLocalEta' app/wx-routing/page.tsx
+          grep -q 'routeProgressNearestPosition(route, ownShip)' app/wx-routing/page.tsx
+          grep -q 'LT · ZD' app/wx-routing/page.tsx
+          if grep -q 'correctLegEtas' components/WxRoutingBridgeSkin.tsx; then
+            echo 'Temporary ETA override still present' >&2
+            exit 1
+          fi
+
+      - name: Remove one-time workflow and commit patch
+        shell: bash
+        run: |
+          rm .github/workflows/one-time-wx-eta-fix.yml
+          git config user.name 'NavDash patch bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add app/wx-routing/page.tsx components/WxRoutingBridgeSkin.tsx .github/workflows/one-time-wx-eta-fix.yml
+          git commit -m 'Fix WX routing ETA source and local zone display [wx-eta-patched]'
+          git push origin HEAD:preview/navmap-isolation
