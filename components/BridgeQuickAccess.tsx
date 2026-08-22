@@ -44,11 +44,11 @@ export function BridgeQuickAccess() {
 
   return createPortal(
     <>
-      <Link href="/wx" className="bc-quick-link">WEATHER</Link>
-      <Link href="/wx-routing" className="bc-quick-link">WX ROUTING</Link>
-      <Link href="/position-report" className="bc-quick-link">POSITION REPORT</Link>
-      <Link href="/official-weather" className="bc-quick-link bc-quick-secondary">OFFICIAL WX</Link>
-      <Link href="/ecr" className="bc-quick-link bc-quick-secondary">ECR</Link>
+      <Link href="/wx" className="bc-quick-link">Weather</Link>
+      <Link href="/wx-routing" className="bc-quick-link">WX Routing</Link>
+      <Link href="/position-report" className="bc-quick-link">Position Report</Link>
+      <Link href="/official-weather" className="bc-quick-link">Official WX</Link>
+      <Link href="/ecr" className="bc-quick-link">ECR</Link>
     </>,
     target,
   );
