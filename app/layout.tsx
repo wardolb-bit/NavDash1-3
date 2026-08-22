@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { NavDashNav } from '../components/NavDashNav';
 import { BridgeConsoleRouteGate } from '../components/BridgeConsoleRouteGate';
+import { WxRoutingBridgeSkin } from '../components/WxRoutingBridgeSkin';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -63,6 +64,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <NavDashNav />
         {children}
         <BridgeConsoleRouteGate />
+        <WxRoutingBridgeSkin />
       </body>
     </html>
   );
