@@ -1,0 +1,171 @@
+/* Position Report bridge-console presentation only. Functional page code is untouched. */
+
+main > div.relative.z-10.min-h-screen {
+  max-width: none !important;
+  padding: 6px !important;
+  font-family: system-ui, sans-serif;
+}
+
+main > div.relative.z-10.min-h-screen > header {
+  margin-bottom: 5px !important;
+  padding: 10px 12px !important;
+  border-radius: 0 !important;
+  border: 1px solid rgba(201, 162, 39, .30) !important;
+  background: #071019 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+main > div.relative.z-10.min-h-screen > header > div {
+  gap: 8px !important;
+}
+
+main > div.relative.z-10.min-h-screen > header .h-16.w-16 {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 0 !important;
+  font-size: 15px !important;
+  background: #101820 !important;
+  border-color: rgba(201, 162, 39, .65) !important;
+}
+
+main > div.relative.z-10.min-h-screen > header h1 {
+  font-size: 22px !important;
+  line-height: 1.05 !important;
+  color: #edf4fa !important;
+}
+
+main > div.relative.z-10.min-h-screen > header h1 + div {
+  margin-top: 4px !important;
+  font-size: 10px !important;
+  color: #8294a5 !important;
+}
+
+main > div.relative.z-10.min-h-screen > header [class*="tracking-[0.42em]"] {
+  font-size: 8px !important;
+  letter-spacing: .16em !important;
+  color: #c9a227 !important;
+}
+
+main > div.relative.z-10.min-h-screen > header button,
+main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"] {
+  height: 30px !important;
+  min-height: 30px !important;
+  width: auto !important;
+  min-width: 112px !important;
+  padding: 0 10px !important;
+  border-radius: 2px !important;
+  box-shadow: none !important;
+  font-size: 9px !important;
+  font-weight: 900 !important;
+  letter-spacing: .06em !important;
+}
+
+main > div.relative.z-10.min-h-screen > header button {
+  border-color: rgba(201, 162, 39, .42) !important;
+  background: #071019 !important;
+  color: #d6bd58 !important;
+}
+
+main > div.relative.z-10.min-h-screen > .grid.w-full.grid-cols-2 {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 5px !important;
+}
+
+main > div.relative.z-10.min-h-screen section {
+  border-radius: 0 !important;
+  border-color: rgba(148, 163, 184, .16) !important;
+  background: #071019 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding: 10px !important;
+}
+
+main > div.relative.z-10.min-h-screen section [class*="rounded-3xl"],
+main > div.relative.z-10.min-h-screen section [class*="rounded-2xl"] {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+main > div.relative.z-10.min-h-screen section [class*="bg-black/25"] {
+  background: #050a0f !important;
+  border-color: rgba(148, 163, 184, .18) !important;
+}
+
+main > div.relative.z-10.min-h-screen section [class*="tracking-[.18em]"] {
+  color: #708496 !important;
+  font-size: 8px !important;
+  letter-spacing: .15em !important;
+}
+
+main > div.relative.z-10.min-h-screen section .font-mono.text-lg {
+  color: #edf4fa !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+}
+
+main > div.relative.z-10.min-h-screen section > div:first-child.grid.grid-cols-2 {
+  gap: 0 !important;
+  padding: 0 !important;
+  border: 1px solid rgba(148, 163, 184, .16) !important;
+  background: #050a0f !important;
+}
+
+main > div.relative.z-10.min-h-screen section > div:first-child.grid.grid-cols-2 > div {
+  min-height: 72px;
+  padding: 10px 12px;
+  border-right: 1px solid rgba(148, 163, 184, .12);
+  border-bottom: 1px solid rgba(148, 163, 184, .12);
+}
+
+main > div.relative.z-10.min-h-screen section > div:first-child.grid.grid-cols-2 > div:nth-child(2n) {
+  border-right: 0;
+}
+
+main > div.relative.z-10.min-h-screen input,
+main > div.relative.z-10.min-h-screen select,
+main > div.relative.z-10.min-h-screen textarea {
+  border-radius: 2px !important;
+  border-color: rgba(148, 163, 184, .24) !important;
+  background: #050a0f !important;
+  color: #edf4fa !important;
+  box-shadow: none !important;
+}
+
+main > div.relative.z-10.min-h-screen input:focus,
+main > div.relative.z-10.min-h-screen select:focus,
+main > div.relative.z-10.min-h-screen textarea:focus {
+  border-color: rgba(201, 162, 39, .75) !important;
+  outline: none !important;
+}
+
+main > div.relative.z-10.min-h-screen section button {
+  border-radius: 2px !important;
+  box-shadow: none !important;
+}
+
+main > div.relative.z-10.min-h-screen pre {
+  border-radius: 2px !important;
+  border-color: rgba(148, 163, 184, .18) !important;
+  background: #050a0f !important;
+  color: #c7d2dc !important;
+}
+
+/* Keep operational state colors alive instead of flattening them into the console palette. */
+main > div.relative.z-10.min-h-screen [class*="bg-emerald-500/10"] {
+  background: rgba(16, 185, 129, .16) !important;
+  border-color: rgba(110, 231, 183, .42) !important;
+  color: #d1fae5 !important;
+}
+
+main > div.relative.z-10.min-h-screen [class*="bg-red-500/10"] {
+  background: rgba(239, 68, 68, .16) !important;
+  border-color: rgba(252, 165, 165, .42) !important;
+  color: #fee2e2 !important;
+}
+
+@media (max-width: 1000px) {
+  main > div.relative.z-10.min-h-screen > .grid.w-full.grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+}
