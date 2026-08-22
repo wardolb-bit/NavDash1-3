@@ -132,9 +132,24 @@ main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"] {
   box-shadow: none !important;
 }
 main.min-h-screen[class*="circle_at_12"] header [class*="rounded-3xl"],
-main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"]:not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-amber"]):not([class*="bg-red"]) {
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"]:not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-red"]):not([class*="bg-slate"]) {
   border-color: rgba(148,163,184,.16) !important;
   background: #08111a !important;
+}
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"][class*="bg-green"] {
+  border-color: rgb(34,197,94) !important;
+  background: rgb(34,197,94) !important;
+  color: #000 !important;
+}
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"][class*="bg-yellow"] {
+  border-color: rgb(250,204,21) !important;
+  background: rgb(250,204,21) !important;
+  color: #000 !important;
+}
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"][class*="bg-red"] {
+  border-color: rgb(239,68,68) !important;
+  background: rgb(239,68,68) !important;
+  color: #000 !important;
 }
 main.min-h-screen[class*="circle_at_12"] header button,
 main.min-h-screen[class*="circle_at_12"] section button,
