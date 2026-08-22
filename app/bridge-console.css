@@ -84,6 +84,11 @@ body::before {
 .navdash-v12-night > div:has(> button):has(+ div > #v12-section-chart) > button,
 .navdash-v12-day > div:has(> button):has(+ div > #v12-section-chart) > button { flex: 0 0 auto !important; padding: .42rem .68rem !important; border-radius: .4rem !important; font-size: .72rem !important; }
 #v12-section-chart::before { content: "MAP CONSOLE"; display: block; margin-bottom: .35rem; color: #c9a227; font: 800 .62rem/1 system-ui, sans-serif; letter-spacing: .18em; }
+
+/* Bridge preview keeps the operational map clean. Weather remains on its dedicated page. */
+#v12-section-weather,
+#v12-section-status { display: none !important; }
+
 @media (max-width: 900px) {
   .navdash-v12-night > div:has(> #v12-section-chart),
   .navdash-v12-day > div:has(> #v12-section-chart) { grid-template-columns: 1fr !important; }
