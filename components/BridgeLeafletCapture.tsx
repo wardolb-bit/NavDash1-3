@@ -3,6 +3,11 @@
 import { useLayoutEffect } from "react";
 import { usePathname } from "next/navigation";
 
+function invalidateCapturedMap() {
+  const map = (window as any).__navdashLeafletMap;
+  if (map?.invalidateSize) map.invalidateSize();
+}
+
 export function BridgeLeafletCapture() {
   const pathname = usePathname();
 
@@ -10,6 +15,32 @@ export function BridgeLeafletCapture() {
     if (pathname !== "/") return;
 
     let cancelled = false;
+    let retryTimer = 0;
+    let resizeObserver: ResizeObserver | null = null;
+    const settleTimers: number[] = [];
+
+    const settleMap = () => {
+      window.requestAnimationFrame(() => {
+        window.setTimeout(invalidateCapturedMap, 60);
+      });
+    };
+
+    const watchMapElement = () => {
+      if (cancelled) return;
+
+      const mapElement = document.getElementById("v12-map");
+      if (!mapElement) {
+        retryTimer = window.setTimeout(watchMapElement, 50);
+        return;
+      }
+
+      resizeObserver = new ResizeObserver(settleMap);
+      resizeObserver.observe(mapElement);
+
+      for (const delay of [0, 100, 350, 900, 1500]) {
+        settleTimers.push(window.setTimeout(settleMap, delay));
+      }
+    };
 
     import("leaflet")
       .then((leafletModule: any) => {
@@ -30,8 +61,13 @@ export function BridgeLeafletCapture() {
         // Keep navigation usable if Leaflet is not available yet.
       });
 
+    watchMapElement();
+
     return () => {
       cancelled = true;
+      window.clearTimeout(retryTimer);
+      settleTimers.forEach((timer) => window.clearTimeout(timer));
+      resizeObserver?.disconnect();
     };
   }, [pathname]);
 
