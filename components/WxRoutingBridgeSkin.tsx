@@ -40,9 +40,22 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function readAisSog(root: HTMLElement) {
+  const sogLabel = Array.from(root.querySelectorAll<HTMLElement>("div,span")).find(
+    (el) => (el.textContent || "").trim() === "SOG / COG",
+  );
+  if (!sogLabel) return NaN;
+
+  const field = sogLabel.parentElement as HTMLElement | null;
+  const valueEl = field?.querySelector<HTMLElement>(".font-black");
+  const candidateText = valueEl?.textContent || field?.textContent || "";
+  const match = candidateText.match(/([0-9]+(?:\.[0-9]+)?)\s*kt/i);
+  return match ? Number(match[1]) : NaN;
+}
+
 function enhancePlanningUi(root: HTMLElement) {
   const textNodes = Array.from(root.querySelectorAll<HTMLElement>("div,span"));
-  const planningHeading = textNodes.find((el) => (el.textContent || "").trim() === "Planning");
+  const planningHeading = textNodes.find((el) => (el.textContent || "").trim() === "Planning" || (el.textContent || "").trim() === "Projection Origin");
   const planningCard = planningHeading?.parentElement as HTMLElement | null;
   if (!planningCard) return;
 
@@ -55,7 +68,7 @@ function enhancePlanningUi(root: HTMLElement) {
   });
 
   const speedLabel = Array.from(planningCard.querySelectorAll<HTMLElement>("span")).find(
-    (el) => (el.textContent || "").trim() === "Planning Speed",
+    (el) => ["Planning Speed", "ETA Speed (kt)"].includes((el.textContent || "").trim()),
   );
   if (speedLabel) speedLabel.textContent = "ETA Speed (kt)";
 
@@ -88,12 +101,7 @@ function enhancePlanningUi(root: HTMLElement) {
     speedInput.closest("label")?.insertAdjacentElement("afterend", helper);
   }
 
-  const sogLabel = Array.from(root.querySelectorAll<HTMLElement>("div")).find(
-    (el) => (el.textContent || "").trim() === "SOG / COG",
-  );
-  const sogText = sogLabel?.parentElement?.textContent || "";
-  const match = sogText.match(/([0-9]+(?:\.[0-9]+)?)\s*kt/i);
-  const sog = match ? Number(match[1]) : NaN;
+  const sog = readAisSog(root);
   const readout = helper.querySelector<HTMLElement>("[data-wxr-ais-sog]");
   const useButton = helper.querySelector<HTMLButtonElement>("[data-wxr-use-ais-sog]");
 
