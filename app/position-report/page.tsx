@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { getAisWebSocketUrl } from '../../lib/aisWebSocket';
 import { useBridgeTheme } from '../../lib/useBridgeTheme';
@@ -278,7 +279,7 @@ function readWaypointCoordinate(wp: unknown, primary: string, secondary: string)
   const record = wp as Record<string, unknown>;
 
   const position = record.position && typeof record.position === 'object'
-    ? record.position as Record<string, unknown>
+    ? position as Record<string, unknown>
     : {};
 
   return finiteNumber(record[primary] ?? record[secondary] ?? position[primary] ?? position[secondary]);
@@ -736,6 +737,12 @@ export default function PositionReportPage() {
               >
                 {livePositionActive ? "Live Position Active" : "Position Unavailable"}
               </div>
+              <Link
+                href="/"
+                className={nightMode ? "inline-flex h-12 w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15" : "inline-flex h-12 w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-300 bg-slate-100 px-4 text-sm font-black text-slate-900 hover:bg-white"}
+              >
+                NAV CONSOLE
+              </Link>
               <button
                 onClick={toggleFullscreen}
                 className={nightMode ? "inline-flex h-12 w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15" : "inline-flex h-12 w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-300 bg-slate-100 px-4 text-sm font-black text-slate-900 hover:bg-white"}
