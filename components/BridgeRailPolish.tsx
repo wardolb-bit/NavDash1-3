@@ -16,19 +16,18 @@ function extractBridgeCoordinates(value: string) {
 export function BridgeRailPolish() {
   useEffect(() => {
     let retryTimer = 0;
-    let statusTimer = 0;
     let cancelled = false;
     let lastGoodLat = "--";
     let lastGoodLon = "--";
+    const observers: MutationObserver[] = [];
 
     const setTextIfChanged = (el: HTMLElement | null, text: string) => {
       if (!el || el.textContent === text) return;
       el.textContent = text;
     };
 
-    const updateDynamicText = () => {
+    const updateCoordinates = () => {
       if (cancelled) return;
-
       const latEl = document.getElementById("bc2-lat");
       const lonEl = document.getElementById("bc2-lon");
       const parsed = extractBridgeCoordinates(
@@ -39,7 +38,10 @@ export function BridgeRailPolish() {
       if (parsed.lon) lastGoodLon = parsed.lon;
       if (lastGoodLat !== "--") setTextIfChanged(latEl, lastGoodLat);
       if (lastGoodLon !== "--") setTextIfChanged(lonEl, lastGoodLon);
+    };
 
+    const updateStatus = () => {
+      if (cancelled) return;
       const routeName = document.getElementById("bc2-route")?.textContent?.trim() || "--";
       const routeLoaded = routeName !== "--" && routeName.toLowerCase() !== "no route loaded";
       const topLive = document.querySelector<HTMLElement>("#bc-v2-topbar .live");
@@ -49,12 +51,24 @@ export function BridgeRailPolish() {
         const el = document.getElementById(id);
         if (!el) return;
         setTextIfChanged(el, `${ok ? "●" : "◆"} ${text}`);
-        const desired = `padding:10px 5px;text-align:center;background:#050b10;color:${ok ? "#45d6a8" : "#d4ad45"};font:800 8px system-ui;letter-spacing:.09em;white-space:nowrap`;
-        if (el.style.cssText !== desired) el.style.cssText = desired;
+        el.style.padding = "10px 5px";
+        el.style.textAlign = "center";
+        el.style.background = "#050b10";
+        el.style.color = ok ? "#45d6a8" : "#d4ad45";
+        el.style.font = "800 8px system-ui";
+        el.style.letterSpacing = ".09em";
+        el.style.whiteSpace = "nowrap";
       };
 
       styleStatus("bc2-status-ais", aisLive ? "AIS LIVE" : "AIS CHECK", aisLive);
       styleStatus("bc2-status-route", routeLoaded ? "ROUTE LOADED" : "NO ROUTE", routeLoaded);
+    };
+
+    const observe = (el: Node | null, callback: () => void) => {
+      if (!el) return;
+      const observer = new MutationObserver(callback);
+      observer.observe(el, { childList: true, subtree: true, characterData: true });
+      observers.push(observer);
     };
 
     const applyOnce = () => {
@@ -122,8 +136,13 @@ export function BridgeRailPolish() {
       const oldFooter = rail.querySelector<HTMLElement>(".bc2-wx");
       if (oldFooter) oldFooter.style.display = "none";
 
-      updateDynamicText();
-      statusTimer = window.setInterval(updateDynamicText, 1000);
+      updateCoordinates();
+      updateStatus();
+
+      observe(document.getElementById("bc2-lat"), updateCoordinates);
+      observe(document.getElementById("bc2-lon"), updateCoordinates);
+      observe(document.getElementById("bc2-route"), updateStatus);
+      observe(document.querySelector("#bc-v2-topbar .live"), updateStatus);
     };
 
     applyOnce();
@@ -131,7 +150,7 @@ export function BridgeRailPolish() {
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
-      window.clearInterval(statusTimer);
+      observers.forEach((observer) => observer.disconnect());
     };
   }, []);
 
