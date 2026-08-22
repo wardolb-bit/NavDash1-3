@@ -279,7 +279,7 @@ function readWaypointCoordinate(wp: unknown, primary: string, secondary: string)
   const record = wp as Record<string, unknown>;
 
   const position = record.position && typeof record.position === 'object'
-    ? position as Record<string, unknown>
+    ? record.position as Record<string, unknown>
     : {};
 
   return finiteNumber(record[primary] ?? record[secondary] ?? position[primary] ?? position[secondary]);
