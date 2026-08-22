@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import { BridgeConsolePreview } from "./BridgeConsolePreview";
 import { BridgeQuickAccess } from "./BridgeQuickAccess";
 import { BridgeOwnShipEnhancer } from "./BridgeOwnShipEnhancer";
 import { BridgeRailPolish } from "./BridgeRailPolish";
@@ -58,7 +57,6 @@ export function BridgeConsoleRouteGate() {
 
   return (
     <>
-      <BridgeConsolePreview />
       <BridgeMapWakeup />
       <NavMapMainOverlayV2 />
       <BridgeMapLayerControls />
