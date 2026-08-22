@@ -122,11 +122,6 @@ type OwnShip = {
   receivedAt: string;
 };
 
-type PositionLike = {
-  lat: number;
-  lon: number;
-};
-
 type Projection = {
   lat: number;
   lon: number;
@@ -145,7 +140,7 @@ type RiskFlag = {
 };
 
 type WxRoutingPanel = "GRIB" | "ROUTE" | "STORM" | "WHAT IF" | "COMPARE" | "LAYERS";
-type ProjectionOriginMode = "current" | "manual";
+type ProjectionMode = "off" | "current" | "departure";
 
 type ScenarioSummary = {
   maxWind: number | null;
@@ -876,11 +871,11 @@ function interpolateRouteAtDistance(route: Waypoint[], targetDistanceNm: number)
   return null;
 }
 
-function routeProgressNearestPosition(route: Waypoint[], position: PositionLike | null) {
+function routeProgressNearestPosition(route: Waypoint[], position: OwnShip | null) {
   return routeProgressNearestPositionDetail(route, position).progressNm;
 }
 
-function routeProgressNearestPositionDetail(route: Waypoint[], position: PositionLike | null) {
+function routeProgressNearestPositionDetail(route: Waypoint[], position: OwnShip | null) {
   if (!position || route.length < 2) {
     return { progressNm: 0, offTrackNm: null as number | null, usable: false };
   }
@@ -928,10 +923,47 @@ function routeProgressNearestPositionDetail(route: Waypoint[], position: Positio
   };
 }
 
-function planningOriginProgress(route: Waypoint[], position: PositionLike | null, usePositionOrigin: boolean) {
-  if (!usePositionOrigin) return 0;
+function planningOriginProgress(route: Waypoint[], position: OwnShip | null, useAisOrigin: boolean) {
+  if (!useAisOrigin) return 0;
   const origin = routeProgressNearestPositionDetail(route, position);
   return origin.usable ? origin.progressNm : 0;
+}
+
+function projectionOriginProgress(route: Waypoint[], position: Pick<OwnShip, "lat" | "lon"> | null) {
+  if (!position) return 0;
+  const origin = routeProgressNearestPositionDetail(route, {
+    lat: position.lat,
+    lon: position.lon,
+    sog: null,
+    cog: null,
+    heading: null,
+    receivedAt: "",
+  });
+  return origin.usable ? origin.progressNm : 0;
+}
+
+function destinationPoint(lat: number, lon: number, bearing: number, distanceNm: number) {
+  const radiusNm = 3440.065;
+  const angularDistance = distanceNm / radiusNm;
+  const bearingRad = toRad(bearing);
+  const lat1 = toRad(lat);
+  const lon1 = toRad(lon);
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(angularDistance) +
+      Math.cos(lat1) * Math.sin(angularDistance) * Math.cos(bearingRad),
+  );
+  const lon2 =
+    lon1 +
+    Math.atan2(
+      Math.sin(bearingRad) * Math.sin(angularDistance) * Math.cos(lat1),
+      Math.cos(angularDistance) - Math.sin(lat1) * Math.sin(lat2),
+    );
+
+  return {
+    lat: toDeg(lat2),
+    lon: normalizedLongitude(toDeg(lon2)),
+  };
 }
 
 function parseUtcDate(value: string) {
@@ -948,6 +980,12 @@ function formatDateTimeLocal(date: Date) {
 
 function hoursBetweenLocalAndUtcValid(localDateTime: string, valid: string) {
   const start = localDateTime ? new Date(localDateTime) : null;
+  const end = parseUtcDate(valid);
+  if (!start || Number.isNaN(start.getTime()) || !end) return 0;
+  return Math.max(0, (end.getTime() - start.getTime()) / 3600000);
+}
+
+function hoursBetweenDateAndUtcValid(start: Date | null, valid: string) {
   const end = parseUtcDate(valid);
   if (!start || Number.isNaN(start.getTime()) || !end) return 0;
   return Math.max(0, (end.getTime() - start.getTime()) / 3600000);
@@ -1075,13 +1113,12 @@ export default function WxRoutingPage() {
   const [showRouteExposureLayer, setShowRouteExposureLayer] = useState(true);
   const [showGribPointLayer, setShowGribPointLayer] = useState(false);
   const [showPositionLayer, setShowPositionLayer] = useState(true);
-  const [showProjectedPosition, setShowProjectedPosition] = useState(false);
   const [ownShip, setOwnShip] = useState<OwnShip | null>(null);
   const [aisStatus, setAisStatus] = useState("AIS not connected");
-  const [useAisOrigin, setUseAisOrigin] = useState(true);
-  const [projectionOriginMode, setProjectionOriginMode] = useState<ProjectionOriginMode>("current");
-  const [manualDepartureLat, setManualDepartureLat] = useState("");
-  const [manualDepartureLon, setManualDepartureLon] = useState("");
+  const [projectionMode, setProjectionMode] = useState<ProjectionMode>("current");
+  const [departureLat, setDepartureLat] = useState("");
+  const [departureLon, setDepartureLon] = useState("");
+  const [departureCourse, setDepartureCourse] = useState("");
   const [selectedRouteLeg, setSelectedRouteLeg] = useState<RouteLegForecast | null>(null);
 
   const timeline = gribSummary?.timeline || [];
@@ -1096,25 +1133,35 @@ export default function WxRoutingPage() {
     if (!departure || Number.isNaN(departure.getTime()) || !Number.isFinite(whatIfDelay)) return departureTime;
     return formatDateTimeLocal(new Date(departure.getTime() + whatIfDelay * 3600000));
   }, [departureTime, whatIfDelay]);
-  const manualDeparturePosition = useMemo<PositionLike | null>(() => {
-    const lat = Number(manualDepartureLat);
-    const lon = Number(manualDepartureLon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  const projectionEnabled = projectionMode !== "off";
+  const useAisOrigin = projectionMode === "current";
+  const departurePosition = useMemo(() => {
+    const lat = Number(departureLat);
+    const lon = Number(departureLon);
+    if (projectionMode !== "departure" || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
     return { lat, lon };
-  }, [manualDepartureLat, manualDepartureLon]);
-  const projectionOriginPosition = projectionOriginMode === "current" ? ownShip : manualDeparturePosition;
-  const projectionDepartureTime = projectionOriginMode === "current" ? formatDateTimeLocal(new Date()) : departureTime;
+  }, [departureLat, departureLon, projectionMode]);
+  const departureCourseDeg = Number(departureCourse);
   const projection = useMemo(() => {
-    if (!showProjectedPosition || !selectedTime || !Number.isFinite(planningSpeedKt) || planningSpeedKt < 0) return null;
-    if (!projectionOriginPosition) return null;
-    if (projectionOriginMode === "manual" && !departureTime) return null;
+    if (!projectionEnabled) return null;
+    if (!selectedTime || !Number.isFinite(planningSpeedKt) || planningSpeedKt < 0) return null;
+
+    const departureStart = departureTime ? new Date(departureTime) : null;
+    const originPosition = projectionMode === "departure" ? departurePosition : ownShip;
+    const positionSource = projectionMode === "departure" ? "departure position/time" : "current AIS position";
+    const elapsedHours = projectionMode === "departure"
+      ? hoursBetweenDateAndUtcValid(departureStart, selectedTime.valid)
+      : Math.max(
+          hoursBetweenDateAndUtcValid(new Date(), selectedTime.valid),
+          forecastLeadHoursForSelection(timeline, selectedIndex, "", selectedTime.valid),
+        );
 
     if (planningSpeedKt === 0) {
-      const stationaryPosition = projectionOriginPosition;
+      const stationaryPosition = originPosition || (route.length ? route[0] : null);
       if (!stationaryPosition) return null;
 
-      const originProgress = planningOriginProgress(route, projectionOriginPosition, true);
+      const originProgress = projectionOriginProgress(route, stationaryPosition);
       const routeProjection = route.length >= 2
         ? interpolateRouteAtDistance(route, originProgress)
         : null;
@@ -1133,15 +1180,30 @@ export default function WxRoutingPage() {
         distanceToNextNm: routeProjection?.distanceToNextNm || 0,
         distanceAlongNm: routeProjection?.distanceAlongNm || 0,
         etaHours: null,
-        forecastLeadHours: forecastLeadHoursForSelection(timeline, selectedIndex, projectionDepartureTime, selectedTime.valid),
-        positionSource: projectionOriginMode === "current" ? "Current position / current time - stationary" : "Manual departure - stationary",
+        forecastLeadHours: elapsedHours,
+        positionSource: `${positionSource} - stationary`,
       };
     }
 
-    if (route.length < 2) return null;
+    if (route.length < 2) {
+      if (!originPosition || !Number.isFinite(departureCourseDeg)) return null;
+      const next = destinationPoint(originPosition.lat, originPosition.lon, departureCourseDeg, elapsedHours * planningSpeedKt);
+      return {
+        lat: next.lat,
+        lon: next.lon,
+        legIndex: 0,
+        nextWaypoint: { id: "DR", name: "Dead reckoning", lat: next.lat, lon: next.lon },
+        distanceToNextNm: 0,
+        distanceAlongNm: elapsedHours * planningSpeedKt,
+        etaHours: null,
+        forecastLeadHours: elapsedHours,
+        positionSource: `${positionSource} - course ${formatDirection(departureCourseDeg)}`,
+      };
+    }
 
-    const elapsedHours = forecastLeadHoursForSelection(timeline, selectedIndex, projectionDepartureTime, selectedTime.valid);
-    const originProgress = planningOriginProgress(route, projectionOriginPosition, true);
+    const originProgress = projectionMode === "departure"
+      ? projectionOriginProgress(route, departurePosition)
+      : planningOriginProgress(route, ownShip, true);
     const projectedDistance = Math.min(routeDistanceNm, originProgress + elapsedHours * planningSpeedKt);
     const next = interpolateRouteAtDistance(route, projectedDistance);
     if (!next) return null;
@@ -1150,21 +1212,9 @@ export default function WxRoutingPage() {
       ...next,
       etaHours: Math.max(0, (routeDistanceNm - projectedDistance) / planningSpeedKt),
       forecastLeadHours: elapsedHours,
-      positionSource: projectionOriginMode === "current" ? "Current position / current time" : "Manual departure position / time",
+      positionSource,
     };
-  }, [
-    departureTime,
-    planningSpeedKt,
-    projectionDepartureTime,
-    projectionOriginMode,
-    projectionOriginPosition,
-    route,
-    routeDistanceNm,
-    selectedIndex,
-    selectedTime,
-    showProjectedPosition,
-    timeline,
-  ]);
+  }, [departurePosition, departureTime, departureCourseDeg, ownShip, planningSpeedKt, projectionEnabled, projectionMode, route, routeDistanceNm, selectedIndex, selectedTime, timeline]);
 
   projectionRef.current = projection;
   planningSpeedRef.current = planningSpeedKt;
@@ -1176,17 +1226,16 @@ export default function WxRoutingPage() {
     selectedTime?.valid ?? "",
   ].join("|");
   const projectedForecast = useMemo(() => {
-    if (!showProjectedPosition) {
+    if (!projectionEnabled) {
       return {
         row: null,
-        source: "projected position off",
+        source: "projection off",
         distanceNm: null,
         usingRouteSample: false,
       };
     }
-
     const routeForecast = gribSummary?.routeForecast || null;
-    const position = projection;
+    const position = projection || (projectionMode === "current" ? ownShip : departurePosition);
     const point = position ? nearestForecastPointToPosition(routeForecast, position.lat, position.lon) : null;
     const row = routePointRow(point, selectedIndex, selectedTime?.valid) || selectedTime || null;
 
@@ -1200,7 +1249,7 @@ export default function WxRoutingPage() {
       distanceNm: point && position ? distanceNm(point.lat, point.lon, position.lat, position.lon) : null,
       usingRouteSample: Boolean(point),
     };
-  }, [gribSummary?.routeForecast, projection, selectedIndex, selectedTime, showProjectedPosition]);
+  }, [departurePosition, gribSummary?.routeForecast, ownShip, projection, projectionEnabled, projectionMode, selectedIndex, selectedTime]);
 
   const pageClass = dayMode
     ? "min-h-screen bg-white text-slate-950"
@@ -1343,8 +1392,8 @@ export default function WxRoutingPage() {
   }, [departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, route, selectedIndex, selectedTime?.valid, useAisOrigin]);
 
   const routeExposureSummary = useMemo(() => {
-    return summarizeScenarioLegs(routeExposure.legForecasts, projectedForecast.usingRouteSample ? [projectedForecast.row] : []);
-  }, [projectedForecast.row, projectedForecast.usingRouteSample, routeExposure.legForecasts]);
+    return summarizeScenarioLegs(routeExposure.legForecasts, projectionEnabled && projectedForecast.usingRouteSample ? [projectedForecast.row] : []);
+  }, [projectedForecast.row, projectedForecast.usingRouteSample, projectionEnabled, routeExposure.legForecasts]);
 
   const whatIfLegForecasts = useMemo(() => {
     const legForecasts: RouteLegForecast[] = [];
@@ -1634,15 +1683,10 @@ export default function WxRoutingPage() {
     [OWNSHIP_LAYER_ID, OWNSHIP_LABEL_LAYER_ID].forEach((layerId) => {
       if (map.getLayer(layerId)) {
         map.setLayoutProperty(layerId, "visibility", showPositionLayer ? "visible" : "none");
-        try {
-          map.moveLayer(layerId);
-        } catch {
-          // Layer order is best-effort across style refreshes.
-        }
       }
     });
 
-    if (!showProjectedPosition) {
+    if (!showPositionLayer) {
       projectedMarkerRef.current?.remove();
       projectedMarkerRef.current = null;
       projectedEdgeMarkerRef.current?.remove();
@@ -1963,7 +2007,7 @@ export default function WxRoutingPage() {
     const overlay = projectedOverlayRef.current;
     if (!map || !overlay || !map.isStyleLoaded()) return;
 
-    if (!showProjectedPosition) {
+    if (!showPositionLayer) {
       projectedMarkerRef.current?.remove();
       projectedMarkerRef.current = null;
       projectedEdgeMarkerRef.current?.remove();
@@ -2106,16 +2150,10 @@ export default function WxRoutingPage() {
   function refreshOwnShipSource() {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    const hasOwnShipPosition =
-      ownShip &&
-      Number.isFinite(ownShip.lat) &&
-      Number.isFinite(ownShip.lon) &&
-      Math.abs(ownShip.lat) <= 90 &&
-      Math.abs(ownShip.lon) <= 180;
 
     const data = {
       type: "FeatureCollection",
-      features: hasOwnShipPosition
+      features: ownShip
         ? [
             {
               type: "Feature",
@@ -2138,55 +2176,43 @@ export default function WxRoutingPage() {
         map.setPaintProperty(OWNSHIP_LABEL_LAYER_ID, "text-color", nightMode ? "#f8fafc" : "#111827");
         map.setPaintProperty(OWNSHIP_LABEL_LAYER_ID, "text-halo-color", nightMode ? "#020617" : "#ffffff");
       }
-    } else {
-      map.addSource(OWNSHIP_SOURCE_ID, {
-        type: "geojson",
-        data,
-      });
+      applyLayerVisibility();
+      return;
     }
 
-    if (!map.getLayer(OWNSHIP_LAYER_ID)) {
-      map.addLayer({
-        id: OWNSHIP_LAYER_ID,
-        type: "circle",
-        source: OWNSHIP_SOURCE_ID,
-        paint: {
-          "circle-radius": ["interpolate", ["linear"], ["zoom"], 2, 7, 7, 10, 11, 14],
-          "circle-color": "#f59e0b",
-          "circle-opacity": 0.96,
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 3,
-        },
-      });
-    }
+    map.addSource(OWNSHIP_SOURCE_ID, {
+      type: "geojson",
+      data,
+    });
 
-    if (!map.getLayer(OWNSHIP_LABEL_LAYER_ID)) {
-      map.addLayer({
-        id: OWNSHIP_LABEL_LAYER_ID,
-        type: "symbol",
-        source: OWNSHIP_SOURCE_ID,
-        layout: {
-          "text-field": ["get", "label"],
-          "text-size": 11,
-          "text-offset": [0, 1.8],
-          "text-anchor": "top",
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
-        },
-        paint: {
-          "text-color": nightMode ? "#f8fafc" : "#111827",
-          "text-halo-color": nightMode ? "#020617" : "#ffffff",
-          "text-halo-width": 2.5,
-        },
-      });
-    }
+    map.addLayer({
+      id: OWNSHIP_LAYER_ID,
+      type: "circle",
+      source: OWNSHIP_SOURCE_ID,
+      paint: {
+        "circle-radius": 7,
+        "circle-color": "#f59e0b",
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 2,
+      },
+    });
 
-    [OWNSHIP_LAYER_ID, OWNSHIP_LABEL_LAYER_ID].forEach((layerId) => {
-      try {
-        if (map.getLayer(layerId)) map.moveLayer(layerId);
-      } catch {
-        // Layer order is best-effort across style refreshes.
-      }
+    map.addLayer({
+      id: OWNSHIP_LABEL_LAYER_ID,
+      type: "symbol",
+      source: OWNSHIP_SOURCE_ID,
+      layout: {
+        "text-field": ["get", "label"],
+        "text-size": 11,
+        "text-offset": [0, 1.6],
+        "text-anchor": "top",
+        "text-allow-overlap": true,
+      },
+      paint: {
+        "text-color": nightMode ? "#f8fafc" : "#111827",
+        "text-halo-color": nightMode ? "#020617" : "#ffffff",
+        "text-halo-width": 2.5,
+      },
     });
 
     applyLayerVisibility();
@@ -2385,31 +2411,6 @@ export default function WxRoutingPage() {
     setSampleLon(center.lng.toFixed(4));
   }
 
-  function setManualDepartureFromAis() {
-    if (!ownShip) {
-      setAisStatus("AIS position is not available yet");
-      return;
-    }
-
-    setManualDepartureLat(ownShip.lat.toFixed(4));
-    setManualDepartureLon(ownShip.lon.toFixed(4));
-  }
-
-  function setManualDepartureFromMapCenter() {
-    const map = mapRef.current;
-    if (!map) return;
-    const center = map.getCenter();
-    setManualDepartureLat(center.lat.toFixed(4));
-    setManualDepartureLon(center.lng.toFixed(4));
-  }
-
-  function setManualDepartureFromRouteStart() {
-    const first = route[0];
-    if (!first) return;
-    setManualDepartureLat(first.lat.toFixed(4));
-    setManualDepartureLon(first.lon.toFixed(4));
-  }
-
   async function toggleFullscreen() {
     try {
       if (!document.fullscreenElement) {
@@ -2557,7 +2558,7 @@ export default function WxRoutingPage() {
 
         setOwnShip(decoded);
         setAisStatus("AIS position live");
-        if (useAisOrigin) {
+        if (projectionMode === "current") {
           setSampleLat(decoded.lat.toFixed(4));
           setSampleLon(decoded.lon.toFixed(4));
         }
@@ -2578,7 +2579,7 @@ export default function WxRoutingPage() {
       closed = true;
       ws.close();
     };
-  }, [useAisOrigin]);
+  }, [projectionMode]);
 
   useEffect(() => {
     refreshWxSource();
@@ -2616,7 +2617,7 @@ export default function WxRoutingPage() {
   useEffect(() => {
     scheduleProjectedRefresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, projectionRefreshKey, planningSpeedKt, showProjectedPosition, nightMode]);
+  }, [mapReady, projectionRefreshKey, planningSpeedKt, ownShip, nightMode]);
 
   useEffect(() => {
     refreshOwnShipSource();
@@ -2628,7 +2629,7 @@ export default function WxRoutingPage() {
   useEffect(() => {
     applyLayerVisibility();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, showGribPointLayer, showRouteExposureLayer, showIsobarLayer, showWindLayer, showPositionLayer, showProjectedPosition]);
+  }, [mapReady, showGribPointLayer, showRouteExposureLayer, showIsobarLayer, showWindLayer, showPositionLayer]);
 
   useEffect(() => {
     if (!isPlaying || timeline.length <= 1) return;
@@ -2918,10 +2919,6 @@ export default function WxRoutingPage() {
                 <button type="button" className={buttonClass} disabled={!ownShip} onClick={setSampleFromAis}>
                   Use AIS Position
                 </button>
-                <label className="flex items-center gap-2 text-sm font-bold">
-                  <input type="checkbox" checked={useAisOrigin} onChange={(event) => setUseAisOrigin(event.target.checked)} />
-                  Use AIS as planning origin
-                </label>
               </div>
             </div>
 
@@ -2988,33 +2985,27 @@ export default function WxRoutingPage() {
 
             <div className={cardClass}>
               <div className={labelClass}>Planning</div>
-              <label className="mt-3 flex items-center justify-between gap-3 border border-slate-500/30 px-3 py-2 text-sm font-bold">
-                <span>Projected Position</span>
-                <input
-                  type="checkbox"
-                  checked={showProjectedPosition}
-                  onChange={(event) => setShowProjectedPosition(event.target.checked)}
-                  className="h-4 w-4 accent-[#c9a227]"
-                />
-              </label>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  className={projectionOriginMode === "current" ? activeButtonClass : buttonClass}
-                  onClick={() => setProjectionOriginMode("current")}
-                >
-                  Current / Now
-                </button>
-                <button
-                  type="button"
-                  className={projectionOriginMode === "manual" ? activeButtonClass : buttonClass}
-                  onClick={() => {
-                    setProjectionOriginMode("manual");
-                    if (!departureTime) setDepartureTime(formatDateTimeLocal(new Date()));
-                  }}
-                >
-                  Manual Depart
-                </button>
+              <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                {[
+                  ["off", "Off"],
+                  ["current", "Current"],
+                  ["departure", "Departure"],
+                ].map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className={
+                      projectionMode === mode
+                        ? "border border-[#c9a227] bg-[#c9a227] px-2 py-2 text-black"
+                        : dayMode
+                          ? "border border-slate-300 bg-white px-2 py-2 text-slate-900"
+                          : "border border-white/10 bg-black/25 px-2 py-2 text-slate-100"
+                    }
+                    onClick={() => setProjectionMode(mode as ProjectionMode)}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
               <label className="mt-3 block">
                 <span className={`text-xs font-bold ${mutedClass}`}>Planning Speed</span>
@@ -3028,28 +3019,30 @@ export default function WxRoutingPage() {
                   step="0.1"
                 />
               </label>
-              {projectionOriginMode === "manual" ? (
-                <div className="mt-3 space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="block">
-                      <span className={`text-xs font-bold ${mutedClass}`}>Departure Lat</span>
-                      <input
-                        className="mt-1 w-full border border-slate-500/40 bg-transparent px-2 py-2 text-sm font-bold outline-none"
-                        value={manualDepartureLat}
-                        onChange={(event) => setManualDepartureLat(event.target.value)}
-                        inputMode="decimal"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className={`text-xs font-bold ${mutedClass}`}>Departure Lon</span>
-                      <input
-                        className="mt-1 w-full border border-slate-500/40 bg-transparent px-2 py-2 text-sm font-bold outline-none"
-                        value={manualDepartureLon}
-                        onChange={(event) => setManualDepartureLon(event.target.value)}
-                        inputMode="decimal"
-                      />
-                    </label>
-                  </div>
+              {projectionMode === "departure" ? (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className={`text-xs font-bold ${mutedClass}`}>Departure Lat</span>
+                    <input
+                      className="mt-1 w-full border border-slate-500/40 bg-transparent px-2 py-2 text-sm font-bold outline-none"
+                      value={departureLat}
+                      onChange={(event) => setDepartureLat(event.target.value)}
+                      type="number"
+                      inputMode="decimal"
+                      step="0.0001"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className={`text-xs font-bold ${mutedClass}`}>Departure Lon</span>
+                    <input
+                      className="mt-1 w-full border border-slate-500/40 bg-transparent px-2 py-2 text-sm font-bold outline-none"
+                      value={departureLon}
+                      onChange={(event) => setDepartureLon(event.target.value)}
+                      type="number"
+                      inputMode="decimal"
+                      step="0.0001"
+                    />
+                  </label>
                   <label className="block">
                     <span className={`text-xs font-bold ${mutedClass}`}>Departure Time</span>
                     <input
@@ -3059,25 +3052,36 @@ export default function WxRoutingPage() {
                       onChange={(event) => setDepartureTime(event.target.value)}
                     />
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    <button type="button" className={buttonClass} disabled={!ownShip} onClick={setManualDepartureFromAis}>
-                      Use AIS
-                    </button>
-                    <button type="button" className={buttonClass} onClick={setManualDepartureFromMapCenter}>
-                      Use Map Center
-                    </button>
-                    <button type="button" className={buttonClass} disabled={!route.length} onClick={setManualDepartureFromRouteStart}>
-                      Use Route Start
-                    </button>
-                  </div>
+                  <label className="block">
+                    <span className={`text-xs font-bold ${mutedClass}`}>Course</span>
+                    <input
+                      className="mt-1 w-full border border-slate-500/40 bg-transparent px-2 py-2 text-sm font-bold outline-none"
+                      value={departureCourse}
+                      onChange={(event) => setDepartureCourse(event.target.value)}
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      max="359.9"
+                      step="0.1"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className={`${buttonClass} col-span-2`}
+                    disabled={!ownShip}
+                    onClick={() => {
+                      if (!ownShip) return;
+                      setDepartureLat(ownShip.lat.toFixed(4));
+                      setDepartureLon(ownShip.lon.toFixed(4));
+                      if (ownShip.cog !== null && Number.isFinite(ownShip.cog)) setDepartureCourse(ownShip.cog.toFixed(1));
+                    }}
+                  >
+                    Set Departure From AIS
+                  </button>
                 </div>
-              ) : (
-                <p className={`mt-3 text-xs ${mutedClass}`}>
-                  Projection starts from live current position at the current time.
-                </p>
-              )}
+              ) : null}
               <p className={`mt-2 text-xs ${mutedClass}`}>
-                Use 0 kt to hold the planning vessel at the selected projection origin.
+                Projection {projectionMode === "off" ? "is off." : projectionMode === "current" ? "starts from current AIS position and time." : "starts from the entered departure position and time."}
               </p>
             </div>
 
@@ -3278,15 +3282,9 @@ export default function WxRoutingPage() {
                     },
                     {
                       label: "Position Markers",
-                      detail: ownShip ? "Current ownship marker" : "Current ownship marker when AIS is available",
+                      detail: ownShip ? "AIS and projected position" : "Projected position when available",
                       checked: showPositionLayer,
                       setChecked: setShowPositionLayer,
-                    },
-                    {
-                      label: "Projected Position",
-                      detail: showProjectedPosition ? "Planning overlay enabled" : "Planning overlay off",
-                      checked: showProjectedPosition,
-                      setChecked: setShowProjectedPosition,
                     },
                   ].map((layer) => (
                     <label
@@ -3532,7 +3530,7 @@ export default function WxRoutingPage() {
                       <div className="font-black">{formatNumber(routeExposureSummary.maxWind, 1, " kt")}</div>
                     </div>
                     <div>
-                      <div className={mutedClass}>{showProjectedPosition ? "Max Seas Incl. Projected" : "Max Seas"}</div>
+                      <div className={mutedClass}>Max Seas Incl. Projected</div>
                       <div className="font-black">{formatNumber(routeExposureSummary.maxSeas, 1, " ft")}</div>
                     </div>
                     <div>
@@ -3562,9 +3560,7 @@ export default function WxRoutingPage() {
             <div className={cardClass}>
               <div className={labelClass}>Projected Forecast</div>
               <div className={`mt-2 text-xs ${mutedClass}`}>
-                {!showProjectedPosition
-                  ? "Projected position is off."
-                  : projectedForecast.usingRouteSample
+                {projectedForecast.usingRouteSample
                   ? `Nearest route sample: ${projectedForecast.source}${projectedForecast.distanceNm !== null ? ` (${projectedForecast.distanceNm.toFixed(1)} nm)` : ""}`
                   : `Using ${projectedForecast.source}. Import GRIB after loading a route for projected-route weather.`}
               </div>
@@ -3606,11 +3602,7 @@ export default function WxRoutingPage() {
                 </div>
               ) : (
                 <p className={`mt-3 text-sm ${mutedClass}`}>
-                  {!showProjectedPosition
-                    ? "Projected position is switched off."
-                    : projectionOriginMode === "manual" && (!manualDeparturePosition || !departureTime)
-                      ? "Enter a manual departure position and departure time to show the projected vessel."
-                      : "Load a route, load a GRIB timeline, and set planning speed to show the projected vessel."}
+                  Load a route, load a GRIB timeline, and set planning speed to show the projected vessel.
                 </p>
               )}
             </div>

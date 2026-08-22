@@ -997,6 +997,7 @@ export default function NavDashHomePage() {
   const routeMarkersRef = useRef<any[]>([]);
   const ownMarkerRef = useRef<any>(null);
   const ownVectorRef = useRef<any>(null);
+  const ownLayerRef = useRef<any>(null);
   const encLayerRef = useRef<any>(null);
   const seamarkLayerRef = useRef<any>(null);
   const weatherLoadedFromLiveAisRef = useRef(false);
@@ -1303,6 +1304,7 @@ export default function NavDashHomePage() {
         mapRef.current = null;
         ownMarkerRef.current = null;
         ownVectorRef.current = null;
+        ownLayerRef.current = null;
         routeLayerRef.current = null;
         routeMarkersRef.current = [];
       }
@@ -1376,6 +1378,12 @@ export default function NavDashHomePage() {
       const L = await import("leaflet");
       const position: [number, number] = [ownShip.lat, ownShip.lon];
 
+      if (!ownLayerRef.current) {
+        ownLayerRef.current = L.layerGroup().addTo(map);
+      } else if (!map.hasLayer(ownLayerRef.current)) {
+        ownLayerRef.current.addTo(map);
+      }
+
       if (!ownMarkerRef.current) {
         ownMarkerRef.current = L.circleMarker(position, {
           radius: 9,
@@ -1385,14 +1393,17 @@ export default function NavDashHomePage() {
           weight: 2,
         })
           .bindTooltip("Own Ship AIS", { permanent: false })
-          .addTo(map);
+          .addTo(ownLayerRef.current);
       } else {
+        if (!ownLayerRef.current.hasLayer(ownMarkerRef.current)) {
+          ownMarkerRef.current.addTo(ownLayerRef.current);
+        }
         ownMarkerRef.current.setLatLng(position);
       }
 
       if (ownVectorRef.current) {
         try {
-          map.removeLayer(ownVectorRef.current);
+          ownLayerRef.current?.removeLayer(ownVectorRef.current);
         } catch {
           // Ignore stale vector cleanup errors.
         }
@@ -1418,7 +1429,7 @@ export default function NavDashHomePage() {
           weight: 2,
         });
 
-        ownVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(map);
+        ownVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(ownLayerRef.current);
       }
 
       // Do not auto-pan here. The watch should be able to freely inspect the chart.

@@ -479,7 +479,6 @@ export default function PhonePage() {
                 <Metric label="Active Leg" value={activeLeg} wide />
               </div>
             </PhoneCard>
-
           </section>
         )}
 

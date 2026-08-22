@@ -106,6 +106,7 @@ const WORLD_MARINE_REGIONS: MarineRegionProduct[] = [
     mode: "local",
     candidates: [
       { source: "NWS Guam Coastal Waters Forecast", productType: "CWF", location: "GUM" },
+      { source: "NWS Guam Area Forecast Discussion", productType: "AFD", location: "GUM" },
     ],
   },
   {
@@ -589,7 +590,8 @@ function pacificProductCandidates(lat: number, lon: number) {
         },
         {
           source: "NWS Guam Area Forecast Discussion",
-          url: "https://tgftp.nws.noaa.gov/data/raw/fx/fxmy50.pgum.txt",
+          productType: "AFD",
+          location: "GUM",
         },
       ]
     : [];
@@ -982,6 +984,7 @@ export async function GET(req: NextRequest) {
     position: { lat, lon },
     errors: [],
   };
+  const quietPointForecastErrors: string[] = [];
 
   try {
     const points = await fetchJson(`https://api.weather.gov/points/${lat},${lon}`);
@@ -1035,7 +1038,7 @@ export async function GET(req: NextRequest) {
         alerts: [],
       };
     } else {
-      out.errors.push(`NWS forecast unavailable: ${err instanceof Error ? err.message : "unknown error"}`);
+      quietPointForecastErrors.push(`NWS point forecast unavailable outside coverage: ${err instanceof Error ? err.message : "unknown error"}`);
       for (const msg of local.errors) out.errors.push(`Local marine product: ${msg}`);
     }
   }
@@ -1115,10 +1118,18 @@ export async function GET(req: NextRequest) {
       parsed,
     };
 
+    const hasOfficialMarineFallback = Boolean(summaryText);
+    if (!hasOfficialMarineFallback) {
+      for (const msg of quietPointForecastErrors) out.errors.push(msg);
+    }
+
     for (const msg of [...local.errors, ...highSeas.errors]) {
-      if (msg) out.errors.push(`Marine source: ${msg}`);
+      if (!msg) continue;
+      if (hasOfficialMarineFallback && /404|No configured position-specific/i.test(msg)) continue;
+      out.errors.push(`Marine source: ${msg}`);
     }
   } catch (err) {
+    for (const msg of quietPointForecastErrors) out.errors.push(msg);
     out.errors.push(`Marine sources unavailable: ${err instanceof Error ? err.message : "unknown error"}`);
   }
 
