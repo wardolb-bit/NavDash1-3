@@ -6,6 +6,7 @@ import { BridgeConsolePreview } from "./BridgeConsolePreview";
 import { BridgeQuickAccess } from "./BridgeQuickAccess";
 import { BridgeOwnShipEnhancer } from "./BridgeOwnShipEnhancer";
 import { BridgeRailPolish } from "./BridgeRailPolish";
+import { BridgeMapWakeup } from "./BridgeMapWakeup";
 
 /**
  * Keep the bridge-console DOM enhancers scoped to the main Nav Console route.
@@ -56,6 +57,7 @@ export function BridgeConsoleRouteGate() {
   return (
     <>
       <BridgeConsolePreview />
+      <BridgeMapWakeup />
       <BridgeOwnShipEnhancer />
       <BridgeRailPolish />
       <BridgeQuickAccess />
