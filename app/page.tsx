@@ -783,6 +783,10 @@ function formatPositionDdm(lat: number, lon: number) {
   return `${formatDdm(lat, true)} / ${formatDdm(lon, false)}`;
 }
 
+function formatOwnShipPositionDdm(lat: number, lon: number) {
+  return `LAT ${formatDdm(lat, true)}\nLON ${formatDdm(lon, false)}`;
+}
+
 function asFiniteNumber(value: unknown, fallback = 0) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
@@ -1961,8 +1965,8 @@ export default function NavDashHomePage() {
                 </div>
                 <div className={softPanelClass}>
                   <div className={labelClass}>Own Ship Position</div>
-                  <div className={ownShip ? "mt-2 text-lg font-black text-emerald-400" : "mt-2 text-xl font-black text-amber-400"}>
-                    {ownShip ? formatPositionDdm(ownShip.lat, ownShip.lon) : "Waiting for AIS"}
+                  <div className={ownShip ? "mt-2 whitespace-pre-line text-lg font-black text-emerald-400" : "mt-2 text-xl font-black text-amber-400"}>
+                    {ownShip ? formatOwnShipPositionDdm(ownShip.lat, ownShip.lon) : "Waiting for AIS"}
                   </div>
                   <div className={`mt-1 text-xs ${mutedClass}`}>
                     {ownShip
