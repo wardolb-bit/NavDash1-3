@@ -42,13 +42,18 @@ export function BridgeQuickAccess() {
 
   if (pathname !== "/" || !target) return null;
 
+  const dayMode = !!target.closest(".navdash-v12-day");
+  const buttonClass = dayMode
+    ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-400 bg-slate-100 px-4 text-sm font-black text-slate-950 shadow-sm hover:bg-white"
+    : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15";
+
   return createPortal(
     <>
-      <Link href="/wx" className="bc-quick-link">Weather</Link>
-      <Link href="/wx-routing" className="bc-quick-link">WX Routing</Link>
-      <Link href="/position-report" className="bc-quick-link">Position Report</Link>
-      <Link href="/official-weather" className="bc-quick-link">Official WX</Link>
-      <Link href="/ecr" className="bc-quick-link">ECR</Link>
+      <Link href="/wx" className={buttonClass}>Weather</Link>
+      <Link href="/wx-routing" className={buttonClass}>WX Routing</Link>
+      <Link href="/position-report" className={buttonClass}>Position Report</Link>
+      <Link href="/official-weather" className={buttonClass}>Official WX</Link>
+      <Link href="/ecr" className={buttonClass}>ECR</Link>
     </>,
     target,
   );
