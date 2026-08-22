@@ -40,6 +40,14 @@ export function BridgeRailPolish() {
       if (lastGoodLat !== "--") setTextIfChanged(latEl, lastGoodLat);
       if (lastGoodLon !== "--") setTextIfChanged(lonEl, lastGoodLon);
 
+      // Logical-leg selection is now the only operating mode, so suppress the
+      // legacy mode/status line even if the underlying bridge scraper restores it.
+      const legMode = document.getElementById("bc2-legname");
+      if (legMode) {
+        setTextIfChanged(legMode, "");
+        legMode.style.display = "none";
+      }
+
       const routeName = document.getElementById("bc2-route")?.textContent?.trim() || "--";
       const routeLoaded = routeName !== "--" && routeName.toLowerCase() !== "no route loaded";
       const topLive = document.querySelector<HTMLElement>("#bc-v2-topbar .live");
@@ -95,12 +103,8 @@ export function BridgeRailPolish() {
         if (strong) strong.style.cssText = "display:block;color:#f0d568;font-size:24px;line-height:1.05;font-weight:850;font-variant-numeric:tabular-nums";
         const small = leg.querySelector<HTMLElement>("small");
         if (small) {
-          const cleaned = (small.textContent || "")
-            .replace(/\s*[|·•-]?\s*mode\s*:\s*auto\s+logical\s+leg\s*/gi, " ")
-            .replace(/\s{2,}/g, " ")
-            .trim();
-          setTextIfChanged(small, cleaned);
-          small.style.cssText = "display:block;margin-top:8px;color:#c2ced8;font-size:11px;font-weight:700;letter-spacing:.03em";
+          setTextIfChanged(small, "");
+          small.style.display = "none";
         }
       }
 
