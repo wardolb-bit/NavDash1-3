@@ -1093,7 +1093,8 @@ export default function NavDashHomePage() {
   const routeLayerRef = useRef<any>(null);
   const routeMarkersRef = useRef<any[]>([]);
   const ownMarkerRef = useRef<any>(null);
-  const ownVectorRef = useRef<any>(null);
+  const ownHeadingVectorRef = useRef<any>(null);
+  const ownCogVectorRef = useRef<any>(null);
   const ownLayerRef = useRef<any>(null);
   const encLayerRef = useRef<any>(null);
   const seamarkLayerRef = useRef<any>(null);
@@ -1401,7 +1402,8 @@ export default function NavDashHomePage() {
         mapRef.current.remove();
         mapRef.current = null;
         ownMarkerRef.current = null;
-        ownVectorRef.current = null;
+        ownHeadingVectorRef.current = null;
+        ownCogVectorRef.current = null;
         ownLayerRef.current = null;
         routeLayerRef.current = null;
         routeMarkersRef.current = [];
@@ -1482,13 +1484,22 @@ export default function NavDashHomePage() {
         ownLayerRef.current.addTo(map);
       }
 
+      const headingValue = ownShip.heading !== null && Number.isFinite(ownShip.heading) ? ownShip.heading : null;
+      const hasHeading = headingValue !== null;
+      const symbolCourse = headingValue ?? ownShip.cog;
+      const symbolBearing = Number.isFinite(symbolCourse) ? normalize360(symbolCourse) : 0;
+      const ownShipIcon = L.divIcon({
+        className: "navdash-ownship-div-icon",
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        html: `<div style="width:34px;height:34px;transform:rotate(${symbolBearing}deg);transform-origin:17px 17px;filter:drop-shadow(0 0 8px rgba(34,211,238,.55));"><svg width="34" height="34" viewBox="-17 -17 34 34" aria-hidden="true"><circle r="13" fill="#041016" fill-opacity=".82" stroke="#22d3ee" stroke-opacity=".45" stroke-width="1.4"/><path d="M 0 -15 L 9 10 L 0 6 L -9 10 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.4" stroke-linejoin="round"/><path d="M 0 -11 L 0 6" stroke="#e7c95c" stroke-width="1.5" stroke-linecap="round"/><circle r="2.4" fill="#22d3ee"/></svg></div>`,
+      });
+
       if (!ownMarkerRef.current) {
-        ownMarkerRef.current = L.circleMarker(position, {
-          radius: 9,
-          color: "#22d3ee",
-          fillColor: "#22d3ee",
-          fillOpacity: 0.85,
-          weight: 2,
+        ownMarkerRef.current = L.marker(position, {
+          icon: ownShipIcon,
+          keyboard: false,
+          zIndexOffset: 2000,
         })
           .bindTooltip("Own Ship AIS", { permanent: false })
           .addTo(ownLayerRef.current);
@@ -1497,20 +1508,45 @@ export default function NavDashHomePage() {
           ownMarkerRef.current.addTo(ownLayerRef.current);
         }
         ownMarkerRef.current.setLatLng(position);
+        ownMarkerRef.current.setIcon(ownShipIcon);
       }
 
-      if (ownVectorRef.current) {
+      if (ownMarkerRef.current.bringToFront) ownMarkerRef.current.bringToFront();
+
+      if (ownHeadingVectorRef.current) {
         try {
-          ownLayerRef.current?.removeLayer(ownVectorRef.current);
+          ownLayerRef.current?.removeLayer(ownHeadingVectorRef.current);
         } catch {
-          // Ignore stale vector cleanup errors.
+          // Ignore stale heading vector cleanup errors.
         }
-        ownVectorRef.current = null;
+        ownHeadingVectorRef.current = null;
+      }
+
+      if (ownCogVectorRef.current) {
+        try {
+          ownLayerRef.current?.removeLayer(ownCogVectorRef.current);
+        } catch {
+          // Ignore stale COG vector cleanup errors.
+        }
+        ownCogVectorRef.current = null;
+      }
+
+      if (hasHeading) {
+        const headingEnd = destinationPoint(ownShip.lat, ownShip.lon, headingValue, 0.75);
+        const headingVectorEnd: [number, number] = [headingEnd.lat, unwrapLongitudeNear(headingEnd.lon, ownShip.lon)];
+        ownHeadingVectorRef.current = L.polyline([position, headingVectorEnd] as any, {
+          color: "#22d3ee",
+          weight: 3,
+          opacity: 0.98,
+        })
+          .bindTooltip("Heading vector", { permanent: false })
+          .addTo(ownLayerRef.current);
+        if (ownHeadingVectorRef.current.bringToFront) ownHeadingVectorRef.current.bringToFront();
       }
 
       if (Number.isFinite(ownShip.sog) && ownShip.sog > 0.1 && Number.isFinite(ownShip.cog)) {
         const vectorMinutes = 6;
-        const vectorDistanceNm = ownShip.sog * (vectorMinutes / 60);
+        const vectorDistanceNm = ownShip.sog * vectorMinutes / 60;
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.cog, vectorDistanceNm);
         const vectorEnd: [number, number] = [end.lat, unwrapLongitudeNear(end.lon, ownShip.lon)];
         const vectorLine = L.polyline([position, vectorEnd] as any, {
@@ -1527,15 +1563,19 @@ export default function NavDashHomePage() {
           weight: 2,
         });
 
-        ownVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(ownLayerRef.current);
+        ownCogVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(ownLayerRef.current);
+        if (vectorLine.bringToFront) vectorLine.bringToFront();
+        if (vectorEndMarker.bringToFront) vectorEndMarker.bringToFront();
       }
+
+      if (ownMarkerRef.current.bringToFront) ownMarkerRef.current.bringToFront();
 
       // Do not auto-pan here. The watch should be able to freely inspect the chart.
       // Use the Center Own Ship button when recentering is desired.
     }
 
     updateOwnShipMarker();
-  }, [ownShip?.lat, ownShip?.lon, ownShip?.sog, ownShip?.cog, route.length, routeName]);
+  }, [ownShip?.lat, ownShip?.lon, ownShip?.sog, ownShip?.cog, ownShip?.heading, route.length, routeName]);
 
   useEffect(() => {
     const map = mapRef.current;
