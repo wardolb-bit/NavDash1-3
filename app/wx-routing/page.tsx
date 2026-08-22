@@ -90,6 +90,7 @@ type RouteLegForecast = {
   cumulativeEndNm: number;
   bearingDeg: number;
   etaLabel: string;
+  etaZoneLabel?: string;
   weatherTimeLabel: string;
   etaMatched: boolean;
   level: "HIGH" | "CAUTION" | "NORMAL" | "NO DATA";
@@ -297,6 +298,33 @@ function formatEtaLabel(departureTime: string, hours: number | null) {
   const hour = String(eta.getHours()).padStart(2, "0");
   const minute = String(eta.getMinutes()).padStart(2, "0");
   return `${month}/${day} ${hour}${minute}`;
+}
+
+function waypointUtcOffsetHours(lon: number) {
+  if (!Number.isFinite(lon)) return 0;
+  const normalized = normalizedLongitude(lon);
+  return Math.max(-12, Math.min(12, Math.round(normalized / 15)));
+}
+
+function signedZoneHours(value: number) {
+  if (value === 0) return "0";
+  return `${value > 0 ? "+" : ""}${value}`;
+}
+
+function formatWaypointLocalEta(etaUtc: Date | null, waypointLon: number) {
+  if (!etaUtc || Number.isNaN(etaUtc.getTime())) return null;
+  const utcOffsetHours = waypointUtcOffsetHours(waypointLon);
+  const zoneDescription = -utcOffsetHours;
+  const local = new Date(etaUtc.getTime() + utcOffsetHours * 3600000);
+  const month = String(local.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(local.getUTCDate()).padStart(2, "0");
+  const hour = String(local.getUTCHours()).padStart(2, "0");
+  const minute = String(local.getUTCMinutes()).padStart(2, "0");
+  const utcLabel = utcOffsetHours === 0 ? "UTC" : `UTC${signedZoneHours(utcOffsetHours)}`;
+  return {
+    dateTime: `${month}/${day} ${hour}${minute}`,
+    zoneLabel: `LT · ZD ${signedZoneHours(zoneDescription)} · ${utcLabel}`,
+  };
 }
 
 function riskFlagsForLeg(row: GribTimelineRow | null, legBearingDeg: number, nextRow?: GribTimelineRow | null): RiskFlag[] {
@@ -1134,7 +1162,7 @@ export default function WxRoutingPage() {
     return formatDateTimeLocal(new Date(departure.getTime() + whatIfDelay * 3600000));
   }, [departureTime, whatIfDelay]);
   const projectionEnabled = projectionMode !== "off";
-  const useAisOrigin = projectionMode === "current";
+  const useAisOrigin = projectionMode !== "departure";
   const departurePosition = useMemo(() => {
     const lat = Number(departureLat);
     const lon = Number(departureLon);
@@ -1309,8 +1337,15 @@ export default function WxRoutingPage() {
     const legForecasts: RouteLegForecast[] = [];
     const selectedValid = selectedTime?.valid;
     const routeForecast = gribSummary?.routeForecast || null;
-    const originProgress = planningOriginProgress(route, ownShip, useAisOrigin);
-    let cumulativeEndNm = 0;
+    const originProgress = projectionMode === "departure"
+    ? projectionOriginProgress(route, departurePosition)
+    : routeProgressNearestPosition(route, ownShip);
+  const etaBaseDate = projectionMode === "departure"
+    ? (departureTime ? new Date(departureTime) : null)
+    : ownShip?.receivedAt
+      ? new Date(ownShip.receivedAt)
+      : new Date();
+  let cumulativeEndNm = 0;
 
     if (coordinates.length < 2 || route.length < 2 || !routeForecast?.routePoints?.length) {
       return { features, legForecasts };
@@ -1328,7 +1363,7 @@ export default function WxRoutingPage() {
         !isPassed && Number.isFinite(planningSpeedKt) && planningSpeedKt > 0
           ? Math.max(0, (cumulativeEndNm - originProgress) / planningSpeedKt)
           : null;
-      const etaDate = dateFromDepartureHours(departureTime, etaHours);
+      const etaDate = etaBaseDate && etaHours !== null ? new Date(etaBaseDate.getTime() + Math.max(0, etaHours) * 3600000) : null;
       const etaMatchedRow = routePointRowNearestEta(point, etaDate);
       const rawRow = etaMatchedRow || routePointRow(point, selectedIndex, selectedValid);
       const seasFilled = fillMissingSeasFromNearestRoutePoint(rawRow, routeForecast, to, selectedIndex);
@@ -1339,6 +1374,7 @@ export default function WxRoutingPage() {
       const color = exposureColor(row);
       const legLabel = `${from.id}-${to.id}`;
       const sourcePoint = point ? `${point.id} ${point.name}`.trim() : "No route sample";
+      const etaDisplay = isPassed ? null : formatWaypointLocalEta(etaDate, to.lon);
       const legForecast: RouteLegForecast = {
         legLabel,
         fromName: from.name,
@@ -1346,7 +1382,8 @@ export default function WxRoutingPage() {
         distanceNm: legDistanceNm,
         cumulativeEndNm,
         bearingDeg: legBearingDeg,
-        etaLabel: isPassed ? "Passed" : formatEtaLabel(departureTime, etaHours),
+        etaLabel: isPassed ? "Passed" : etaDisplay?.dateTime || "--",
+        etaZoneLabel: isPassed ? undefined : etaDisplay?.zoneLabel,
         weatherTimeLabel: row?.label || row?.valid || selectedTime?.label || "--",
         etaMatched: Boolean(etaMatchedRow),
         level,
@@ -1374,6 +1411,7 @@ export default function WxRoutingPage() {
           distanceNm: legDistanceNm,
           bearingDeg: legBearingDeg,
           etaLabel: legForecast.etaLabel,
+          etaZoneLabel: legForecast.etaZoneLabel || "",
           weatherTimeLabel: legForecast.weatherTimeLabel,
           etaMatched: legForecast.etaMatched,
           valid: row?.valid || selectedTime?.valid || "",
@@ -1389,7 +1427,7 @@ export default function WxRoutingPage() {
     }
 
     return { features, legForecasts };
-  }, [departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, route, selectedIndex, selectedTime?.valid, useAisOrigin]);
+  }, [departurePosition, departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, projectionMode, route, selectedIndex, selectedTime?.valid]);
 
   const routeExposureSummary = useMemo(() => {
     return summarizeScenarioLegs(routeExposure.legForecasts, projectionEnabled && projectedForecast.usingRouteSample ? [projectedForecast.row] : []);
@@ -1756,6 +1794,7 @@ export default function WxRoutingPage() {
           cumulativeEndNm: 0,
           bearingDeg: propertyNumber(props.bearingDeg) || 0,
           etaLabel: props.etaLabel || "--",
+          etaZoneLabel: props.etaZoneLabel || undefined,
           weatherTimeLabel: props.weatherTimeLabel || row?.label || row?.valid || "--",
           etaMatched: props.etaMatched === true || props.etaMatched === "true",
           level: props.level || "NO DATA",
@@ -3192,6 +3231,9 @@ export default function WxRoutingPage() {
                           <div>
                             <div className={mutedClass}>ETA WPT</div>
                             <div className="font-black">{leg.etaLabel}</div>
+                  {leg.etaZoneLabel ? (
+                    <div className={`text-[0.65rem] font-bold ${mutedClass}`}>{leg.etaZoneLabel}</div>
+                  ) : null}
                           </div>
                           <div>
                             <div className={mutedClass}>WX Time</div>
@@ -3629,6 +3671,9 @@ export default function WxRoutingPage() {
                   <div>Swell: <span className="font-bold">{formatNumber(selectedRouteLeg.row?.swellFt, 1, " ft")} / {formatNumber(selectedRouteLeg.row?.swellPeriod, 1, " sec")}</span></div>
                   <div>Bearing: <span className="font-bold">{formatDirection(selectedRouteLeg.bearingDeg)}</span></div>
                   <div>ETA WPT: <span className="font-bold">{selectedRouteLeg.etaLabel}</span></div>
+        {selectedRouteLeg.etaZoneLabel ? (
+          <div>Zone: <span className="font-bold">{selectedRouteLeg.etaZoneLabel}</span></div>
+        ) : null}
                   <div>Match: <span className="font-bold">{selectedRouteLeg.etaMatched ? "ETA matched" : "Selected time"}</span></div>
                   <div className="flex flex-wrap gap-1 pt-1">
                     {selectedRouteLeg.risks.length ? (
