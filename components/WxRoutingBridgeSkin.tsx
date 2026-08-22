@@ -9,19 +9,23 @@ function important(el: HTMLElement | null, prop: string, value: string) {
 }
 
 type RouteWaypoint = { lat: number; lon: number };
-type RouteStatePayload = { waypoints: RouteWaypoint[]; activeWaypointIndex: number };
+type RouteStatePayload = { waypoints: RouteWaypoint[] };
 
 function toRad(value: number) {
   return (value * Math.PI) / 180;
 }
 
+function unwrapLongitudeNear(value: number, reference: number) {
+  let next = value;
+  while (next - reference > 180) next -= 360;
+  while (next - reference < -180) next += 360;
+  return next;
+}
+
 function distanceNm(aLat: number, aLon: number, bLat: number, bLon: number) {
   const radiusNm = 3440.065;
   const dLat = toRad(bLat - aLat);
-  let dLonDeg = bLon - aLon;
-  while (dLonDeg > 180) dLonDeg -= 360;
-  while (dLonDeg < -180) dLonDeg += 360;
-  const dLon = toRad(dLonDeg);
+  const dLon = toRad(unwrapLongitudeNear(bLon, aLon) - aLon);
   const lat1 = toRad(aLat);
   const lat2 = toRad(bLat);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
@@ -40,16 +44,14 @@ function parseDdmCoordinate(text: string, isLat: boolean) {
 }
 
 function findDisplayedOwnShip(root: HTMLElement) {
-  const candidates = Array.from(root.querySelectorAll<HTMLElement>("div"));
-  const label = candidates.find((el) => (el.textContent || "").trim() === "Position");
+  const labels = Array.from(root.querySelectorAll<HTMLElement>("div"));
+  const label = labels.find((el) => (el.textContent || "").trim() === "Position");
   const value = label?.nextElementSibling as HTMLElement | null;
-  const text = value?.textContent || "";
-  const parts = text.split("/");
+  const parts = (value?.textContent || "").split("/");
   if (parts.length < 2) return null;
   const lat = parseDdmCoordinate(parts[0], true);
   const lon = parseDdmCoordinate(parts[1], false);
-  if (lat === null || lon === null) return null;
-  return { lat, lon };
+  return lat === null || lon === null ? null : { lat, lon };
 }
 
 function findPlanningSpeed(root: HTMLElement) {
@@ -60,6 +62,46 @@ function findPlanningSpeed(root: HTMLElement) {
   return Number.isFinite(speed) && speed > 0 ? speed : null;
 }
 
+function logicalActiveWaypointIndex(route: RouteWaypoint[], position: { lat: number; lon: number }) {
+  if (route.length < 2) return 1;
+
+  let bestLeg = 0;
+  let bestOffTrack = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < route.length - 1; i += 1) {
+    const start = route[i];
+    const end = route[i + 1];
+    const refLat = (position.lat + start.lat + end.lat) / 3;
+    const nmPerDegLon = Math.max(0.01, 60 * Math.cos(toRad(refLat)));
+
+    const startLon = unwrapLongitudeNear(start.lon, position.lon);
+    const endLon = unwrapLongitudeNear(end.lon, startLon);
+    const posLon = unwrapLongitudeNear(position.lon, startLon);
+
+    const startX = startLon * nmPerDegLon;
+    const startY = start.lat * 60;
+    const endX = endLon * nmPerDegLon;
+    const endY = end.lat * 60;
+    const posX = posLon * nmPerDegLon;
+    const posY = position.lat * 60;
+
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const denom = dx * dx + dy * dy;
+    const t = denom > 0 ? Math.max(0, Math.min(1, ((posX - startX) * dx + (posY - startY) * dy) / denom)) : 0;
+    const closestX = startX + dx * t;
+    const closestY = startY + dy * t;
+    const offTrack = Math.hypot(posX - closestX, posY - closestY);
+
+    if (offTrack < bestOffTrack) {
+      bestOffTrack = offTrack;
+      bestLeg = i;
+    }
+  }
+
+  return Math.min(route.length - 1, bestLeg + 1);
+}
+
 function waypointUtcOffsetHours(lon: number) {
   if (!Number.isFinite(lon)) return 0;
   let normalized = lon;
@@ -68,24 +110,23 @@ function waypointUtcOffsetHours(lon: number) {
   return Math.max(-12, Math.min(12, Math.round(normalized / 15)));
 }
 
-function signedHours(value: number) {
-  if (value === 0) return "0";
-  return `${value > 0 ? "+" : ""}${value}`;
+function signed(value: number) {
+  return value > 0 ? `+${value}` : `${value}`;
 }
 
-function waypointLocalEtaParts(hoursFromNow: number, waypointLon: number) {
+function localEtaParts(hoursFromNow: number, waypointLon: number) {
   const etaUtcMs = Date.now() + Math.max(0, hoursFromNow) * 3600000;
-  const offsetHours = waypointUtcOffsetHours(waypointLon);
-  const zoneDescription = -offsetHours;
-  const local = new Date(etaUtcMs + offsetHours * 3600000);
+  const utcOffset = waypointUtcOffsetHours(waypointLon);
+  const zoneDescription = -utcOffset;
+  const local = new Date(etaUtcMs + utcOffset * 3600000);
   const month = String(local.getUTCMonth() + 1).padStart(2, "0");
   const day = String(local.getUTCDate()).padStart(2, "0");
   const hour = String(local.getUTCHours()).padStart(2, "0");
   const minute = String(local.getUTCMinutes()).padStart(2, "0");
-  const utcLabel = offsetHours === 0 ? "UTC" : `UTC${signedHours(offsetHours)}`;
+  const utcLabel = utcOffset === 0 ? "UTC" : `UTC${signed(utcOffset)}`;
   return {
     dateTime: `${month}/${day} ${hour}${minute}`,
-    zone: `LT · ZD ${signedHours(zoneDescription)} · ${utcLabel}`,
+    zone: `LT · ZD ${signed(zoneDescription)} · ${utcLabel}`,
   };
 }
 
@@ -93,6 +134,28 @@ function findEtaValue(card: HTMLElement) {
   const nodes = Array.from(card.querySelectorAll<HTMLElement>("div"));
   const label = nodes.find((el) => (el.textContent || "").trim() === "ETA WPT");
   return label?.nextElementSibling as HTMLElement | null;
+}
+
+function hideTechnicalWxDetails(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>("div,span,p").forEach((el) => {
+    const text = (el.textContent || "").trim();
+    if (!text) return;
+
+    if (/^Isobar Samples$/i.test(text)) {
+      important(el.parentElement, "display", "none");
+      return;
+    }
+
+    if (/^(\d+\s+)?(wind|map|grib|isobar)?\s*samples?$/i.test(text)) {
+      important(el, "display", "none");
+      return;
+    }
+
+    if (/\.exe\b/i.test(text) || /executable/i.test(text) || /sample(?:d)?\s+points?/i.test(text)) {
+      const sourceDetail = !!el.parentElement?.querySelector("div") && /Data Source/i.test(el.parentElement?.textContent || "");
+      if (sourceDetail || /\.exe\b/i.test(text)) important(el, "display", "none");
+    }
+  });
 }
 
 export function WxRoutingBridgeSkin() {
@@ -103,32 +166,10 @@ export function WxRoutingBridgeSkin() {
 
     let cancelled = false;
     let retryTimer = 0;
-    let etaTimer = 0;
+    let routeRefreshTimer = 0;
     let observer: MutationObserver | null = null;
+    let correctionQueued = false;
     let routeState: RouteStatePayload | null = null;
-
-    const hideTechnicalWxDetails = (root: HTMLElement) => {
-      root.querySelectorAll<HTMLElement>("div,span,p").forEach((el) => {
-        const text = (el.textContent || "").trim();
-        if (!text) return;
-
-        if (/^Isobar Samples$/i.test(text)) {
-          const row = el.parentElement;
-          if (row) important(row, "display", "none");
-          return;
-        }
-
-        if (/^(\d+\s+)?(wind|map|grib|isobar)?\s*samples?$/i.test(text)) {
-          important(el, "display", "none");
-          return;
-        }
-
-        if (/\.exe\b/i.test(text) || /executable/i.test(text) || /sample(?:d)?\s+points?/i.test(text)) {
-          const isDataSourceDetail = !!el.parentElement?.querySelector("div") && /Data Source/i.test(el.parentElement?.textContent || "");
-          if (isDataSourceDetail || /\.exe\b/i.test(text)) important(el, "display", "none");
-        }
-      });
-    };
 
     const loadRouteState = async () => {
       try {
@@ -141,12 +182,7 @@ export function WxRoutingBridgeSkin() {
             lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
           }))
           .filter((wp: RouteWaypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
-        if (waypoints.length < 2) return;
-        const rawIndex = Number(payload?.activeWaypointIndex);
-        const activeWaypointIndex = Number.isFinite(rawIndex)
-          ? Math.max(1, Math.min(Math.trunc(rawIndex), waypoints.length - 1))
-          : 1;
-        routeState = { waypoints, activeWaypointIndex };
+        if (waypoints.length >= 2) routeState = { waypoints };
       } catch {}
     };
 
@@ -156,7 +192,8 @@ export function WxRoutingBridgeSkin() {
       const speed = findPlanningSpeed(root);
       if (!ownShip || !speed) return;
 
-      const { waypoints, activeWaypointIndex } = routeState;
+      const waypoints = routeState.waypoints;
+      const activeWaypointIndex = logicalActiveWaypointIndex(waypoints, ownShip);
       const cards = Array.from(root.querySelectorAll<HTMLElement>("button")).filter((card) =>
         Array.from(card.querySelectorAll<HTMLElement>("div")).some((el) => (el.textContent || "").trim() === "ETA WPT"),
       );
@@ -171,33 +208,52 @@ export function WxRoutingBridgeSkin() {
 
       cards.forEach((card, legIndex) => {
         const etaValue = findEtaValue(card);
-        if (!etaValue) return;
         const destinationWaypointIndex = legIndex + 1;
+        if (!etaValue || destinationWaypointIndex >= waypoints.length) return;
 
         if (destinationWaypointIndex < activeWaypointIndex) {
           if (etaValue.textContent !== "Passed") etaValue.textContent = "Passed";
+          etaValue.removeAttribute("data-wxr-eta-signature");
           return;
         }
 
         if (destinationWaypointIndex > activeWaypointIndex) {
-          hoursToWaypoint +=
-            distanceNm(
-              waypoints[destinationWaypointIndex - 1].lat,
-              waypoints[destinationWaypointIndex - 1].lon,
-              waypoints[destinationWaypointIndex].lat,
-              waypoints[destinationWaypointIndex].lon,
-            ) / speed;
+          hoursToWaypoint += distanceNm(
+            waypoints[destinationWaypointIndex - 1].lat,
+            waypoints[destinationWaypointIndex - 1].lon,
+            waypoints[destinationWaypointIndex].lat,
+            waypoints[destinationWaypointIndex].lon,
+          ) / speed;
         }
 
-        const eta = waypointLocalEtaParts(hoursToWaypoint, waypoints[destinationWaypointIndex].lon);
-        const nextHtml = `${eta.dateTime}<span data-wxr-eta-zone="true" style="display:block;margin-top:2px;font-size:0.68rem;font-weight:800;opacity:.78;white-space:nowrap">${eta.zone}</span>`;
-        if (etaValue.innerHTML !== nextHtml) etaValue.innerHTML = nextHtml;
+        const eta = localEtaParts(hoursToWaypoint, waypoints[destinationWaypointIndex].lon);
+        const signature = `${eta.dateTime}|${eta.zone}`;
+        const zoneExists = !!etaValue.querySelector("[data-wxr-eta-zone]");
+        if (etaValue.dataset.wxrEtaSignature === signature && zoneExists) return;
+
+        etaValue.replaceChildren(document.createTextNode(eta.dateTime));
+        const zone = document.createElement("span");
+        zone.dataset.wxrEtaZone = "true";
+        zone.textContent = eta.zone;
+        zone.style.cssText = "display:block;margin-top:2px;font-size:.68rem;font-weight:800;opacity:.78;white-space:nowrap";
+        etaValue.appendChild(zone);
+        etaValue.dataset.wxrEtaSignature = signature;
+      });
+    };
+
+    const queueCorrection = (root: HTMLElement) => {
+      if (correctionQueued || cancelled) return;
+      correctionQueued = true;
+      window.requestAnimationFrame(() => {
+        correctionQueued = false;
+        if (cancelled) return;
+        hideTechnicalWxDetails(root);
+        correctLegEtas(root);
       });
     };
 
     const apply = () => {
       if (cancelled) return;
-
       const main = document.querySelector<HTMLElement>("main");
       const shell = main?.firstElementChild as HTMLElement | null;
       const header = shell?.querySelector<HTMLElement>(":scope > header") || null;
@@ -226,7 +282,7 @@ export function WxRoutingBridgeSkin() {
         shell.insertBefore(topbar, header);
       }
 
-      topbar.style.cssText = "height:46px;display:grid;grid-template-columns:280px 1fr 180px;align-items:center;padding:0 12px;margin-bottom:0;border:1px solid rgba(201,162,39,.30);background:#071019;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
+      topbar.style.cssText = "height:46px;display:grid;grid-template-columns:280px 1fr 180px;align-items:center;padding:0 12px;border:1px solid rgba(201,162,39,.30);background:#071019;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
       const brand = topbar.querySelector<HTMLElement>(".wxr-brand");
       if (brand) brand.style.cssText = "display:flex;align-items:center;gap:9px";
       const logo = topbar.querySelector<HTMLElement>(".wxr-logo");
@@ -274,37 +330,32 @@ export function WxRoutingBridgeSkin() {
         important(el, "box-shadow", "none");
       });
 
-      shell.querySelectorAll<HTMLElement>("section, aside").forEach((el) => {
+      shell.querySelectorAll<HTMLElement>("section,aside").forEach((el) => {
         if (el.closest("header")) return;
         important(el, "border-radius", "0");
         important(el, "box-shadow", "none");
       });
-
       shell.querySelectorAll<HTMLElement>("button").forEach((el) => {
         important(el, "border-radius", "3px");
         important(el, "box-shadow", "none");
       });
 
       hideTechnicalWxDetails(shell);
-      loadRouteState().then(() => correctLegEtas(shell));
-      etaTimer = window.setInterval(() => {
-        loadRouteState().then(() => correctLegEtas(shell));
-      }, 2000);
+      loadRouteState().then(() => queueCorrection(shell));
 
-      if (!observer) {
-        observer = new MutationObserver(() => {
-          hideTechnicalWxDetails(shell);
-          correctLegEtas(shell);
-        });
-        observer.observe(shell, { childList: true, subtree: true, characterData: true });
-      }
+      observer = new MutationObserver(() => queueCorrection(shell));
+      observer.observe(shell, { childList: true, subtree: true, characterData: true });
+
+      routeRefreshTimer = window.setInterval(() => {
+        loadRouteState().then(() => queueCorrection(shell));
+      }, 10000);
     };
 
     apply();
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
-      window.clearInterval(etaTimer);
+      window.clearInterval(routeRefreshTimer);
       observer?.disconnect();
       document.getElementById("wxr-v2-topbar")?.remove();
     };
