@@ -16,6 +16,36 @@ export function WxRoutingBridgeSkin() {
 
     let cancelled = false;
     let retryTimer = 0;
+    let observer: MutationObserver | null = null;
+
+    const hideTechnicalWxDetails = (root: HTMLElement) => {
+      root.querySelectorAll<HTMLElement>("div,span,p").forEach((el) => {
+        const text = (el.textContent || "").trim();
+        if (!text) return;
+
+        // Hide the small operationally-irrelevant sample counters while
+        // preserving the actual layer names and controls.
+        if (/^Isobar Samples$/i.test(text)) {
+          const row = el.parentElement;
+          if (row) important(row, "display", "none");
+          return;
+        }
+
+        if (/^(\d+\s+)?(wind|map|grib|isobar)?\s*samples?$/i.test(text)) {
+          important(el, "display", "none");
+          return;
+        }
+
+        // The GRIB backend may report its local executable path and parsing
+        // sample counts in sourceNotes. That is useful for debugging, not for
+        // the bridge display, so suppress only that rendered technical line.
+        if (/\.exe\b/i.test(text) || /executable/i.test(text) || /sample(?:d)?\s+points?/i.test(text)) {
+          const card = el.closest<HTMLElement>("div");
+          const isDataSourceDetail = !!el.parentElement?.querySelector("div") && /Data Source/i.test(el.parentElement?.textContent || "");
+          if (isDataSourceDetail || /\.exe\b/i.test(text)) important(el, "display", "none");
+        }
+      });
+    };
 
     const apply = () => {
       if (cancelled) return;
@@ -106,12 +136,19 @@ export function WxRoutingBridgeSkin() {
         important(el, "border-radius", "3px");
         important(el, "box-shadow", "none");
       });
+
+      hideTechnicalWxDetails(shell);
+      if (!observer) {
+        observer = new MutationObserver(() => hideTechnicalWxDetails(shell));
+        observer.observe(shell, { childList: true, subtree: true, characterData: true });
+      }
     };
 
     apply();
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
+      observer?.disconnect();
       document.getElementById("wxr-v2-topbar")?.remove();
     };
   }, [pathname]);
