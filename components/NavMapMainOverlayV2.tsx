@@ -8,6 +8,7 @@ type OwnShip = { lat: number; lon: number; sog: number; cog: number; heading: nu
 type Waypoint = { id?: string; name?: string; lat: number; lon: number };
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
+const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v2";
 
 function sixBitCharToValue(char: string) {
   let value = char.charCodeAt(0) - 48;
@@ -90,6 +91,20 @@ function routeSignature(route: Waypoint[]) {
   return route.map((wp) => `${wp.id || ""}|${wp.name || ""}|${wp.lat.toFixed(6)}|${wp.lon.toFixed(6)}`).join(";");
 }
 
+function readSavedMapView(): { lat: number; lon: number; zoom: number } | null {
+  try {
+    const raw = window.sessionStorage.getItem(MAP_VIEW_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const lat = Number(parsed?.lat);
+    const lon = Number(parsed?.lon);
+    const zoom = Number(parsed?.zoom);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(zoom)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || zoom < 1 || zoom > 19) return null;
+    return { lat, lon, zoom };
+  } catch { return null; }
+}
+
 export function NavMapMainOverlayV2() {
   const [host, setHost] = useState<HTMLElement | null>(null);
 
@@ -147,7 +162,15 @@ function IsolatedMainMap() {
         document.head.appendChild(link);
       }
 
-      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false }).setView([13.4443, 144.7937], 7);
+      const savedView = readSavedMapView();
+      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false });
+      if (savedView) {
+        map.setView([savedView.lat, savedView.lon], savedView.zoom, { animate: false });
+        didInitialRouteFitRef.current = true;
+      } else {
+        map.setView([13.4443, 144.7937], 7, { animate: false });
+      }
+
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
       L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
       try {
@@ -160,6 +183,16 @@ function IsolatedMainMap() {
       ownPane.style.zIndex = "720";
       ownLayerRef.current = L.layerGroup([], { pane: "navmap-main-ownship-v2" } as any).addTo(map);
       mapRef.current = map;
+
+      const persistView = () => {
+        try {
+          const center = map.getCenter();
+          window.sessionStorage.setItem(MAP_VIEW_STORAGE_KEY, JSON.stringify({ lat: center.lat, lon: center.lng, zoom: map.getZoom() }));
+        } catch {}
+      };
+      map.on("moveend", persistView);
+      map.on("zoomend", persistView);
+      (element as any).__navmapMainPersistV2 = persistView;
 
       const invalidate = () => requestAnimationFrame(() => map.invalidateSize({ animate: false }));
       resizeObserver = new ResizeObserver(invalidate);
@@ -176,7 +209,16 @@ function IsolatedMainMap() {
       resizeObserver?.disconnect();
       const element = elementRef.current as any;
       if (element?.__navmapMainInvalidateV2) window.removeEventListener("resize", element.__navmapMainInvalidateV2);
-      if (mapRef.current) { mapRef.current.remove(); mapRef.current = null; }
+      if (mapRef.current) {
+        const persistView = element?.__navmapMainPersistV2;
+        if (persistView) {
+          persistView();
+          mapRef.current.off("moveend", persistView);
+          mapRef.current.off("zoomend", persistView);
+        }
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
       ownLayerRef.current = null; ownMarkerRef.current = null; headingVectorRef.current = null; cogVectorRef.current = null;
       routeLayerRef.current = null; routeMarkersRef.current = [];
     };
