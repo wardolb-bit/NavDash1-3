@@ -22,34 +22,40 @@ function decode(line:string):OwnShip|null{
 function fmtLat(v:number){const h=v>=0?"N":"S",a=Math.abs(v),d=Math.floor(a),m=(a-d)*60;return `${String(d).padStart(2,"0")}° ${m.toFixed(3).padStart(6,"0")}' ${h}`;}
 function fmtLon(v:number){const h=v>=0?"E":"W",a=Math.abs(v),d=Math.floor(a),m=(a-d)*60;return `${String(d).padStart(3,"0")}° ${m.toFixed(3).padStart(6,"0")}' ${h}`;}
 
+/**
+ * Bridge rail position helper only.
+ *
+ * The actual map marker belongs to app/page.tsx. Do not hide, replace, rotate,
+ * or otherwise mutate Leaflet's own-ship layer from this helper.
+ */
 export function BridgeOwnShipEnhancer(){
  useEffect(()=>{
-   let ws:WebSocket|null=null, retry=0, last:OwnShip|null=null, observer:MutationObserver|null=null;
+   let ws:WebSocket|null=null, retry=0;
    const publish=(ship:OwnShip)=>{
-     last=ship;
      const lat=document.getElementById("bc2-lat"),lon=document.getElementById("bc2-lon");
-     if(lat)lat.textContent=fmtLat(ship.lat); if(lon)lon.textContent=fmtLon(ship.lon);
+     if(lat)lat.textContent=fmtLat(ship.lat);
+     if(lon)lon.textContent=fmtLon(ship.lon);
      document.documentElement.dataset.bcOwnCog=String(ship.cog);
-     updateSymbol();
-   };
-   const updateSymbol=()=>{
-     const map=document.getElementById("v12-map"); if(!map)return;
-     const circles=Array.from(map.querySelectorAll<SVGCircleElement>('circle[stroke="#22d3ee"],circle[stroke="#22D3EE"]'));
-     const own=circles.find(c=>Number(c.getAttribute("r"))>=8); if(!own)return;
-     own.style.opacity="0"; own.style.fillOpacity="0"; own.style.pointerEvents="none";
-     const svg=own.ownerSVGElement; if(!svg)return;
-     let marker=svg.querySelector<SVGGElement>("#bc-ownship-vessel");
-     if(!marker){marker=document.createElementNS("http://www.w3.org/2000/svg","g");marker.id="bc-ownship-vessel";marker.style.pointerEvents="none";marker.innerHTML='<circle r="13" fill="#041016" fill-opacity="0.76" stroke="#22d3ee" stroke-opacity="0.35" stroke-width="1"/><path d="M 0 -15 L 9 10 L 0 6 L -9 10 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.4" stroke-linejoin="round"/><path d="M 0 -11 L 0 6" stroke="#e7c95c" stroke-width="1.6"/><circle r="2.5" fill="#22d3ee"/>';svg.appendChild(marker);}
-     const cx=Number(own.getAttribute("cx")||0),cy=Number(own.getAttribute("cy")||0),cog=last?.cog??0;
-     marker.setAttribute("transform",`translate(${cx} ${cy}) rotate(${Number.isFinite(cog)?cog:0})`);
    };
    const connect=()=>{
-     try{ws=new WebSocket(getAisWebSocketUrl());ws.onmessage=e=>{let raw=String(e.data||"");try{const j=JSON.parse(raw);raw=typeof j==="string"?j:(j?.sentence||j?.nmea||j?.raw||"");}catch{} raw.split(/\r?\n/).forEach(line=>{const d=decode(line.trim());if(d)publish(d);});};ws.onclose=()=>{retry=window.setTimeout(connect,2000);};ws.onerror=()=>{};}catch{retry=window.setTimeout(connect,2000);}
+     try{
+       ws=new WebSocket(getAisWebSocketUrl());
+       ws.onmessage=e=>{
+         let raw=String(e.data||"");
+         try{
+           const j=JSON.parse(raw);
+           raw=typeof j==="string"?j:(j?.sentence||j?.nmea||j?.raw||"");
+         }catch{}
+         raw.split(/\r?\n/).forEach(line=>{const d=decode(line.trim());if(d)publish(d);});
+       };
+       ws.onclose=()=>{retry=window.setTimeout(connect,2000);};
+       ws.onerror=()=>{};
+     }catch{
+       retry=window.setTimeout(connect,2000);
+     }
    };
-   const map=document.getElementById("v12-map"); if(map){observer=new MutationObserver(updateSymbol);observer.observe(map,{subtree:true,childList:true,attributes:true,attributeFilter:["cx","cy","r","transform"]});}
-   else {const wait=window.setInterval(()=>{const m=document.getElementById("v12-map");if(m){window.clearInterval(wait);observer=new MutationObserver(updateSymbol);observer.observe(m,{subtree:true,childList:true,attributes:true,attributeFilter:["cx","cy","r","transform"]});}},250);}
    connect();
-   return()=>{window.clearTimeout(retry);observer?.disconnect();if(ws){ws.onclose=null;ws.close();}};
+   return()=>{window.clearTimeout(retry);if(ws){ws.onclose=null;ws.close();}};
  },[]);
  return null;
 }
