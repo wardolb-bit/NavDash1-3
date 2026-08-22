@@ -5,15 +5,14 @@ import { usePathname } from "next/navigation";
 
 function setImportant(el: HTMLElement | null, property: string, value: string) { if (!el) return; el.style.setProperty(property, value, "important"); }
 function valueFor(root: HTMLElement, label: string) { const labelEl=Array.from(root.querySelectorAll<HTMLElement>("div")).find((el)=>el.textContent?.trim()===label); const box=labelEl?.parentElement as HTMLElement|null; if(!box)return "--"; return Array.from(box.children).map((el)=>(el as HTMLElement).textContent?.trim()||"").filter((t)=>t&&t!==label).join(" ")||"--"; }
-function leafletMapFor(map: HTMLElement) { const events=(map as any)._leaflet_events as Record<string, any>|undefined; if(!events)return null; for(const event of Object.values(events)){const ctx=event?.ctx;if(ctx?.invalidateSize&&ctx?._container===map)return ctx;} return null; }
 
 export function BridgeConsolePreview(){
  const pathname = usePathname();
  useEffect(()=>{
   if (pathname !== "/") return;
   let attempts=0,retryTimer=0,syncTimer=0,mapResizeTimer=0; let mapObserver:ResizeObserver|null=null,overlayObserver:MutationObserver|null=null,recoverWindowResize:(()=>void)|null=null; let vectorVisible=true,aisVisible=true;
-  const invalidateMapSize=(map:HTMLElement)=>{const leafletMap=leafletMapFor(map);if(leafletMap)leafletMap.invalidateSize();};
-  const settleMapTiles=(map:HTMLElement)=>{window.requestAnimationFrame(()=>window.setTimeout(()=>{invalidateMapSize(map);window.dispatchEvent(new Event("resize"));},60));};
+  const nudgeMapContainer=(map:HTMLElement)=>{const previousWidth=map.style.width||"100%";map.style.width="calc(100% - 1px)";void map.offsetWidth;window.requestAnimationFrame(()=>{map.style.width=previousWidth;window.dispatchEvent(new Event("resize"));});};
+  const settleMapTiles=(map:HTMLElement)=>{window.requestAnimationFrame(()=>window.setTimeout(()=>nudgeMapContainer(map),60));};
   const recoverMapTiles=(map:HTMLElement)=>{window.clearTimeout(mapResizeTimer);mapResizeTimer=window.setTimeout(()=>settleMapTiles(map),180);};
   const applyOverlayVisibility=(map:HTMLElement)=>{Array.from(map.querySelectorAll<SVGElement>("path, circle")).filter((el)=>(el.getAttribute("stroke")||"").toLowerCase()==="#22d3ee").forEach((el)=>{const isVector=(el.getAttribute("stroke-dasharray")||"").trim().length>0;el.style.display=aisVisible&&(!isVector||vectorVisible)?"":"none";});};
   const updateChartButtons=()=>{const v=document.getElementById("bc-chart-projection"),a=document.getElementById("bc-chart-ais");if(v){v.textContent=`VECTOR ${vectorVisible?"ON":"OFF"}`;v.style.color=vectorVisible?"#e7c95c":"#8294a5";v.style.borderColor=vectorVisible?"rgba(201,162,39,.6)":"rgba(148,163,184,.25)";}if(a){a.textContent=`AIS ${aisVisible?"ON":"OFF"}`;a.style.color=aisVisible?"#42d3c8":"#8294a5";a.style.borderColor=aisVisible?"rgba(66,211,200,.55)":"rgba(148,163,184,.25)";}};
