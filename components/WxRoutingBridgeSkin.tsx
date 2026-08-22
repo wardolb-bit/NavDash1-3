@@ -8,6 +8,31 @@ function important(el: HTMLElement | null, prop: string, value: string) {
   el.style.setProperty(prop, value, "important");
 }
 
+function hideTechnicalWxDetails(root: HTMLElement) {
+  root.querySelectorAll<HTMLElement>("div,span,p").forEach((el) => {
+    const text = (el.textContent || "").trim();
+    if (!text) return;
+
+    if (/^Isobar Samples$/i.test(text)) {
+      const row = el.parentElement;
+      if (row) important(row, "display", "none");
+      return;
+    }
+
+    if (/^(\d+\s+)?(wind|map|grib|isobar)?\s*samples?$/i.test(text)) {
+      important(el, "display", "none");
+      return;
+    }
+
+    if (/\.exe\b/i.test(text) || /executable/i.test(text) || /sample(?:d)?\s+points?/i.test(text)) {
+      const isDataSourceDetail =
+        !!el.parentElement?.querySelector("div") &&
+        /Data Source/i.test(el.parentElement?.textContent || "");
+      if (isDataSourceDetail || /\.exe\b/i.test(text)) important(el, "display", "none");
+    }
+  });
+}
+
 export function WxRoutingBridgeSkin() {
   const pathname = usePathname();
 
@@ -20,6 +45,7 @@ export function WxRoutingBridgeSkin() {
 
     const apply = () => {
       if (cancelled) return;
+
       const main = document.querySelector<HTMLElement>("main");
       const shell = main?.firstElementChild as HTMLElement | null;
       const header = shell?.querySelector<HTMLElement>(":scope > header") || null;
@@ -96,32 +122,28 @@ export function WxRoutingBridgeSkin() {
         important(el, "box-shadow", "none");
       });
 
-      shell.querySelectorAll<HTMLElement>("section,aside").forEach((el) => {
+      shell.querySelectorAll<HTMLElement>("section, aside").forEach((el) => {
         if (el.closest("header")) return;
         important(el, "border-radius", "0");
         important(el, "box-shadow", "none");
       });
+
       shell.querySelectorAll<HTMLElement>("button").forEach((el) => {
         important(el, "border-radius", "3px");
         important(el, "box-shadow", "none");
       });
 
       hideTechnicalWxDetails(shell);
-      loadRouteState().then(() => queueCorrection(shell));
-
-      observer = new MutationObserver(() => queueCorrection(shell));
-      observer.observe(shell, { childList: true, subtree: true, characterData: true });
-
-      routeRefreshTimer = window.setInterval(() => {
-        loadRouteState().then(() => queueCorrection(shell));
-      }, 10000);
+      if (!observer) {
+        observer = new MutationObserver(() => hideTechnicalWxDetails(shell));
+        observer.observe(shell, { childList: true, subtree: true, characterData: true });
+      }
     };
 
     apply();
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
-      window.clearInterval(routeRefreshTimer);
       observer?.disconnect();
       document.getElementById("wxr-v2-topbar")?.remove();
     };
