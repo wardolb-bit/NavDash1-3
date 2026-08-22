@@ -33,6 +33,108 @@ function hideTechnicalWxDetails(root: HTMLElement) {
   });
 }
 
+function setReactInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  if (!setter) return;
+  setter.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function findPlanningCard(root: HTMLElement) {
+  const heading = Array.from(root.querySelectorAll<HTMLElement>("div,span")).find((el) => {
+    const text = (el.textContent || "").trim();
+    return text === "Planning" || text === "Projection Origin";
+  });
+  return heading?.parentElement as HTMLElement | null;
+}
+
+function readAisSog(root: HTMLElement) {
+  const label = Array.from(root.querySelectorAll<HTMLElement>("div,span")).find(
+    (el) => (el.textContent || "").trim() === "SOG / COG",
+  );
+  const field = label?.parentElement as HTMLElement | null;
+  const value = field?.querySelector<HTMLElement>(".font-black")?.textContent || "";
+  const match = value.match(/([0-9]+(?:\.[0-9]+)?)\s*kt/i);
+  const sog = match ? Number(match[1]) : NaN;
+  return Number.isFinite(sog) ? sog : null;
+}
+
+function ensurePlanningUi(root: HTMLElement) {
+  const card = findPlanningCard(root);
+  if (!card) return;
+
+  const heading = Array.from(card.querySelectorAll<HTMLElement>("div,span")).find((el) => {
+    const text = (el.textContent || "").trim();
+    return text === "Planning" || text === "Projection Origin";
+  });
+  if (heading && heading.textContent !== "Projection Origin") heading.textContent = "Projection Origin";
+
+  card.querySelectorAll<HTMLButtonElement>("button").forEach((button) => {
+    const text = (button.textContent || "").trim();
+    if (text === "Current") button.textContent = "Current Position";
+    if (text === "Departure") button.textContent = "Departure Position";
+  });
+
+  const speedLabel = Array.from(card.querySelectorAll<HTMLElement>("span")).find((el) => {
+    const text = (el.textContent || "").trim();
+    return text === "Planning Speed" || text === "ETA Speed (kt)";
+  });
+  if (speedLabel && speedLabel.textContent !== "ETA Speed (kt)") speedLabel.textContent = "ETA Speed (kt)";
+
+  const speedInput = card.querySelector<HTMLInputElement>('input[type="number"]');
+  if (!speedInput) return;
+
+  let helper = card.querySelector<HTMLElement>("[data-wxr-eta-speed-helper]");
+  if (!helper) {
+    helper = document.createElement("div");
+    helper.dataset.wxrEtaSpeedHelper = "true";
+    helper.style.cssText = "margin-top:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;font:700 10px system-ui;color:#8294a5";
+
+    const readout = document.createElement("span");
+    readout.dataset.wxrAisSog = "true";
+    readout.textContent = "AIS SOG: --";
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.wxrUseAisSog = "true";
+    button.textContent = "Use AIS SOG";
+    button.disabled = true;
+    button.style.cssText = "height:26px;padding:0 8px;border:1px solid rgba(201,162,39,.55);border-radius:3px;background:#071019;color:#e7c95c;font:900 9px system-ui;letter-spacing:.04em;opacity:.45";
+    button.addEventListener("click", () => {
+      const sog = Number(button.dataset.sog);
+      if (Number.isFinite(sog) && sog >= 0) setReactInputValue(speedInput, sog.toFixed(1));
+    });
+
+    const note = document.createElement("span");
+    note.textContent = "This speed drives leg ETAs.";
+
+    helper.append(readout, button, note);
+    speedInput.closest("label")?.insertAdjacentElement("afterend", helper);
+  }
+}
+
+function refreshPlanningUi(root: HTMLElement) {
+  ensurePlanningUi(root);
+  const card = findPlanningCard(root);
+  if (!card) return;
+
+  const readout = card.querySelector<HTMLElement>("[data-wxr-ais-sog]");
+  const button = card.querySelector<HTMLButtonElement>("[data-wxr-use-ais-sog]");
+  if (!readout || !button) return;
+
+  const sog = readAisSog(root);
+  const nextReadout = sog === null ? "AIS SOG: --" : `AIS SOG: ${sog.toFixed(1)} kt`;
+  if (readout.textContent !== nextReadout) readout.textContent = nextReadout;
+
+  const enabled = sog !== null;
+  if (button.disabled === enabled) button.disabled = !enabled;
+  const nextOpacity = enabled ? "1" : ".45";
+  if (button.style.opacity !== nextOpacity) button.style.opacity = nextOpacity;
+  const nextSog = enabled ? String(sog) : "";
+  if (button.dataset.sog !== nextSog) button.dataset.sog = nextSog;
+}
+
 export function WxRoutingBridgeSkin() {
   const pathname = usePathname();
 
@@ -41,6 +143,7 @@ export function WxRoutingBridgeSkin() {
 
     let cancelled = false;
     let retryTimer = 0;
+    let refreshTimer = 0;
     let observer: MutationObserver | null = null;
 
     const apply = () => {
@@ -134,9 +237,17 @@ export function WxRoutingBridgeSkin() {
       });
 
       hideTechnicalWxDetails(shell);
+      refreshPlanningUi(shell);
+
       if (!observer) {
         observer = new MutationObserver(() => hideTechnicalWxDetails(shell));
         observer.observe(shell, { childList: true, subtree: true, characterData: true });
+      }
+
+      if (!refreshTimer) {
+        refreshTimer = window.setInterval(() => {
+          if (!cancelled) refreshPlanningUi(shell);
+        }, 750);
       }
     };
 
@@ -144,6 +255,7 @@ export function WxRoutingBridgeSkin() {
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
+      window.clearInterval(refreshTimer);
       observer?.disconnect();
       document.getElementById("wxr-v2-topbar")?.remove();
     };
