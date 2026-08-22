@@ -33,6 +33,42 @@ body::before {
 #bc-quick-access .bc-quick-link:hover { background: #1a2630; }
 #bc-quick-access .bc-quick-secondary { border-color: rgba(148,163,184,.3); color: #c5d0d9; }
 
+/* Quick-access links are portaled into the real header control row. Make them
+   actual bridge-console buttons there, matching the Load RTZ control geometry. */
+.navdash-v12-night > header .bc-quick-link,
+.navdash-v12-day > header .bc-quick-link {
+  display: inline-flex !important;
+  width: auto !important;
+  min-width: 6.25rem !important;
+  height: 2.15rem !important;
+  flex: 0 0 auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 .65rem !important;
+  border: 1px solid rgba(201,162,39,.42) !important;
+  border-radius: .4rem !important;
+  background: #071019 !important;
+  color: #d6bd58 !important;
+  box-shadow: none !important;
+  font: 800 .72rem/1 system-ui, sans-serif !important;
+  letter-spacing: .04em !important;
+  line-height: 1 !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+.navdash-v12-night > header .bc-quick-link:hover,
+.navdash-v12-day > header .bc-quick-link:hover {
+  background: #101820 !important;
+  border-color: rgba(201,162,39,.68) !important;
+  color: #f1d56b !important;
+}
+.navdash-v12-night > header .bc-quick-secondary,
+.navdash-v12-day > header .bc-quick-secondary {
+  border-color: rgba(148,163,184,.30) !important;
+  color: #c5d0d9 !important;
+}
+
 /* Target the real main-screen shell directly. */
 .navdash-v12-night,
 .navdash-v12-day { padding: .55rem !important; }
