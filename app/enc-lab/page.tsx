@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import L from "leaflet";
+import type { CircleMarker, Map as LeafletMap, Polyline, TileLayer } from "leaflet";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
@@ -9,6 +9,8 @@ const ECDIS_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCO
 
 type OwnShip = { lat: number; lon: number; sog: number; cog: number };
 type Waypoint = { lat: number; lon: number; name?: string; id?: string };
+type EncLayers = { ecdis: TileLayer; plain: TileLayer };
+type LabMap = LeafletMap & { _encLayers?: EncLayers };
 
 function sixBitCharToValue(char: string) {
   const code = char.charCodeAt(0);
@@ -64,58 +66,75 @@ function loadRoute(): Waypoint[] {
 
 export default function EncLabPage() {
   const mapNode = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const ownShipMarker = useRef<L.CircleMarker | null>(null);
-  const routeLayer = useRef<L.Polyline | null>(null);
+  const mapRef = useRef<LabMap | null>(null);
+  const leafletRef = useRef<typeof import("leaflet") | null>(null);
+  const ownShipMarker = useRef<CircleMarker | null>(null);
+  const routeLayer = useRef<Polyline | null>(null);
   const [ownShip, setOwnShip] = useState<OwnShip | null>(null);
-  const [status, setStatus] = useState("Connecting to wheelhouse AIS…");
+  const [status, setStatus] = useState("Loading chart engine…");
   const [chartMode, setChartMode] = useState<"ecdis" | "plain">("ecdis");
 
   useEffect(() => {
-    if (!mapNode.current || mapRef.current) return;
+    let cancelled = false;
 
-    const map = L.map(mapNode.current, {
-      zoomControl: true,
-      worldCopyJump: true,
-      preferCanvas: true,
-    }).setView([13.45, 144.75], 8);
+    const startMap = async () => {
+      if (!mapNode.current || mapRef.current) return;
 
-    const plain = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "© OpenStreetMap contributors",
-    });
+      const leafletModule = await import("leaflet");
+      if (cancelled || !mapNode.current) return;
+      leafletRef.current = leafletModule;
+      const L = leafletModule.default;
 
-    const ecdis = L.tileLayer.wms(ECDIS_WMS, {
-      layers: "0",
-      format: "image/png",
-      transparent: false,
-      version: "1.3.0",
-      maxZoom: 18,
-      attribution: "NOAA ENC / IHO S-52 portrayal",
-    } as L.WMSOptions);
+      const map = L.map(mapNode.current, {
+        zoomControl: true,
+        worldCopyJump: true,
+        preferCanvas: true,
+      }).setView([13.45, 144.75], 8) as LabMap;
 
-    ecdis.addTo(map);
-    (map as any)._encLayers = { ecdis, plain };
+      const plain = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors",
+      });
 
-    const route = loadRoute();
-    if (route.length > 1) {
-      routeLayer.current = L.polyline(route.map(wp => [wp.lat, wp.lon] as [number, number]), {
-        color: "#f2cf5b",
-        weight: 3,
-        opacity: 0.95,
-      }).addTo(map);
-      map.fitBounds(routeLayer.current.getBounds(), { padding: [40, 40] });
-    }
+      const ecdis = L.tileLayer.wms(ECDIS_WMS, {
+        layers: "0",
+        format: "image/png",
+        transparent: false,
+        version: "1.3.0",
+        maxZoom: 18,
+        attribution: "NOAA ENC / IHO S-52 portrayal",
+      });
 
-    mapRef.current = map;
+      ecdis.addTo(map);
+      map._encLayers = { ecdis, plain };
+
+      const route = loadRoute();
+      if (route.length > 1) {
+        routeLayer.current = L.polyline(route.map(wp => [wp.lat, wp.lon] as [number, number]), {
+          color: "#f2cf5b",
+          weight: 3,
+          opacity: 0.95,
+        }).addTo(map);
+        map.fitBounds(routeLayer.current.getBounds(), { padding: [40, 40] });
+      }
+
+      mapRef.current = map;
+      setStatus("Connecting to wheelhouse AIS…");
+    };
+
+    startMap().catch(() => setStatus("Chart engine failed"));
+
     return () => {
-      map.remove();
-      mapRef.current = null;
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current as (L.Map & { _encLayers?: { ecdis: L.TileLayer.WMS; plain: L.TileLayer } }) | null;
+    const map = mapRef.current;
     if (!map?._encLayers) return;
     const { ecdis, plain } = map._encLayers;
     if (chartMode === "ecdis") {
@@ -141,7 +160,10 @@ export default function EncLabPage() {
         setOwnShip(decoded);
 
         const map = mapRef.current;
-        if (!map) return;
+        const leafletModule = leafletRef.current;
+        if (!map || !leafletModule) return;
+        const L = leafletModule.default;
+
         if (!ownShipMarker.current) {
           ownShipMarker.current = L.circleMarker([decoded.lat, decoded.lon], {
             radius: 8,
