@@ -44,8 +44,8 @@ export function BridgeQuickAccess() {
 
   const dayMode = !!target.closest(".navdash-v12-day");
   const buttonClass = dayMode
-    ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-400 bg-slate-100 px-4 text-sm font-black text-slate-950 shadow-sm hover:bg-white"
-    : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15";
+    ? "bc-header-nav inline-flex flex-none items-center justify-center whitespace-nowrap border border-slate-400 bg-slate-100 font-black text-slate-950 shadow-sm hover:bg-white"
+    : "bc-header-nav inline-flex flex-none items-center justify-center whitespace-nowrap border border-white/10 bg-white/10 font-black text-slate-100 hover:bg-white/15";
 
   return createPortal(
     <>
