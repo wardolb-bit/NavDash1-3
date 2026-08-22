@@ -129,9 +129,12 @@ main.min-h-screen[class*="circle_at_12"] header [class*="grid"] { gap: 5px !impo
 main.min-h-screen[class*="circle_at_12"] header [class*="rounded-3xl"],
 main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"] {
   border-radius: 0 !important;
+  box-shadow: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] header [class*="rounded-3xl"],
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"]:not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-amber"]):not([class*="bg-red"]) {
   border-color: rgba(148,163,184,.16) !important;
   background: #08111a !important;
-  box-shadow: none !important;
 }
 main.min-h-screen[class*="circle_at_12"] header button,
 main.min-h-screen[class*="circle_at_12"] section button,
