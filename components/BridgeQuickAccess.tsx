@@ -2,29 +2,54 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 export function BridgeQuickAccess() {
   const pathname = usePathname();
-  if (pathname !== "/") return null;
+  const [target, setTarget] = useState<HTMLElement | null>(null);
 
-  const enterFullscreen = async () => {
-    try {
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      } else {
-        await document.documentElement.requestFullscreen();
+  useEffect(() => {
+    if (pathname !== "/") {
+      setTarget(null);
+      return;
+    }
+
+    let cancelled = false;
+    let timer = 0;
+
+    const findTarget = () => {
+      if (cancelled) return;
+      const shell = document.querySelector<HTMLElement>(".navdash-v12-day, .navdash-v12-night");
+      const header = shell ? Array.from(shell.children).find((el) => el.tagName === "HEADER") as HTMLElement | undefined : undefined;
+      const row = header?.firstElementChild as HTMLElement | null;
+      const controls = row?.lastElementChild as HTMLElement | null;
+
+      if (controls) {
+        setTarget(controls);
+        return;
       }
-    } catch {}
-  };
 
-  return (
-    <div id="bc-quick-access" className="fixed right-3 top-[9px] z-[100000] flex items-center gap-1">
+      timer = window.setTimeout(findTarget, 100);
+    };
+
+    findTarget();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [pathname]);
+
+  if (pathname !== "/" || !target) return null;
+
+  return createPortal(
+    <>
       <Link href="/wx" className="bc-quick-link">WEATHER</Link>
       <Link href="/wx-routing" className="bc-quick-link">WX ROUTING</Link>
       <Link href="/position-report" className="bc-quick-link">POSITION REPORT</Link>
       <Link href="/official-weather" className="bc-quick-link bc-quick-secondary">OFFICIAL WX</Link>
       <Link href="/ecr" className="bc-quick-link bc-quick-secondary">ECR</Link>
-      <button type="button" onClick={enterFullscreen} className="bc-quick-link bc-quick-secondary">FULLSCREEN</button>
-    </div>
+    </>,
+    target,
   );
 }
