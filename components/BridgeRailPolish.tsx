@@ -2,13 +2,6 @@
 
 import { useEffect } from "react";
 
-function padHeading(value: string) {
-  const match = value.match(/([0-9.]+)/);
-  if (!match) return value;
-  const n = Math.round(Number(match[1]));
-  return Number.isFinite(n) ? `${String(((n % 360) + 360) % 360).padStart(3, "0")}°` : value;
-}
-
 function extractBridgeCoordinates(value: string) {
   const normalized = value.replace(/\s+/g, " ").trim();
   const lat = normalized.match(/(?:LAT\s*)?([0-9]{1,2}°\s*[0-9.]+['’′]?\s*[NS])/i)?.[1];
@@ -22,13 +15,55 @@ function extractBridgeCoordinates(value: string) {
 
 export function BridgeRailPolish() {
   useEffect(() => {
-    let timer = 0;
+    let retryTimer = 0;
+    let statusTimer = 0;
+    let cancelled = false;
     let lastGoodLat = "--";
     let lastGoodLon = "--";
 
-    const apply = () => {
+    const setTextIfChanged = (el: HTMLElement | null, text: string) => {
+      if (!el || el.textContent === text) return;
+      el.textContent = text;
+    };
+
+    const updateDynamicText = () => {
+      if (cancelled) return;
+
+      const latEl = document.getElementById("bc2-lat");
+      const lonEl = document.getElementById("bc2-lon");
+      const parsed = extractBridgeCoordinates(
+        `${latEl?.textContent?.trim() || ""} ${lonEl?.textContent?.trim() || ""}`,
+      );
+
+      if (parsed.lat) lastGoodLat = parsed.lat;
+      if (parsed.lon) lastGoodLon = parsed.lon;
+      if (lastGoodLat !== "--") setTextIfChanged(latEl, lastGoodLat);
+      if (lastGoodLon !== "--") setTextIfChanged(lonEl, lastGoodLon);
+
+      const routeName = document.getElementById("bc2-route")?.textContent?.trim() || "--";
+      const routeLoaded = routeName !== "--" && routeName.toLowerCase() !== "no route loaded";
+      const topLive = document.querySelector<HTMLElement>("#bc-v2-topbar .live");
+      const aisLive = !!topLive && !/offline|waiting|disconnected/i.test(topLive.textContent || "");
+
+      const styleStatus = (id: string, text: string, ok: boolean) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        setTextIfChanged(el, `${ok ? "●" : "◆"} ${text}`);
+        const desired = `padding:10px 5px;text-align:center;background:#050b10;color:${ok ? "#45d6a8" : "#d4ad45"};font:800 8px system-ui;letter-spacing:.09em;white-space:nowrap`;
+        if (el.style.cssText !== desired) el.style.cssText = desired;
+      };
+
+      styleStatus("bc2-status-ais", aisLive ? "AIS LIVE" : "AIS CHECK", aisLive);
+      styleStatus("bc2-status-route", routeLoaded ? "ROUTE LOADED" : "NO ROUTE", routeLoaded);
+    };
+
+    const applyOnce = () => {
+      if (cancelled) return;
       const rail = document.getElementById("bc-v2-instruments");
-      if (!rail) return;
+      if (!rail) {
+        retryTimer = window.setTimeout(applyOnce, 100);
+        return;
+      }
 
       rail.style.setProperty("min-width", "330px");
 
@@ -49,27 +84,6 @@ export function BridgeRailPolish() {
         });
       }
 
-      const latEl = document.getElementById("bc2-lat");
-      const lonEl = document.getElementById("bc2-lon");
-      const latNow = latEl?.textContent?.trim() || "--";
-      const lonNow = lonEl?.textContent?.trim() || "--";
-
-      // BridgeConsolePreview's legacy scraper can return the whole Own Ship card
-      // in bc2-lat (LAT + LON + SOG/COG/HDG). Split only the coordinate tokens
-      // back into their dedicated display rows and leave speed/course to their
-      // existing instrument cells.
-      const parsed = extractBridgeCoordinates(`${latNow} ${lonNow}`);
-      if (parsed.lat) lastGoodLat = parsed.lat;
-      if (parsed.lon) lastGoodLon = parsed.lon;
-
-      if (latEl && lastGoodLat !== "--") latEl.textContent = lastGoodLat;
-      if (lonEl && lastGoodLon !== "--") lonEl.textContent = lastGoodLon;
-
-      const cog = document.getElementById("bc2-cog");
-      const hdg = document.getElementById("bc2-hdg");
-      if (cog?.textContent && cog.textContent !== "--") cog.textContent = padHeading(cog.textContent);
-      if (hdg?.textContent && hdg.textContent !== "--") hdg.textContent = padHeading(hdg.textContent);
-
       rail.querySelectorAll<HTMLElement>(".bc2-big-grid strong").forEach((el) => {
         el.style.cssText = "display:block;font-size:31px;line-height:1;color:#edf4fa;font-weight:850;font-variant-numeric:tabular-nums";
       });
@@ -81,8 +95,11 @@ export function BridgeRailPolish() {
         if (strong) strong.style.cssText = "display:block;color:#f0d568;font-size:24px;line-height:1.05;font-weight:850;font-variant-numeric:tabular-nums";
         const small = leg.querySelector<HTMLElement>("small");
         if (small) {
-          const cleaned = (small.textContent || "").replace(/\s*[|·•-]?\s*mode\s*:\s*auto\s+logical\s+leg\s*/ig, " ").replace(/\s{2,}/g, " ").trim();
-          small.textContent = cleaned;
+          const cleaned = (small.textContent || "")
+            .replace(/\s*[|·•-]?\s*mode\s*:\s*auto\s+logical\s+leg\s*/gi, " ")
+            .replace(/\s{2,}/g, " ")
+            .trim();
+          setTextIfChanged(small, cleaned);
           small.style.cssText = "display:block;margin-top:8px;color:#c2ced8;font-size:11px;font-weight:700;letter-spacing:.03em";
         }
       }
@@ -100,35 +117,26 @@ export function BridgeRailPolish() {
       if (!status) {
         status = document.createElement("div");
         status.id = "bc2-system-strip";
-        status.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:auto;border-top:1px solid rgba(148,163,184,.14);background:rgba(148,163,184,.12)";
         status.innerHTML = '<span id="bc2-status-ais"></span><span id="bc2-status-route"></span>';
         rail.appendChild(status);
-      } else {
-        status.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:auto;border-top:1px solid rgba(148,163,184,.14);background:rgba(148,163,184,.12)";
-        document.getElementById("bc2-status-pos")?.remove();
       }
-
-      const routeName = document.getElementById("bc2-route")?.textContent?.trim() || "--";
-      const routeLoaded = routeName !== "--" && routeName.toLowerCase() !== "no route loaded";
-      const topLive = document.querySelector<HTMLElement>("#bc-v2-topbar .live");
-      const aisLive = !!topLive && !/offline|waiting|disconnected/i.test(topLive.textContent || "");
-
-      const styleStatus = (id: string, text: string, ok: boolean) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.textContent = `${ok ? "●" : "◆"} ${text}`;
-        el.style.cssText = `padding:10px 5px;text-align:center;background:#050b10;color:${ok ? "#45d6a8" : "#d4ad45"};font:800 8px system-ui;letter-spacing:.09em;white-space:nowrap`;
-      };
-      styleStatus("bc2-status-ais", aisLive ? "AIS LIVE" : "AIS CHECK", aisLive);
-      styleStatus("bc2-status-route", routeLoaded ? "ROUTE LOADED" : "NO ROUTE", routeLoaded);
+      status.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:1px;margin-top:auto;border-top:1px solid rgba(148,163,184,.14);background:rgba(148,163,184,.12)";
+      document.getElementById("bc2-status-pos")?.remove();
 
       const oldFooter = rail.querySelector<HTMLElement>(".bc2-wx");
       if (oldFooter) oldFooter.style.display = "none";
+
+      updateDynamicText();
+      statusTimer = window.setInterval(updateDynamicText, 1000);
     };
 
-    timer = window.setInterval(apply, 500);
-    apply();
-    return () => window.clearInterval(timer);
+    applyOnce();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(retryTimer);
+      window.clearInterval(statusTimer);
+    };
   }, []);
 
   return null;
