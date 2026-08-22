@@ -65,8 +65,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Script>
 
         <NavDashNav />
-        <BridgeLeafletCapture />
-        {children}
+        <BridgeLeafletCapture>{children}</BridgeLeafletCapture>
         <BridgeConsolePreview />
         <BridgeOwnShipEnhancer />
         <BridgeRailPolish />
