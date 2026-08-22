@@ -831,6 +831,103 @@ function formatHours(hours: number | null | undefined) {
   return `${h}h ${m.toString().padStart(2, "0")}m`;
 }
 
+type DestinationTimeZone = {
+  offsetHours: number;
+  description: string;
+  timeZone?: string;
+};
+
+type LatLonPosition = {
+  lat: number;
+  lon: number;
+};
+
+function formatUtcOffset(offsetHours: number) {
+  if (!Number.isFinite(offsetHours)) return "UTC";
+  if (offsetHours === 0) return "UTC";
+
+  const sign = offsetHours >= 0 ? "+" : "-";
+  const absolute = Math.abs(offsetHours);
+  const hours = Math.floor(absolute);
+  const minutes = Math.round((absolute - hours) * 60);
+
+  return `UTC${sign}${hours}${minutes ? `:${minutes.toString().padStart(2, "0")}` : ""}`;
+}
+
+function destinationTimeZoneForPosition(position: LatLonPosition): DestinationTimeZone {
+  const { lat, lon } = position;
+
+  if (lat >= 10 && lat <= 22 && lon >= 138 && lon <= 150) {
+    return { offsetHours: 10, description: "Chamorro Standard Time", timeZone: "Pacific/Guam" };
+  }
+
+  if (lat >= 5 && lat <= 12 && lon >= 133 && lon < 138) {
+    return { offsetHours: 9, description: "Palau Time", timeZone: "Pacific/Palau" };
+  }
+
+  if (lat >= 0 && lat <= 12 && lon >= 138 && lon < 148) {
+    return { offsetHours: 10, description: "Yap / Chuuk Time", timeZone: "Pacific/Chuuk" };
+  }
+
+  if (lat >= 0 && lat <= 12 && lon >= 148 && lon < 165) {
+    return { offsetHours: 11, description: "Pohnpei / Kosrae Time", timeZone: "Pacific/Pohnpei" };
+  }
+
+  if (lat >= 4 && lat <= 15 && lon >= 165 && lon <= 180) {
+    return { offsetHours: 12, description: "Marshall Islands Time", timeZone: "Pacific/Majuro" };
+  }
+
+  if (lat >= 18 && lat <= 23 && lon >= -161 && lon <= -154) {
+    return { offsetHours: -10, description: "Hawaii-Aleutian Standard Time", timeZone: "Pacific/Honolulu" };
+  }
+
+  const offsetHours = Math.max(-12, Math.min(14, Math.round(lon / 15)));
+  return { offsetHours, description: "Destination longitude time zone" };
+}
+
+function formatDateTimeWithOffset(date: Date, offsetHours: number) {
+  const adjusted = new Date(date.getTime() + offsetHours * 3600000);
+  const day = adjusted.toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const time = adjusted.toLocaleTimeString("en-US", {
+    timeZone: "UTC",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  return `${day} ${time}`;
+}
+
+function formatEtaAtDestination(etaHours: number | null | undefined, destination: LatLonPosition) {
+  if (etaHours === null || etaHours === undefined || !Number.isFinite(etaHours)) {
+    return { time: "--", zone: "Waiting for valid SOG and route distance" };
+  }
+
+  const etaUtc = new Date(Date.now() + etaHours * 3600000);
+  const zone = destinationTimeZoneForPosition(destination);
+  const time = zone.timeZone
+    ? new Intl.DateTimeFormat("en-US", {
+        timeZone: zone.timeZone,
+        month: "short",
+        day: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(etaUtc)
+    : formatDateTimeWithOffset(etaUtc, zone.offsetHours);
+
+  return {
+    time,
+    zone: `${zone.description} (${formatUtcOffset(zone.offsetHours)})`,
+  };
+}
+
 function normalizeSharedRouteState(parsed: any): { routeName?: string; waypoints?: Waypoint[]; activeWaypointIndex?: number } | null {
   try {
     const rawWaypoints = Array.isArray(parsed?.waypoints) ? parsed.waypoints : [];
@@ -1046,6 +1143,7 @@ export default function NavDashHomePage() {
   const etaHours = dtg && ownShip?.sog ? dtg / Math.max(ownShip.sog, 0.1) : null;
   const legBearing = activeLeg ? bearingDeg(activeLegStart.lat, activeLegStart.lon, activeLegEnd.lat, activeLegEnd.lon) : null;
   const destination = route[route.length - 1] || routeFallback;
+  const destinationEta = formatEtaAtDestination(etaHours, destination);
   const coastlinePro = computeCoastlinePro(ownShip, coastlineMode, route);
 
   const statusItems = useMemo(() => {
@@ -1880,7 +1978,8 @@ export default function NavDashHomePage() {
                   </div>
                   <div className={softPanelClass}>
                     <div className={labelClass}>ETA</div>
-                    <div className={dayMode ? "mt-2 text-2xl font-black text-slate-950" : "mt-2 text-2xl font-black text-white"}>{formatHours(etaHours)}</div>
+                    <div className={dayMode ? "mt-2 text-lg font-black leading-tight text-slate-950" : "mt-2 text-lg font-black leading-tight text-white"}>{destinationEta.time}</div>
+                    <div className={`mt-1 text-xs font-bold leading-snug ${mutedClass}`}>{destinationEta.zone}</div>
                   </div>
                   <div className={softPanelClass}>
                     <div className={labelClass}>XTE</div>
