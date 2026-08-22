@@ -1,0 +1,32 @@
+name: Apply ETA Card Patch
+
+on:
+  push:
+    branches:
+      - preview/navdash-weather-projection-cleanup
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: contains(github.event.head_commit.message, 'Stage ETA card patch payload')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: preview/navdash-weather-projection-cleanup
+          fetch-depth: 0
+      - name: Apply ETA card patch and clean payload
+        run: |
+          base64 -d .codex/eta-card.patch.gz.b64 | gunzip > /tmp/eta-card.patch
+          git apply --ignore-whitespace /tmp/eta-card.patch
+          rm -f .codex/eta-card.patch.gz.b64
+          rmdir .codex 2>/dev/null || true
+          rm -f .github/workflows/apply-eta-card-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx
+          git rm -f --ignore-unmatch .codex/eta-card.patch.gz.b64 .github/workflows/apply-eta-card-patch.yml
+          git commit -m "Show destination-local ETA on voyage card"
+          git push origin HEAD:preview/navdash-weather-projection-cleanup
