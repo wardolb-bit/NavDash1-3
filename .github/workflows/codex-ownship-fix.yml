@@ -204,3 +204,5 @@ export function BridgeOwnShipEnhancer() {
           git add app/page.tsx components/BridgeOwnShipEnhancer.tsx .github/workflows/codex-ownship-fix.yml
           git commit -m "Fix ownship marker source of truth"
           git push origin HEAD:preview/codex-bridge-ui-2
+
+# trigger: 2
