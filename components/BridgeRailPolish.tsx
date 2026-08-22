@@ -9,6 +9,17 @@ function padHeading(value: string) {
   return Number.isFinite(n) ? `${String(((n % 360) + 360) % 360).padStart(3, "0")}°` : value;
 }
 
+function extractBridgeCoordinates(value: string) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  const lat = normalized.match(/(?:LAT\s*)?([0-9]{1,2}°\s*[0-9.]+['’′]?\s*[NS])/i)?.[1];
+  const lon = normalized.match(/(?:LON\s*)?([0-9]{1,3}°\s*[0-9.]+['’′]?\s*[EW])/i)?.[1];
+
+  return {
+    lat: lat ? `LAT ${lat.replace(/\s+/g, "")}` : null,
+    lon: lon ? `LON ${lon.replace(/\s+/g, "")}` : null,
+  };
+}
+
 export function BridgeRailPolish() {
   useEffect(() => {
     let timer = 0;
@@ -34,7 +45,7 @@ export function BridgeRailPolish() {
       if (pos) {
         pos.style.cssText = "padding:16px 14px;border-bottom:1px solid rgba(148,163,184,.14);background:linear-gradient(180deg,rgba(66,211,200,.035),transparent)";
         pos.querySelectorAll<HTMLElement>("strong").forEach((el) => {
-          el.style.cssText = "display:block;color:#55ded3;font-size:25px;font-weight:850;line-height:1.24;letter-spacing:.025em;font-variant-numeric:tabular-nums";
+          el.style.cssText = "display:block;color:#55ded3;font-size:25px;font-weight:850;line-height:1.24;letter-spacing:.025em;font-variant-numeric:tabular-nums;white-space:nowrap";
         });
       }
 
@@ -42,10 +53,17 @@ export function BridgeRailPolish() {
       const lonEl = document.getElementById("bc2-lon");
       const latNow = latEl?.textContent?.trim() || "--";
       const lonNow = lonEl?.textContent?.trim() || "--";
-      if (/[NS]$/i.test(latNow)) lastGoodLat = latNow;
-      if (/[EW]$/i.test(lonNow)) lastGoodLon = lonNow;
-      if (latEl && lastGoodLat !== "--" && !/[NS]$/i.test(latNow)) latEl.textContent = lastGoodLat;
-      if (lonEl && lastGoodLon !== "--" && !/[EW]$/i.test(lonNow)) lonEl.textContent = lastGoodLon;
+
+      // BridgeConsolePreview's legacy scraper can return the whole Own Ship card
+      // in bc2-lat (LAT + LON + SOG/COG/HDG). Split only the coordinate tokens
+      // back into their dedicated display rows and leave speed/course to their
+      // existing instrument cells.
+      const parsed = extractBridgeCoordinates(`${latNow} ${lonNow}`);
+      if (parsed.lat) lastGoodLat = parsed.lat;
+      if (parsed.lon) lastGoodLon = parsed.lon;
+
+      if (latEl && lastGoodLat !== "--") latEl.textContent = lastGoodLat;
+      if (lonEl && lastGoodLon !== "--") lonEl.textContent = lastGoodLon;
 
       const cog = document.getElementById("bc2-cog");
       const hdg = document.getElementById("bc2-hdg");
