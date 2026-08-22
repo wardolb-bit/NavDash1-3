@@ -60,13 +60,24 @@ function findPlanningSpeed(root: HTMLElement) {
   return Number.isFinite(speed) && speed > 0 ? speed : null;
 }
 
-function formatEtaFromNow(hours: number) {
-  const eta = new Date(Date.now() + Math.max(0, hours) * 3600000);
-  const month = String(eta.getMonth() + 1).padStart(2, "0");
-  const day = String(eta.getDate()).padStart(2, "0");
-  const hour = String(eta.getHours()).padStart(2, "0");
-  const minute = String(eta.getMinutes()).padStart(2, "0");
-  return `${month}/${day} ${hour}${minute}`;
+function waypointUtcOffsetHours(lon: number) {
+  if (!Number.isFinite(lon)) return 0;
+  let normalized = lon;
+  while (normalized > 180) normalized -= 360;
+  while (normalized < -180) normalized += 360;
+  return Math.max(-12, Math.min(12, Math.round(normalized / 15)));
+}
+
+function formatWaypointLocalEta(hoursFromNow: number, waypointLon: number) {
+  const etaUtcMs = Date.now() + Math.max(0, hoursFromNow) * 3600000;
+  const offsetHours = waypointUtcOffsetHours(waypointLon);
+  const local = new Date(etaUtcMs + offsetHours * 3600000);
+  const month = String(local.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(local.getUTCDate()).padStart(2, "0");
+  const hour = String(local.getUTCHours()).padStart(2, "0");
+  const minute = String(local.getUTCMinutes()).padStart(2, "0");
+  const offsetLabel = offsetHours === 0 ? "UTC" : `UTC${offsetHours > 0 ? "+" : ""}${offsetHours}`;
+  return `${month}/${day} ${hour}${minute} LT (${offsetLabel})`;
 }
 
 function findEtaValue(card: HTMLElement) {
@@ -165,7 +176,7 @@ export function WxRoutingBridgeSkin() {
                 waypoints[destinationWaypointIndex].lon,
               ) / speed;
           }
-          nextText = formatEtaFromNow(hoursToWaypoint);
+          nextText = formatWaypointLocalEta(hoursToWaypoint, waypoints[destinationWaypointIndex].lon);
         }
 
         if (etaValue.textContent !== nextText) etaValue.textContent = nextText;
