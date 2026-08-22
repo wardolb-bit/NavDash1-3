@@ -8,6 +8,73 @@ function important(el: HTMLElement | null, prop: string, value: string) {
   el.style.setProperty(prop, value, "important");
 }
 
+type RouteWaypoint = { lat: number; lon: number };
+type RouteStatePayload = { waypoints: RouteWaypoint[]; activeWaypointIndex: number };
+
+function toRad(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function distanceNm(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const radiusNm = 3440.065;
+  const dLat = toRad(bLat - aLat);
+  let dLonDeg = bLon - aLon;
+  while (dLonDeg > 180) dLonDeg -= 360;
+  while (dLonDeg < -180) dLonDeg += 360;
+  const dLon = toRad(dLonDeg);
+  const lat1 = toRad(aLat);
+  const lat2 = toRad(bLat);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * radiusNm * Math.asin(Math.sqrt(h));
+}
+
+function parseDdmCoordinate(text: string, isLat: boolean) {
+  const hemiPattern = isLat ? "[NS]" : "[EW]";
+  const match = text.match(new RegExp(`(\\d{1,3})\\s+(\\d+(?:\\.\\d+)?)['’′]?\\s*(${hemiPattern})`, "i"));
+  if (!match) return null;
+  const degrees = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(degrees) || !Number.isFinite(minutes)) return null;
+  const sign = /[SW]/i.test(match[3]) ? -1 : 1;
+  return sign * (degrees + minutes / 60);
+}
+
+function findDisplayedOwnShip(root: HTMLElement) {
+  const candidates = Array.from(root.querySelectorAll<HTMLElement>("div"));
+  const label = candidates.find((el) => (el.textContent || "").trim() === "Position");
+  const value = label?.nextElementSibling as HTMLElement | null;
+  const text = value?.textContent || "";
+  const parts = text.split("/");
+  if (parts.length < 2) return null;
+  const lat = parseDdmCoordinate(parts[0], true);
+  const lon = parseDdmCoordinate(parts[1], false);
+  if (lat === null || lon === null) return null;
+  return { lat, lon };
+}
+
+function findPlanningSpeed(root: HTMLElement) {
+  const labels = Array.from(root.querySelectorAll<HTMLElement>("label"));
+  const planning = labels.find((el) => /Planning Speed/i.test(el.textContent || ""));
+  const input = planning?.querySelector<HTMLInputElement>("input");
+  const speed = Number(input?.value);
+  return Number.isFinite(speed) && speed > 0 ? speed : null;
+}
+
+function formatEtaFromNow(hours: number) {
+  const eta = new Date(Date.now() + Math.max(0, hours) * 3600000);
+  const month = String(eta.getMonth() + 1).padStart(2, "0");
+  const day = String(eta.getDate()).padStart(2, "0");
+  const hour = String(eta.getHours()).padStart(2, "0");
+  const minute = String(eta.getMinutes()).padStart(2, "0");
+  return `${month}/${day} ${hour}${minute}`;
+}
+
+function findEtaValue(card: HTMLElement) {
+  const nodes = Array.from(card.querySelectorAll<HTMLElement>("div"));
+  const label = nodes.find((el) => (el.textContent || "").trim() === "ETA WPT");
+  return label?.nextElementSibling as HTMLElement | null;
+}
+
 export function WxRoutingBridgeSkin() {
   const pathname = usePathname();
 
@@ -16,15 +83,15 @@ export function WxRoutingBridgeSkin() {
 
     let cancelled = false;
     let retryTimer = 0;
+    let etaTimer = 0;
     let observer: MutationObserver | null = null;
+    let routeState: RouteStatePayload | null = null;
 
     const hideTechnicalWxDetails = (root: HTMLElement) => {
       root.querySelectorAll<HTMLElement>("div,span,p").forEach((el) => {
         const text = (el.textContent || "").trim();
         if (!text) return;
 
-        // Hide the small operationally-irrelevant sample counters while
-        // preserving the actual layer names and controls.
         if (/^Isobar Samples$/i.test(text)) {
           const row = el.parentElement;
           if (row) important(row, "display", "none");
@@ -36,14 +103,72 @@ export function WxRoutingBridgeSkin() {
           return;
         }
 
-        // The GRIB backend may report its local executable path and parsing
-        // sample counts in sourceNotes. That is useful for debugging, not for
-        // the bridge display, so suppress only that rendered technical line.
         if (/\.exe\b/i.test(text) || /executable/i.test(text) || /sample(?:d)?\s+points?/i.test(text)) {
-          const card = el.closest<HTMLElement>("div");
           const isDataSourceDetail = !!el.parentElement?.querySelector("div") && /Data Source/i.test(el.parentElement?.textContent || "");
           if (isDataSourceDetail || /\.exe\b/i.test(text)) important(el, "display", "none");
         }
+      });
+    };
+
+    const loadRouteState = async () => {
+      try {
+        const response = await fetch("/api/route-state", { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json();
+        const waypoints = (Array.isArray(payload?.waypoints) ? payload.waypoints : [])
+          .map((wp: any) => ({
+            lat: Number(wp?.lat ?? wp?.latitude),
+            lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+          }))
+          .filter((wp: RouteWaypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+        if (waypoints.length < 2) return;
+        const rawIndex = Number(payload?.activeWaypointIndex);
+        const activeWaypointIndex = Number.isFinite(rawIndex)
+          ? Math.max(1, Math.min(Math.trunc(rawIndex), waypoints.length - 1))
+          : 1;
+        routeState = { waypoints, activeWaypointIndex };
+      } catch {}
+    };
+
+    const correctLegEtas = (root: HTMLElement) => {
+      if (!routeState) return;
+      const ownShip = findDisplayedOwnShip(root);
+      const speed = findPlanningSpeed(root);
+      if (!ownShip || !speed) return;
+
+      const { waypoints, activeWaypointIndex } = routeState;
+      const cards = Array.from(root.querySelectorAll<HTMLElement>("button")).filter((card) =>
+        Array.from(card.querySelectorAll<HTMLElement>("div")).some((el) => (el.textContent || "").trim() === "ETA WPT"),
+      );
+      if (!cards.length) return;
+
+      let hoursToWaypoint = distanceNm(
+        ownShip.lat,
+        ownShip.lon,
+        waypoints[activeWaypointIndex].lat,
+        waypoints[activeWaypointIndex].lon,
+      ) / speed;
+
+      cards.forEach((card, legIndex) => {
+        const etaValue = findEtaValue(card);
+        if (!etaValue) return;
+        const destinationWaypointIndex = legIndex + 1;
+
+        let nextText = "Passed";
+        if (destinationWaypointIndex >= activeWaypointIndex) {
+          if (destinationWaypointIndex > activeWaypointIndex) {
+            hoursToWaypoint +=
+              distanceNm(
+                waypoints[destinationWaypointIndex - 1].lat,
+                waypoints[destinationWaypointIndex - 1].lon,
+                waypoints[destinationWaypointIndex].lat,
+                waypoints[destinationWaypointIndex].lon,
+              ) / speed;
+          }
+          nextText = formatEtaFromNow(hoursToWaypoint);
+        }
+
+        if (etaValue.textContent !== nextText) etaValue.textContent = nextText;
       });
     };
 
@@ -138,6 +263,11 @@ export function WxRoutingBridgeSkin() {
       });
 
       hideTechnicalWxDetails(shell);
+      loadRouteState().then(() => correctLegEtas(shell));
+      etaTimer = window.setInterval(() => {
+        loadRouteState().then(() => correctLegEtas(shell));
+      }, 2000);
+
       if (!observer) {
         observer = new MutationObserver(() => hideTechnicalWxDetails(shell));
         observer.observe(shell, { childList: true, subtree: true, characterData: true });
@@ -148,6 +278,7 @@ export function WxRoutingBridgeSkin() {
     return () => {
       cancelled = true;
       window.clearTimeout(retryTimer);
+      window.clearInterval(etaTimer);
       observer?.disconnect();
       document.getElementById("wxr-v2-topbar")?.remove();
     };
