@@ -1,0 +1,180 @@
+/* NavDash bridge-console preview. Preview branch only. */
+body::before {
+  content: "BRIDGE CONSOLE PREVIEW";
+  position: fixed;
+  top: .4rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99999;
+  pointer-events: none;
+  padding: .28rem .7rem;
+  border: 1px solid #c9a227;
+  border-radius: .3rem;
+  background: #05090e;
+  color: #f5d76e;
+  font: 800 .68rem/1 system-ui, sans-serif;
+  letter-spacing: .14em;
+}
+
+#bc-quick-access .bc-quick-link {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(201,162,39,.55);
+  background: #101820;
+  padding: 0 10px;
+  color: #f1d56b;
+  font: 900 9px/1 system-ui, sans-serif;
+  letter-spacing: .08em;
+  text-decoration: none;
+  cursor: pointer;
+}
+#bc-quick-access .bc-quick-link:hover { background: #1a2630; }
+#bc-quick-access .bc-quick-secondary { border-color: rgba(148,163,184,.3); color: #c5d0d9; }
+
+/* Target the real main-screen shell directly. */
+.navdash-v12-night,
+.navdash-v12-day { padding: .55rem !important; }
+.navdash-v12-night { background: #05090e !important; }
+.navdash-v12-night > header,
+.navdash-v12-day > header { margin-bottom: .4rem !important; padding: .45rem .65rem !important; border-radius: .55rem !important; box-shadow: none !important; backdrop-filter: none !important; }
+.navdash-v12-night > header { background: #091119 !important; border-color: rgba(201,162,39,.28) !important; }
+.navdash-v12-night > header h1,
+.navdash-v12-day > header h1 { font-size: 1.4rem !important; line-height: 1.5rem !important; }
+.navdash-v12-night > header .h-16.w-16,
+.navdash-v12-day > header .h-16.w-16 { width: 2.35rem !important; height: 2.35rem !important; border-radius: .45rem !important; font-size: 1rem !important; }
+.navdash-v12-night > header h1 + div,
+.navdash-v12-day > header h1 + div { display: none !important; }
+.navdash-v12-night > header label,
+.navdash-v12-night > header button,
+.navdash-v12-day > header label,
+.navdash-v12-day > header button { width: auto !important; min-width: 6.25rem !important; height: 2.15rem !important; padding: 0 .65rem !important; border-radius: .4rem !important; font-size: .72rem !important; box-shadow: none !important; }
+
+.navdash-v12-night > div:has(> #v12-section-chart),
+.navdash-v12-day > div:has(> #v12-section-chart) { display: grid !important; grid-template-columns: minmax(0, 1fr) 300px !important; gap: .55rem !important; align-items: start !important; }
+#v12-section-chart { padding: .55rem !important; border-radius: .5rem !important; box-shadow: none !important; backdrop-filter: none !important; min-width: 0 !important; }
+.navdash-v12-night #v12-section-chart { background: #08111a !important; border-color: rgba(148,163,184,.16) !important; }
+#v12-section-chart > div:first-child { margin-bottom: .4rem !important; gap: .45rem !important; }
+#v12-section-chart h2 { margin-top: 0 !important; font-size: 1.05rem !important; line-height: 1.2rem !important; }
+#v12-section-chart h2 + p { display: none !important; }
+#v12-section-chart > div:first-child button { padding: .4rem .6rem !important; border-radius: .4rem !important; font-size: .7rem !important; line-height: .95rem !important; }
+
+/* Force the map to dominate the bridge screen, but leave Leaflet's internal panes alone. */
+#v12-map { display: block !important; width: 100% !important; height: 70vh !important; min-height: 560px !important; border-radius: .45rem !important; background: #13212d !important; overflow: hidden !important; position: relative !important; }
+#v12-section-chart > #v12-map + div { margin-top: .4rem !important; padding: .42rem .55rem !important; border-radius: .4rem !important; font-size: .68rem !important; line-height: .95rem !important; }
+#v12-section-route { padding: .55rem !important; border-radius: .5rem !important; box-shadow: none !important; backdrop-filter: none !important; }
+#v12-section-route + section { padding: .55rem !important; border-radius: .5rem !important; box-shadow: none !important; backdrop-filter: none !important; }
+.navdash-v12-night #v12-section-route,
+.navdash-v12-night #v12-section-route + section { background: #08111a !important; border-color: rgba(148,163,184,.16) !important; }
+#v12-section-route .rounded-3xl,
+#v12-section-route .rounded-2xl,
+#v12-section-route + section .rounded-3xl,
+#v12-section-route + section .rounded-2xl { border-radius: .4rem !important; }
+#v12-section-route .p-4,
+#v12-section-route + section .p-4 { padding: .45rem !important; }
+#v12-section-route .gap-3,
+#v12-section-route + section .gap-3 { gap: .35rem !important; }
+#v12-section-route .text-2xl,
+#v12-section-route + section .text-2xl { font-size: 1.35rem !important; line-height: 1.45rem !important; }
+#v12-section-route .text-xl { font-size: .95rem !important; line-height: 1.1rem !important; }
+#v12-section-route .text-lg { font-size: .85rem !important; line-height: 1.05rem !important; }
+.navdash-v12-night > div:has(> button):has(+ div > #v12-section-chart),
+.navdash-v12-day > div:has(> button):has(+ div > #v12-section-chart) { display: flex !important; gap: .35rem !important; margin-bottom: .4rem !important; }
+.navdash-v12-night > div:has(> button):has(+ div > #v12-section-chart) > button,
+.navdash-v12-day > div:has(> button):has(+ div > #v12-section-chart) > button { flex: 0 0 auto !important; padding: .42rem .68rem !important; border-radius: .4rem !important; font-size: .72rem !important; }
+#v12-section-chart::before { content: "MAP CONSOLE"; display: block; margin-bottom: .35rem; color: #c9a227; font: 800 .62rem/1 system-ui, sans-serif; letter-spacing: .18em; }
+
+/* Bridge preview keeps the operational map clean. Weather remains on its dedicated page. */
+#v12-section-weather,
+#v12-section-status { display: none !important; }
+
+/* ECR preview styling only. No ECR TSX, WebSocket, route, weather, or calculation logic is changed. */
+main.min-h-screen[class*="circle_at_12"] {
+  background: #04080c !important;
+  padding: 6px !important;
+  color: #dbe5ee !important;
+  font-family: system-ui, sans-serif !important;
+}
+main.min-h-screen[class*="circle_at_12"] > div { max-width: none !important; }
+main.min-h-screen[class*="circle_at_12"] header {
+  margin-bottom: 5px !important;
+  padding: 12px !important;
+  border: 1px solid rgba(201,162,39,.30) !important;
+  border-radius: 0 !important;
+  background: #071019 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] header h1 {
+  margin-top: 4px !important;
+  color: #edf4fa !important;
+  font-size: 22px !important;
+  line-height: 1.05 !important;
+  letter-spacing: .01em !important;
+}
+main.min-h-screen[class*="circle_at_12"] header p {
+  margin-top: 6px !important;
+  max-width: 760px !important;
+  color: #8294a5 !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+}
+main.min-h-screen[class*="circle_at_12"] header [class*="uppercase"] {
+  color: #c9a227 !important;
+  font-size: 9px !important;
+  letter-spacing: .16em !important;
+}
+main.min-h-screen[class*="circle_at_12"] header [class*="grid"] { gap: 5px !important; }
+main.min-h-screen[class*="circle_at_12"] header [class*="rounded-3xl"],
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"] {
+  border-radius: 0 !important;
+  border-color: rgba(148,163,184,.16) !important;
+  background: #08111a !important;
+  box-shadow: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] header button,
+main.min-h-screen[class*="circle_at_12"] section button,
+main.min-h-screen[class*="circle_at_12"] a {
+  border-radius: 2px !important;
+  border-color: rgba(201,162,39,.42) !important;
+  background: #071019 !important;
+  color: #d6bd58 !important;
+  box-shadow: none !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: .06em !important;
+}
+main.min-h-screen[class*="circle_at_12"] section {
+  gap: 5px !important;
+}
+main.min-h-screen[class*="circle_at_12"] section > div,
+main.min-h-screen[class*="circle_at_12"] section > article {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] [class*="text-5xl"] {
+  color: #42d3c8 !important;
+  font-size: 36px !important;
+  line-height: 1 !important;
+}
+main.min-h-screen[class*="circle_at_12"] [class*="text-4xl"] { font-size: 26px !important; }
+main.min-h-screen[class*="circle_at_12"] [class*="text-3xl"] { font-size: 22px !important; }
+main.min-h-screen[class*="circle_at_12"] [class*="text-2xl"] { font-size: 18px !important; }
+main.min-h-screen[class*="circle_at_12"] [class*="text-xl"] { font-size: 14px !important; }
+main.min-h-screen[class*="circle_at_12"] input,
+main.min-h-screen[class*="circle_at_12"] select {
+  border-radius: 2px !important;
+  border-color: rgba(148,163,184,.25) !important;
+  background: #050a0f !important;
+  color: #edf4fa !important;
+  box-shadow: none !important;
+}
+
+@media (max-width: 900px) {
+  .navdash-v12-night > div:has(> #v12-section-chart),
+  .navdash-v12-day > div:has(> #v12-section-chart) { grid-template-columns: 1fr !important; }
+  #v12-map { height: 58vh !important; min-height: 420px !important; }
+  #bc-quick-access { top: 42px !important; right: 6px !important; }
+}
