@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { BridgeConsolePreview } from "./BridgeConsolePreview";
 import { BridgeQuickAccess } from "./BridgeQuickAccess";
@@ -9,16 +10,48 @@ import { BridgeRailPolish } from "./BridgeRailPolish";
 /**
  * Keep the bridge-console DOM enhancers scoped to the main Nav Console route.
  *
- * These components use timers/observers and direct DOM references. Mounting them
- * in the root layout allowed those references to survive client-side navigation
- * to ECR/Position Report and then fight the newly-mounted main-page DOM on return.
- * Scoping them to `/` guarantees their cleanup runs when leaving Nav Console and
- * gives them fresh DOM references when returning.
+ * The helpers also wait until Leaflet has actually initialized the main map.
+ * This avoids racing the map mount on route return, which can leave the map
+ * container resized before Leaflet has created its panes/tiles.
  */
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
+  const [mapReady, setMapReady] = useState(false);
 
-  if (pathname !== "/") return null;
+  useEffect(() => {
+    setMapReady(false);
+    if (pathname !== "/") return;
+
+    let cancelled = false;
+    let timer = 0;
+    let attempts = 0;
+
+    const waitForLeaflet = () => {
+      if (cancelled) return;
+
+      const map = document.getElementById("v12-map");
+      const leafletReady = !!map?.querySelector(".leaflet-map-pane, .leaflet-pane");
+
+      if (leafletReady) {
+        setMapReady(true);
+        return;
+      }
+
+      attempts += 1;
+      if (attempts < 120) {
+        timer = window.setTimeout(waitForLeaflet, 100);
+      }
+    };
+
+    waitForLeaflet();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [pathname]);
+
+  if (pathname !== "/" || !mapReady) return null;
 
   return (
     <>
