@@ -68,7 +68,7 @@ function waypointUtcOffsetHours(lon: number) {
   return Math.max(-12, Math.min(12, Math.round(normalized / 15)));
 }
 
-function formatWaypointLocalEta(hoursFromNow: number, waypointLon: number) {
+function waypointLocalEtaParts(hoursFromNow: number, waypointLon: number) {
   const etaUtcMs = Date.now() + Math.max(0, hoursFromNow) * 3600000;
   const offsetHours = waypointUtcOffsetHours(waypointLon);
   const local = new Date(etaUtcMs + offsetHours * 3600000);
@@ -77,7 +77,7 @@ function formatWaypointLocalEta(hoursFromNow: number, waypointLon: number) {
   const hour = String(local.getUTCHours()).padStart(2, "0");
   const minute = String(local.getUTCMinutes()).padStart(2, "0");
   const offsetLabel = offsetHours === 0 ? "UTC" : `UTC${offsetHours > 0 ? "+" : ""}${offsetHours}`;
-  return `${month}/${day} ${hour}${minute} LT (${offsetLabel})`;
+  return { dateTime: `${month}/${day} ${hour}${minute}`, zone: `LT · ${offsetLabel}` };
 }
 
 function findEtaValue(card: HTMLElement) {
@@ -165,21 +165,24 @@ export function WxRoutingBridgeSkin() {
         if (!etaValue) return;
         const destinationWaypointIndex = legIndex + 1;
 
-        let nextText = "Passed";
-        if (destinationWaypointIndex >= activeWaypointIndex) {
-          if (destinationWaypointIndex > activeWaypointIndex) {
-            hoursToWaypoint +=
-              distanceNm(
-                waypoints[destinationWaypointIndex - 1].lat,
-                waypoints[destinationWaypointIndex - 1].lon,
-                waypoints[destinationWaypointIndex].lat,
-                waypoints[destinationWaypointIndex].lon,
-              ) / speed;
-          }
-          nextText = formatWaypointLocalEta(hoursToWaypoint, waypoints[destinationWaypointIndex].lon);
+        if (destinationWaypointIndex < activeWaypointIndex) {
+          if (etaValue.textContent !== "Passed") etaValue.textContent = "Passed";
+          return;
         }
 
-        if (etaValue.textContent !== nextText) etaValue.textContent = nextText;
+        if (destinationWaypointIndex > activeWaypointIndex) {
+          hoursToWaypoint +=
+            distanceNm(
+              waypoints[destinationWaypointIndex - 1].lat,
+              waypoints[destinationWaypointIndex - 1].lon,
+              waypoints[destinationWaypointIndex].lat,
+              waypoints[destinationWaypointIndex].lon,
+            ) / speed;
+        }
+
+        const eta = waypointLocalEtaParts(hoursToWaypoint, waypoints[destinationWaypointIndex].lon);
+        const nextHtml = `${eta.dateTime}<span data-wxr-eta-zone="true" style="display:block;margin-top:2px;font-size:0.68rem;font-weight:800;opacity:.72;white-space:nowrap">${eta.zone}</span>`;
+        if (etaValue.innerHTML !== nextHtml) etaValue.innerHTML = nextHtml;
       });
     };
 
