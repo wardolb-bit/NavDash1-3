@@ -89,6 +89,89 @@ body::before {
 #v12-section-weather,
 #v12-section-status { display: none !important; }
 
+/* ECR preview styling only. No ECR TSX, WebSocket, route, weather, or calculation logic is changed. */
+main.min-h-screen[class*="circle_at_12"] {
+  background: #04080c !important;
+  padding: 6px !important;
+  color: #dbe5ee !important;
+  font-family: system-ui, sans-serif !important;
+}
+main.min-h-screen[class*="circle_at_12"] > div { max-width: none !important; }
+main.min-h-screen[class*="circle_at_12"] header {
+  margin-bottom: 5px !important;
+  padding: 12px !important;
+  border: 1px solid rgba(201,162,39,.30) !important;
+  border-radius: 0 !important;
+  background: #071019 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] header h1 {
+  margin-top: 4px !important;
+  color: #edf4fa !important;
+  font-size: 22px !important;
+  line-height: 1.05 !important;
+  letter-spacing: .01em !important;
+}
+main.min-h-screen[class*="circle_at_12"] header p {
+  margin-top: 6px !important;
+  max-width: 760px !important;
+  color: #8294a5 !important;
+  font-size: 11px !important;
+  line-height: 1.45 !important;
+}
+main.min-h-screen[class*="circle_at_12"] header [class*="uppercase"] {
+  color: #c9a227 !important;
+  font-size: 9px !important;
+  letter-spacing: .16em !important;
+}
+main.min-h-screen[class*="circle_at_12"] header [class*="grid"] { gap: 5px !important; }
+main.min-h-screen[class*="circle_at_12"] header [class*="rounded-3xl"],
+main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"] {
+  border-radius: 0 !important;
+  border-color: rgba(148,163,184,.16) !important;
+  background: #08111a !important;
+  box-shadow: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] header button,
+main.min-h-screen[class*="circle_at_12"] section button,
+main.min-h-screen[class*="circle_at_12"] a {
+  border-radius: 2px !important;
+  border-color: rgba(201,162,39,.42) !important;
+  background: #071019 !important;
+  color: #d6bd58 !important;
+  box-shadow: none !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: .06em !important;
+}
+main.min-h-screen[class*="circle_at_12"] section {
+  gap: 5px !important;
+}
+main.min-h-screen[class*="circle_at_12"] section > div,
+main.min-h-screen[class*="circle_at_12"] section > article {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+main.min-h-screen[class*="circle_at_12"] [class*="text-5xl"] {
+  color: #42d3c8 !important;
+  font-size: 36px !important;
+  line-height: 1 !important;
+}
+main.min-h-screen[class*="circle_at_12"] [class*="text-4xl"] { font-size: 26px !important; }
+main.min-h-screen[class*="circle_at_12"] [class*="text-3xl"] { font-size: 22px !important; }
+main.min-h-screen[class*="circle_at_12"] [class*="text-2xl"] { font-size: 18px !important; }
+main.min-h-screen[class*="circle_at_12"] [class*="text-xl"] { font-size: 14px !important; }
+main.min-h-screen[class*="circle_at_12"] input,
+main.min-h-screen[class*="circle_at_12"] select {
+  border-radius: 2px !important;
+  border-color: rgba(148,163,184,.25) !important;
+  background: #050a0f !important;
+  color: #edf4fa !important;
+  box-shadow: none !important;
+}
+
 @media (max-width: 900px) {
   .navdash-v12-night > div:has(> #v12-section-chart),
   .navdash-v12-day > div:has(> #v12-section-chart) { grid-template-columns: 1fr !important; }
