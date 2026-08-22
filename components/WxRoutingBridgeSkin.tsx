@@ -68,16 +68,25 @@ function waypointUtcOffsetHours(lon: number) {
   return Math.max(-12, Math.min(12, Math.round(normalized / 15)));
 }
 
+function signedHours(value: number) {
+  if (value === 0) return "0";
+  return `${value > 0 ? "+" : ""}${value}`;
+}
+
 function waypointLocalEtaParts(hoursFromNow: number, waypointLon: number) {
   const etaUtcMs = Date.now() + Math.max(0, hoursFromNow) * 3600000;
   const offsetHours = waypointUtcOffsetHours(waypointLon);
+  const zoneDescription = -offsetHours;
   const local = new Date(etaUtcMs + offsetHours * 3600000);
   const month = String(local.getUTCMonth() + 1).padStart(2, "0");
   const day = String(local.getUTCDate()).padStart(2, "0");
   const hour = String(local.getUTCHours()).padStart(2, "0");
   const minute = String(local.getUTCMinutes()).padStart(2, "0");
-  const offsetLabel = offsetHours === 0 ? "UTC" : `UTC${offsetHours > 0 ? "+" : ""}${offsetHours}`;
-  return { dateTime: `${month}/${day} ${hour}${minute}`, zone: `LT · ${offsetLabel}` };
+  const utcLabel = offsetHours === 0 ? "UTC" : `UTC${signedHours(offsetHours)}`;
+  return {
+    dateTime: `${month}/${day} ${hour}${minute}`,
+    zone: `LT · ZD ${signedHours(zoneDescription)} · ${utcLabel}`,
+  };
 }
 
 function findEtaValue(card: HTMLElement) {
@@ -181,7 +190,7 @@ export function WxRoutingBridgeSkin() {
         }
 
         const eta = waypointLocalEtaParts(hoursToWaypoint, waypoints[destinationWaypointIndex].lon);
-        const nextHtml = `${eta.dateTime}<span data-wxr-eta-zone="true" style="display:block;margin-top:2px;font-size:0.68rem;font-weight:800;opacity:.72;white-space:nowrap">${eta.zone}</span>`;
+        const nextHtml = `${eta.dateTime}<span data-wxr-eta-zone="true" style="display:block;margin-top:2px;font-size:0.68rem;font-weight:800;opacity:.78;white-space:nowrap">${eta.zone}</span>`;
         if (etaValue.innerHTML !== nextHtml) etaValue.innerHTML = nextHtml;
       });
     };
@@ -283,7 +292,10 @@ export function WxRoutingBridgeSkin() {
       }, 2000);
 
       if (!observer) {
-        observer = new MutationObserver(() => hideTechnicalWxDetails(shell));
+        observer = new MutationObserver(() => {
+          hideTechnicalWxDetails(shell);
+          correctLegEtas(shell);
+        });
         observer.observe(shell, { childList: true, subtree: true, characterData: true });
       }
     };
