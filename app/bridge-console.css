@@ -60,6 +60,11 @@ body::before {
 #v12-section-chart h2 + p { display: none !important; }
 #v12-section-chart > div:first-child button { padding: .4rem .6rem !important; border-radius: .4rem !important; font-size: .7rem !important; line-height: .95rem !important; }
 
+/* Keep own-ship LAT and LON as two deliberate rows; never let LON wrap away from its value. */
+#v12-section-route .whitespace-pre-line {
+  white-space: pre !important;
+}
+
 /* Force the map to dominate the bridge screen, but leave Leaflet's internal panes alone. */
 #v12-map { display: block !important; width: 100% !important; height: 70vh !important; min-height: 560px !important; border-radius: .45rem !important; background: #13212d !important; overflow: hidden !important; position: relative !important; }
 #v12-section-chart > #v12-map + div { margin-top: .4rem !important; padding: .42rem .55rem !important; border-radius: .4rem !important; font-size: .68rem !important; line-height: .95rem !important; }
