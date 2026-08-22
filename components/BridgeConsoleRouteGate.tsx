@@ -7,6 +7,7 @@ import { BridgeQuickAccess } from "./BridgeQuickAccess";
 import { BridgeOwnShipEnhancer } from "./BridgeOwnShipEnhancer";
 import { BridgeRailPolish } from "./BridgeRailPolish";
 import { BridgeMapWakeup } from "./BridgeMapWakeup";
+import { BridgeMapLayerControls } from "./BridgeMapLayerControls";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 
 /**
@@ -60,6 +61,7 @@ export function BridgeConsoleRouteGate() {
       <BridgeConsolePreview />
       <BridgeMapWakeup />
       <NavMapMainOverlayV2 />
+      <BridgeMapLayerControls />
       <BridgeOwnShipEnhancer />
       <BridgeRailPolish />
       <BridgeQuickAccess />
