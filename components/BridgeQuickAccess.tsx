@@ -20,6 +20,7 @@ export function BridgeQuickAccess() {
   return (
     <div id="bc-quick-access" className="fixed right-3 top-[9px] z-[100000] flex items-center gap-1">
       <Link href="/wx" className="bc-quick-link">WEATHER</Link>
+      <Link href="/wx-routing" className="bc-quick-link">WX ROUTING</Link>
       <Link href="/position-report" className="bc-quick-link">POSITION REPORT</Link>
       <Link href="/official-weather" className="bc-quick-link bc-quick-secondary">OFFICIAL WX</Link>
       <Link href="/ecr" className="bc-quick-link bc-quick-secondary">ECR</Link>
