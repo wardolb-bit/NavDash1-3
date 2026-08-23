@@ -38,6 +38,27 @@ function distanceNm(a: Position, b: Waypoint) {
   return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+function rhumbWgs84Nm(a: Position, b: Waypoint) {
+  const A = 6378137;
+  const f = 1 / 298.257223563;
+  const e2 = f * (2 - f);
+  const e = Math.sqrt(e2);
+  const p1 = a.lat * Math.PI / 180;
+  const p2 = b.lat * Math.PI / 180;
+  const dl = normalizedLonDelta(b.lon - a.lon) * Math.PI / 180;
+  const iso = (p: number) => Math.log(Math.tan(Math.PI / 4 + p / 2)) - e / 2 * Math.log((1 + e * Math.sin(p)) / (1 - e * Math.sin(p)));
+  const M = (p: number) => A * (
+    (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256) * p
+    - (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
+    + (15 * e2 * e2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p)
+    - (35 * e2 ** 3 / 3072) * Math.sin(6 * p)
+  );
+  const dPsi = iso(p2) - iso(p1);
+  const dM = M(p2) - M(p1);
+  const q = Math.abs(dPsi) > 1e-12 ? dM / dPsi : A * Math.cos(p1) / Math.sqrt(1 - e2 * Math.sin(p1) ** 2);
+  return Math.hypot(dM, q * dl) / 1852;
+}
+
 function normalizeRoute(data: any) {
   const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : [])
     .map((wp: any) => ({ lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) }))
@@ -96,9 +117,6 @@ export function BridgeNextWaypointDistance() {
         closestDistanceToTarget = Math.min(closestDistanceToTarget, currentDistance);
         const { projectionRatio } = passageMetrics(position, previous, target);
 
-        // Once own ship is beyond the perpendicular waypoint plane, the old
-        // waypoint is astern regardless of cross-track distance.  The former
-        // 5 NM cross-track gate could leave NEXT WPT stuck on a passed point.
         const crossedWaypointPlane = projectionRatio >= 1;
         const passedAfterCloseApproach = closestDistanceToTarget <= 2 && currentDistance >= closestDistanceToTarget + 0.2;
         if (!crossedWaypointPlane && !passedAfterCloseApproach) break;
@@ -121,7 +139,7 @@ export function BridgeNextWaypointDistance() {
         display.style.cssText = "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px";
       }
       const next = route[activeWaypointIndex];
-      display.textContent = position && next ? `NEXT WPT ${distanceNm(position, next).toFixed(1)} NM` : "NEXT WPT --";
+      display.textContent = position && next ? `NEXT WPT ${rhumbWgs84Nm(position, next).toFixed(1)} NM` : "NEXT WPT --";
     };
 
     const loadRoute = async () => {
