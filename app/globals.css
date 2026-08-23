@@ -21,6 +21,74 @@ body::before { content: none !important; display: none !important; }
   min-width: 108px !important;
   height: 30px !important;
   box-sizing: border-box;
+  flex: 0 0 108px !important;
+}
+
+/* Keep the full top control row visible and aligned left-to-right. */
+.navdash-v12-day > header > :first-child,
+.navdash-v12-night > header > :first-child {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  gap: 5px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
+}
+
+/* Day mode: force every injected bridge-console instrument cell and footer light. */
+.navdash-v12-day #bc-v2-instruments,
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title,
+.navdash-v12-day #bc-v2-instruments .bc2-pos,
+.navdash-v12-day #bc-v2-instruments .bc2-big-grid,
+.navdash-v12-day #bc-v2-instruments .bc2-big-grid > div,
+.navdash-v12-day #bc-v2-instruments .bc2-leg,
+.navdash-v12-day #bc-v2-instruments .bc2-small-grid,
+.navdash-v12-day #bc-v2-instruments .bc2-small-grid > div,
+.navdash-v12-day #bc-v2-instruments .bc2-wx {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #17212b !important;
+  border-color: rgba(15,23,42,.22) !important;
+}
+
+.navdash-v12-day #bc-v2-instruments label,
+.navdash-v12-day #bc-v2-instruments small {
+  color: #586773 !important;
+}
+
+.navdash-v12-day #bc-v2-instruments .bc2-big-grid strong,
+.navdash-v12-day #bc-v2-instruments .bc2-small-grid strong {
+  color: #17212b !important;
+}
+
+.navdash-v12-day #bc-v2-instruments .bc2-pos strong {
+  color: #006f78 !important;
+}
+
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title span,
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title b,
+.navdash-v12-day #bc-v2-instruments .bc2-leg strong {
+  color: #7a5b00 !important;
+}
+
+/* Any legacy/status blocks remaining beneath the injected rail must also follow Day mode. */
+.navdash-v12-day #bc-v2-instruments ~ *,
+.navdash-v12-day #bc-v2-instruments ~ * *,
+.navdash-v12-day #bc-v2-instruments + * {
+  background-color: #ffffff !important;
+  color: #17212b !important;
+  border-color: rgba(15,23,42,.22) !important;
+}
+
+/* Preserve green live/loaded status text on the light footer. */
+.navdash-v12-day #bc-v2-instruments ~ * [class*="green"],
+.navdash-v12-day #bc-v2-instruments ~ * [style*="34d399"],
+.navdash-v12-day #bc-v2-instruments ~ * [style*="green"] {
+  color: #067647 !important;
 }
 
 /* Preserve semantic ECR threshold/status colors against bridge-console night-mode overrides. */
