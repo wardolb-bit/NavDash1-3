@@ -1,9 +1,12 @@
-/* Preview-only Day Mode corrections for bridge header controls and status rail. */
+/* Preview-only bridge header and Day Mode corrections. Loaded after bridge-console.css. */
 
-.navdash-v12-day > header > :first-child > :last-child {
+/* The actual header control group is the last child inside the native header row. */
+.navdash-v12-day > header > :first-child > :last-child,
+.navdash-v12-night > header > :first-child > :last-child {
   width: 100% !important;
   min-width: 0 !important;
   display: flex !important;
+  flex: 1 1 auto !important;
   flex-wrap: nowrap !important;
   justify-content: flex-start !important;
   align-items: center !important;
@@ -14,35 +17,71 @@
   opacity: 1 !important;
 }
 
-.navdash-v12-day > header > :first-child > :last-child button,
-.navdash-v12-day > header > :first-child > :last-child label,
-.navdash-v12-day > header > :first-child > :last-child [role="button"] {
+/* Native controls and injected quick-access links are one uniform toolbar. */
+.navdash-v12-day > header > :first-child > :last-child > button,
+.navdash-v12-day > header > :first-child > :last-child > label,
+.navdash-v12-day > header > :first-child > :last-child > a.bc-header-nav,
+.navdash-v12-night > header > :first-child > :last-child > button,
+.navdash-v12-night > header > :first-child > :last-child > label,
+.navdash-v12-night > header > :first-child > :last-child > a.bc-header-nav {
   display: inline-flex !important;
   visibility: visible !important;
   opacity: 1 !important;
   flex: 0 0 108px !important;
   width: 108px !important;
   min-width: 108px !important;
+  max-width: 108px !important;
   height: 30px !important;
   box-sizing: border-box !important;
+  padding: 0 8px !important;
   align-items: center !important;
   justify-content: center !important;
+  border-radius: 3px !important;
+  font-size: 10px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  box-shadow: none !important;
+}
+
+.navdash-v12-day > header > :first-child > :last-child > button,
+.navdash-v12-day > header > :first-child > :last-child > label,
+.navdash-v12-day > header > :first-child > :last-child > a.bc-header-nav {
   background: #ffffff !important;
   color: #17212b !important;
   border-color: rgba(15,23,42,.28) !important;
 }
 
-/* The AIS LIVE / ROUTE LOADED strip is the final visible rail block, outside bc-v2-instruments. */
-.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child,
-.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child > *,
-.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child > * > * {
+.navdash-v12-night > header > :first-child > :last-child > button,
+.navdash-v12-night > header > :first-child > :last-child > label,
+.navdash-v12-night > header > :first-child > :last-child > a.bc-header-nav {
+  background: #071019 !important;
+  color: #dbe5ee !important;
+  border-color: rgba(148,163,184,.28) !important;
+}
+
+/* Keep the RTZ file input hidden even while forcing the label visible. */
+.navdash-v12-day > header input[type="file"],
+.navdash-v12-night > header input[type="file"] {
+  display: none !important;
+}
+
+/* Source-of-truth Day Mode styling for the system status strip. */
+.navdash-v12-day #bc2-system-strip {
+  background: rgba(15,23,42,.12) !important;
+  border-top-color: rgba(15,23,42,.22) !important;
+}
+
+.navdash-v12-day #bc2-status-ais,
+.navdash-v12-day #bc2-status-route {
   background: #ffffff !important;
   background-color: #ffffff !important;
   border-color: rgba(15,23,42,.22) !important;
 }
 
-.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child [class*="green"],
-.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child [style*="34d399"],
-.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child [style*="green"] {
+.navdash-v12-day #bc2-status-ais {
+  color: #067647 !important;
+}
+
+.navdash-v12-day #bc2-status-route {
   color: #067647 !important;
 }
