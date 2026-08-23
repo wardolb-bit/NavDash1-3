@@ -45,14 +45,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 }) || null;
               };
 
-              const placeMeasureLabel = () => {
+              const syncMeasureReadout = () => {
                 const map = getMap();
-                const label = map?.querySelector(".navmap-measure-label");
-                if (!map || !(label instanceof HTMLElement)) return;
-                const x = Math.max(12, map.clientWidth - label.offsetWidth - 14);
-                label.style.setProperty("transform", "translate3d(" + x + "px, 58px, 0)", "important");
-                label.style.setProperty("margin", "0", "important");
-                label.style.setProperty("z-index", "1200", "important");
+                if (!map) return;
+                const label = map.querySelector(".navmap-measure-label");
+                let readout = document.getElementById("navdash-measure-readout");
+
+                if (!(label instanceof HTMLElement) || !label.textContent?.trim()) {
+                  readout?.remove();
+                  return;
+                }
+
+                label.style.setProperty("display", "none", "important");
+
+                if (!(readout instanceof HTMLElement)) {
+                  readout = document.createElement("div");
+                  readout.id = "navdash-measure-readout";
+                  readout.style.cssText = "position:absolute;top:72px;right:12px;z-index:1200;padding:7px 10px;border:1px solid #22d3ee;background:rgba(7,16,25,.94);color:#d9fbff;border-radius:4px;font:700 12px/1.2 system-ui,sans-serif;letter-spacing:.02em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.25)";
+                  map.appendChild(readout);
+                }
+
+                readout.textContent = label.textContent.trim();
               };
 
               document.addEventListener("click", (event) => {
@@ -78,17 +91,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   return;
                 }
 
-                if (text === "CLEAR MARKS") {
+                if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
                   event.preventDefault();
-                  event.stopPropagation();
+                  event.stopImmediatePropagation();
                   try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, "[]"); } catch {}
-                  window.location.reload();
+
+                  const toolPane = getMap()?.querySelector(".leaflet-pane.navmap-main-tools-v1-pane");
+                  if (toolPane instanceof HTMLElement) {
+                    toolPane.querySelectorAll("path, circle").forEach((el) => el.remove());
+                  }
+
+                  window.setTimeout(() => window.location.reload(), 50);
                 }
               }, true);
 
-              const observer = new MutationObserver(() => {
-                placeMeasureLabel();
-              });
+              const observer = new MutationObserver(syncMeasureReadout);
 
               const start = () => {
                 const map = getMap();
@@ -96,11 +113,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   window.setTimeout(start, 150);
                   return;
                 }
-                observer.observe(map, { childList: true, subtree: true });
-                placeMeasureLabel();
+                observer.observe(map, { childList: true, subtree: true, characterData: true });
+                syncMeasureReadout();
               };
 
-              window.addEventListener("resize", placeMeasureLabel);
+              window.addEventListener("resize", syncMeasureReadout);
               start();
             })();
           `}
