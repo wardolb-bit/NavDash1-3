@@ -1,0 +1,169 @@
+/* Preview-only shared NavDash theme layer.
+   This file is intentionally loaded last so shared Day/Night rules win over
+   page-local Tailwind utility colors without changing page logic. */
+
+:root,
+html[data-navdash-theme="bridge-night"] {
+  --nd-bg: #071019;
+  --nd-panel: #0b151f;
+  --nd-panel-alt: #111d28;
+  --nd-text: #e7edf3;
+  --nd-muted: #91a0ad;
+  --nd-border: rgba(148, 163, 184, .22);
+  --nd-control-bg: #101a24;
+  --nd-control-hover: #182531;
+  --nd-control-text: #e7edf3;
+  --nd-gold: #c9a227;
+  --nd-teal: #42d3c8;
+}
+
+html[data-navdash-theme="day"] {
+  --nd-bg: #eef2f5;
+  --nd-panel: #ffffff;
+  --nd-panel-alt: #f4f7f9;
+  --nd-text: #17212b;
+  --nd-muted: #586773;
+  --nd-border: rgba(15, 23, 42, .22);
+  --nd-control-bg: #ffffff;
+  --nd-control-hover: #f3f6f8;
+  --nd-control-text: #17212b;
+  --nd-gold: #7a5b00;
+  --nd-teal: #006f78;
+  color-scheme: light;
+}
+
+html[data-navdash-theme="day"],
+html[data-navdash-theme="day"] body {
+  background: var(--nd-bg) !important;
+  color: var(--nd-text) !important;
+}
+
+/* Shared top-level NavDash navigation. */
+html[data-navdash-theme="day"] .navdash-global-nav {
+  background: #ffffff !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, .08) !important;
+}
+
+html[data-navdash-theme="day"] .navdash-global-nav select {
+  background: #ffffff !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] .navdash-global-nav > div > div:last-child > div {
+  background: var(--nd-panel-alt) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] .navdash-global-nav a:not([class*="bg-[#c9a227]"]) {
+  color: #26343f !important;
+}
+
+html[data-navdash-theme="day"] .navdash-global-nav [class*="text-slate-400"] {
+  color: var(--nd-muted) !important;
+}
+
+/* Shared page canvas. */
+html[data-navdash-theme="day"] body > main,
+html[data-navdash-theme="day"] main[class*="min-h-screen"] {
+  background: var(--nd-bg) !important;
+  color: var(--nd-text) !important;
+}
+
+/* Convert common hard-coded night surfaces used across NavDash pages.
+   Semantic red/amber/green/cyan status surfaces are intentionally excluded. */
+html[data-navdash-theme="day"] main [class*="bg-slate-950"],
+html[data-navdash-theme="day"] main [class*="bg-slate-900"],
+html[data-navdash-theme="day"] main [class*="bg-slate-800"],
+html[data-navdash-theme="day"] main [class*="bg-black/"],
+html[data-navdash-theme="day"] main [class*="bg-[#071019]"],
+html[data-navdash-theme="day"] main [class*="bg-[#08111a]"],
+html[data-navdash-theme="day"] main [class*="bg-[#05090e]"],
+html[data-navdash-theme="day"] main [class*="bg-white/[0."] {
+  background: var(--nd-panel) !important;
+  background-color: var(--nd-panel) !important;
+  color: var(--nd-text) !important;
+}
+
+html[data-navdash-theme="day"] main [class*="bg-slate-50"],
+html[data-navdash-theme="day"] main [class*="bg-slate-100"],
+html[data-navdash-theme="day"] main [class*="bg-slate-200"] {
+  background: var(--nd-panel-alt) !important;
+  background-color: var(--nd-panel-alt) !important;
+}
+
+/* Common night text utilities become readable dark text in Day Mode. */
+html[data-navdash-theme="day"] main [class*="text-white"],
+html[data-navdash-theme="day"] main [class*="text-slate-100"],
+html[data-navdash-theme="day"] main [class*="text-slate-200"],
+html[data-navdash-theme="day"] main [class*="text-slate-300"] {
+  color: var(--nd-text) !important;
+}
+
+html[data-navdash-theme="day"] main [class*="text-slate-400"],
+html[data-navdash-theme="day"] main [class*="text-slate-500"] {
+  color: var(--nd-muted) !important;
+}
+
+/* Normalize the common dark borders used on panels and controls. */
+html[data-navdash-theme="day"] main [class*="border-white/10"],
+html[data-navdash-theme="day"] main [class*="border-slate-700"],
+html[data-navdash-theme="day"] main [class*="border-slate-800"] {
+  border-color: var(--nd-border) !important;
+}
+
+/* Shared neutral controls. Semantic status/action buttons retain their own colors. */
+html[data-navdash-theme="day"] main button:not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#c9a227]"]),
+html[data-navdash-theme="day"] main label:has(input[type="file"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#c9a227]"]) {
+  background: var(--nd-control-bg) !important;
+  color: var(--nd-control-text) !important;
+  border-color: var(--nd-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-navdash-theme="day"] main button:not([disabled]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#c9a227]"]):hover {
+  background: var(--nd-control-hover) !important;
+}
+
+html[data-navdash-theme="day"] main input,
+html[data-navdash-theme="day"] main select,
+html[data-navdash-theme="day"] main textarea {
+  background: #ffffff !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] main input::placeholder,
+html[data-navdash-theme="day"] main textarea::placeholder {
+  color: #71808c !important;
+}
+
+/* Preserve operational chart/map rendering. */
+html[data-navdash-theme="day"] .leaflet-container,
+html[data-navdash-theme="day"] #v12-map {
+  color: initial;
+}
+
+/* Common bridge-console injected surfaces also use the shared variables. */
+html[data-navdash-theme="day"] #bc-v2-topbar,
+html[data-navdash-theme="day"] #bc-v2-instruments,
+html[data-navdash-theme="day"] #bc-chart-tools {
+  background-color: var(--nd-panel) !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] #bc2-system-strip,
+html[data-navdash-theme="day"] #bc2-status-ais,
+html[data-navdash-theme="day"] #bc2-status-route {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] #bc2-status-ais,
+html[data-navdash-theme="day"] #bc2-status-route {
+  color: #067647 !important;
+}
