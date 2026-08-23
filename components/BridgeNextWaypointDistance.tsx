@@ -42,6 +42,13 @@ export function BridgeNextWaypointDistance() {
     let route: Waypoint[] = [];
     let activeWaypointIndex = 1;
 
+    const styleDisplay = (display: HTMLElement) => {
+      const day = document.documentElement.dataset.navdashTheme === "day" || document.documentElement.classList.contains("day-mode");
+      display.style.cssText = day
+        ? "padding:5px 9px;border:1px solid #cbd5e1;background:#ffffff;color:#334155;font-size:9px"
+        : "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px";
+    };
+
     const render = () => {
       const center = document.querySelector<HTMLElement>("#bc-v2-topbar .bc2-center");
       if (!center) return;
@@ -51,11 +58,14 @@ export function BridgeNextWaypointDistance() {
         display.id = "bc2-top-nextwpt";
         const dtg = document.getElementById("bc2-top-dtg");
         dtg?.insertAdjacentElement("afterend", display);
-        display.style.cssText = "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px";
       }
+      styleDisplay(display);
       const next = route[activeWaypointIndex];
       display.textContent = position && next ? `NEXT WPT ${distanceNm(position, next).toFixed(1)} NM` : "NEXT WPT --";
     };
+
+    const themeObserver = new MutationObserver(render);
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-navdash-theme"] });
 
     const loadRoute = async () => {
       if (closed) return;
@@ -100,7 +110,7 @@ export function BridgeNextWaypointDistance() {
     loadRoute();
     connect();
     const initialTimer = window.setTimeout(render, 250);
-    return () => { closed = true; window.clearTimeout(initialTimer); window.clearTimeout(retryTimer); window.clearTimeout(routeTimer); if (socket) { socket.onclose = null; socket.close(); } document.getElementById("bc2-top-nextwpt")?.remove(); };
+    return () => { closed = true; themeObserver.disconnect(); window.clearTimeout(initialTimer); window.clearTimeout(retryTimer); window.clearTimeout(routeTimer); if (socket) { socket.onclose = null; socket.close(); } document.getElementById("bc2-top-nextwpt")?.remove(); };
   }, []);
   return null;
 }
