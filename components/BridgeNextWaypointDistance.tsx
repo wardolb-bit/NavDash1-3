@@ -59,10 +59,8 @@ function passageMetrics(position: Position, from: Waypoint, to: Waypoint) {
   const wx = normalizedLonDelta(position.lon - from.lon) * nmPerDegLon;
   const wy = (position.lat - from.lat) * 60;
   const legSq = vx * vx + vy * vy;
-  if (legSq <= 0.000001) return { projectionRatio: 0, crossTrackNm: Infinity };
-  const projectionRatio = (wx * vx + wy * vy) / legSq;
-  const crossTrackNm = Math.abs(wx * vy - wy * vx) / Math.sqrt(legSq);
-  return { projectionRatio, crossTrackNm };
+  if (legSq <= 0.000001) return { projectionRatio: 0 };
+  return { projectionRatio: (wx * vx + wy * vy) / legSq };
 }
 
 export function BridgeNextWaypointDistance() {
@@ -91,15 +89,17 @@ export function BridgeNextWaypointDistance() {
 
     const advancePassedWaypoint = () => {
       if (!position || route.length < 2) return;
-
       while (activeWaypointIndex > 0 && activeWaypointIndex < route.length - 1) {
         const previous = route[activeWaypointIndex - 1];
         const target = route[activeWaypointIndex];
         const currentDistance = distanceNm(position, target);
         closestDistanceToTarget = Math.min(closestDistanceToTarget, currentDistance);
-        const { projectionRatio, crossTrackNm } = passageMetrics(position, previous, target);
+        const { projectionRatio } = passageMetrics(position, previous, target);
 
-        const crossedWaypointPlane = projectionRatio >= 1 && crossTrackNm <= 5;
+        // Once own ship is beyond the perpendicular waypoint plane, the old
+        // waypoint is astern regardless of cross-track distance.  The former
+        // 5 NM cross-track gate could leave NEXT WPT stuck on a passed point.
+        const crossedWaypointPlane = projectionRatio >= 1;
         const passedAfterCloseApproach = closestDistanceToTarget <= 2 && currentDistance >= closestDistanceToTarget + 0.2;
         if (!crossedWaypointPlane && !passedAfterCloseApproach) break;
 
