@@ -6,9 +6,13 @@ import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
 type OwnShip = { lat: number; lon: number; sog: number; cog: number; heading: number | null };
 type Waypoint = { id?: string; name?: string; lat: number; lon: number };
+type UserMark = { id: string; name: string; lat: number; lon: number };
+type MeasurePoint = { lat: number; lon: number };
+type ToolMode = "pan" | "mark" | "measure";
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v2";
+const USER_CHART_STORAGE_KEY = "navdash-user-chart-v1";
 
 function sixBitCharToValue(char: string) {
   let value = char.charCodeAt(0) - 48;
@@ -52,6 +56,20 @@ function destinationPoint(lat: number, lon: number, bearing: number, distanceNm:
   const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distanceRad) + Math.cos(lat1) * Math.sin(distanceRad) * Math.cos(bearingRad));
   const lon2 = lon1 + Math.atan2(Math.sin(bearingRad) * Math.sin(distanceRad) * Math.cos(lat1), Math.cos(distanceRad) - Math.sin(lat1) * Math.sin(lat2));
   return { lat: (lat2 * 180) / Math.PI, lon: ((((lon2 * 180) / Math.PI) + 540) % 360) - 180 };
+}
+
+function distanceAndBearing(from: MeasurePoint, to: MeasurePoint) {
+  const radiusNm = 3440.065;
+  const lat1 = (from.lat * Math.PI) / 180;
+  const lat2 = (to.lat * Math.PI) / 180;
+  const dLat = ((to.lat - from.lat) * Math.PI) / 180;
+  const dLon = ((to.lon - from.lon) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const distanceNm = 2 * radiusNm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const bearing = (Math.atan2(y, x) * 180) / Math.PI;
+  return { distanceNm, bearing: (bearing + 360) % 360 };
 }
 
 function unwrapRoute(route: Waypoint[]) {
@@ -105,6 +123,21 @@ function readSavedMapView(): { lat: number; lon: number; zoom: number } | null {
   } catch { return null; }
 }
 
+function readUserChart(): UserMark[] {
+  try {
+    const raw = window.localStorage.getItem(USER_CHART_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((mark: any, index: number) => ({
+      id: typeof mark?.id === "string" ? mark.id : `mark-${index + 1}`,
+      name: typeof mark?.name === "string" ? mark.name : `Mark ${index + 1}`,
+      lat: Number(mark?.lat),
+      lon: Number(mark?.lon),
+    })).filter((mark: UserMark) => Number.isFinite(mark.lat) && Number.isFinite(mark.lon) && Math.abs(mark.lat) <= 90 && Math.abs(mark.lon) <= 180);
+  } catch { return []; }
+}
+
 export function NavMapMainOverlayV2() {
   const [host, setHost] = useState<HTMLElement | null>(null);
 
@@ -138,10 +171,27 @@ function IsolatedMainMap() {
   const cogVectorRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const routeMarkersRef = useRef<any[]>([]);
+  const userChartLayerRef = useRef<any>(null);
+  const measurementLayerRef = useRef<any>(null);
   const routeSignatureRef = useRef("");
   const didInitialRouteFitRef = useRef(false);
+  const toolModeRef = useRef<ToolMode>("pan");
+  const measureStartRef = useRef<MeasurePoint | null>(null);
   const [ownShip, setOwnShip] = useState<OwnShip | null>(null);
   const [route, setRoute] = useState<Waypoint[]>([]);
+  const [toolMode, setToolMode] = useState<ToolMode>("pan");
+  const [userMarks, setUserMarks] = useState<UserMark[]>([]);
+  const [measurement, setMeasurement] = useState<{ distanceNm: number; bearing: number } | null>(null);
+
+  useEffect(() => { toolModeRef.current = toolMode; }, [toolMode]);
+
+  useEffect(() => {
+    setUserMarks(readUserChart());
+  }, []);
+
+  useEffect(() => {
+    try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, JSON.stringify(userMarks)); } catch {}
+  }, [userMarks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,8 +231,49 @@ function IsolatedMainMap() {
 
       const ownPane = map.createPane("navmap-main-ownship-v2");
       ownPane.style.zIndex = "720";
+      const toolPane = map.createPane("navmap-main-tools-v1");
+      toolPane.style.zIndex = "730";
       ownLayerRef.current = L.layerGroup([], { pane: "navmap-main-ownship-v2" } as any).addTo(map);
+      userChartLayerRef.current = L.layerGroup([], { pane: "navmap-main-tools-v1" } as any).addTo(map);
+      measurementLayerRef.current = L.layerGroup([], { pane: "navmap-main-tools-v1" } as any).addTo(map);
       mapRef.current = map;
+
+      const handleMapClick = (event: any) => {
+        const point = { lat: Number(event.latlng.lat), lon: Number(event.latlng.lng) };
+        if (toolModeRef.current === "mark") {
+          setUserMarks((current) => [...current, {
+            id: `mark-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name: `Mark ${current.length + 1}`,
+            lat: point.lat,
+            lon: point.lon,
+          }]);
+          return;
+        }
+        if (toolModeRef.current !== "measure") return;
+        if (!measureStartRef.current) {
+          measureStartRef.current = point;
+          setMeasurement(null);
+          measurementLayerRef.current?.clearLayers();
+          L.circleMarker([point.lat, point.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
+          return;
+        }
+        const start = measureStartRef.current;
+        const result = distanceAndBearing(start, point);
+        measurementLayerRef.current?.clearLayers();
+        L.polyline([[start.lat, start.lon], [point.lat, point.lon]], { pane: "navmap-main-tools-v1", color: "#22d3ee", weight: 3, opacity: 0.95, dashArray: "8 6" }).addTo(measurementLayerRef.current);
+        for (const p of [start, point]) {
+          L.circleMarker([p.lat, p.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
+        }
+        const midpoint: [number, number] = [(start.lat + point.lat) / 2, (start.lon + point.lon) / 2];
+        L.tooltip({ permanent: true, direction: "center", className: "navmap-measure-label", pane: "navmap-main-tools-v1" })
+          .setLatLng(midpoint)
+          .setContent(`${result.bearing.toFixed(1)}°T · ${result.distanceNm.toFixed(2)} NM`)
+          .addTo(measurementLayerRef.current);
+        measureStartRef.current = null;
+        setMeasurement(result);
+      };
+      map.on("click", handleMapClick);
+      (element as any).__navmapMainClickV2 = handleMapClick;
 
       const persistView = () => {
         try {
@@ -210,6 +301,8 @@ function IsolatedMainMap() {
       const element = elementRef.current as any;
       if (element?.__navmapMainInvalidateV2) window.removeEventListener("resize", element.__navmapMainInvalidateV2);
       if (mapRef.current) {
+        const clickHandler = element?.__navmapMainClickV2;
+        if (clickHandler) mapRef.current.off("click", clickHandler);
         const persistView = element?.__navmapMainPersistV2;
         if (persistView) {
           persistView();
@@ -221,6 +314,7 @@ function IsolatedMainMap() {
       }
       ownLayerRef.current = null; ownMarkerRef.current = null; headingVectorRef.current = null; cogVectorRef.current = null;
       routeLayerRef.current = null; routeMarkersRef.current = [];
+      userChartLayerRef.current = null; measurementLayerRef.current = null;
     };
   }, []);
 
@@ -301,6 +395,22 @@ function IsolatedMainMap() {
   }, [route]);
 
   useEffect(() => {
+    async function updateUserChart() {
+      const layer = userChartLayerRef.current;
+      if (!layer) return;
+      const L = await import("leaflet");
+      layer.clearLayers();
+      for (const mark of userMarks) {
+        const marker = L.circleMarker([mark.lat, mark.lon], {
+          pane: "navmap-main-tools-v1", radius: 6, color: "#f1d56b", fillColor: "#071019", fillOpacity: 1, weight: 2,
+        }).addTo(layer);
+        marker.bindTooltip(`${mark.name}<br>${mark.lat.toFixed(5)}, ${mark.lon.toFixed(5)}`);
+      }
+    }
+    updateUserChart();
+  }, [userMarks]);
+
+  useEffect(() => {
     async function updateOwnShip() {
       const map = mapRef.current;
       const layer = ownLayerRef.current;
@@ -333,5 +443,50 @@ function IsolatedMainMap() {
     updateOwnShip();
   }, [ownShip]);
 
-  return <div ref={elementRef} id="navmap-main-isolated-v2" style={{ position: "absolute", inset: 0, zIndex: 650, width: "100%", height: "100%", minHeight: "100%", background: "#0a141d" }} />;
+  const clearMeasurement = () => {
+    measureStartRef.current = null;
+    setMeasurement(null);
+    measurementLayerRef.current?.clearLayers();
+  };
+
+  const clearUserChart = () => {
+    if (!window.confirm("Clear all user chart marks?")) return;
+    setUserMarks([]);
+  };
+
+  const buttonStyle = (active: boolean): React.CSSProperties => ({
+    border: `1px solid ${active ? "#22d3ee" : "rgba(241,213,107,.45)"}`,
+    background: active ? "rgba(34,211,238,.16)" : "rgba(7,16,25,.90)",
+    color: active ? "#d9fbff" : "#f1d56b",
+    minHeight: 36,
+    padding: "7px 11px",
+    borderRadius: 5,
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: ".08em",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  });
+
+  return (
+    <>
+      <div ref={elementRef} id="navmap-main-isolated-v2" style={{ position: "absolute", inset: 0, zIndex: 650, width: "100%", height: "100%", minHeight: "100%", background: "#0a141d" }} />
+      <div style={{ position: "absolute", zIndex: 760, top: 10, left: 54, right: 10, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", pointerEvents: "none" }}>
+        <div style={{ display: "flex", gap: 6, padding: 6, border: "1px solid rgba(241,213,107,.28)", borderRadius: 7, background: "rgba(5,12,18,.88)", backdropFilter: "blur(6px)", pointerEvents: "auto" }}>
+          <button type="button" style={buttonStyle(toolMode === "pan")} onClick={() => { setToolMode("pan"); clearMeasurement(); }}>PAN</button>
+          <button type="button" style={buttonStyle(toolMode === "mark")} onClick={() => { setToolMode("mark"); clearMeasurement(); }}>USER CHART</button>
+          <button type="button" style={buttonStyle(toolMode === "measure")} onClick={() => { setToolMode("measure"); clearMeasurement(); }}>RANGE / BRG</button>
+          <button type="button" style={buttonStyle(false)} onClick={clearMeasurement}>CLEAR MEASURE</button>
+          <button type="button" style={buttonStyle(false)} onClick={clearUserChart} disabled={userMarks.length === 0}>CLEAR MARKS</button>
+        </div>
+        <div style={{ padding: "8px 10px", minHeight: 36, display: "flex", alignItems: "center", border: "1px solid rgba(34,211,238,.28)", borderRadius: 6, background: "rgba(5,12,18,.88)", color: "#d7e7ee", fontSize: 12, fontWeight: 650, pointerEvents: "auto" }}>
+          {toolMode === "measure" && !measurement ? (measureStartRef.current ? "Select end point" : "Select start point") : null}
+          {toolMode === "mark" ? `Tap map to add mark · ${userMarks.length} saved` : null}
+          {measurement ? `${measurement.bearing.toFixed(1)}°T · ${measurement.distanceNm.toFixed(2)} NM` : null}
+          {toolMode === "pan" && !measurement ? `${userMarks.length} user mark${userMarks.length === 1 ? "" : "s"}` : null}
+        </div>
+      </div>
+      <style>{`.navmap-measure-label{background:#071019!important;border:1px solid #22d3ee!important;color:#d9fbff!important;box-shadow:none!important;font:700 12px/1.2 system-ui,sans-serif!important;padding:5px 7px!important}.navmap-measure-label:before{display:none!important}`}</style>
+    </>
+  );
 }
