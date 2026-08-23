@@ -21,18 +21,48 @@ function decodeOwnShip(line: string): Position | null {
     return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
   } catch { return null; }
 }
+
+function normalizedLonDelta(value: number) {
+  let result = value;
+  while (result > 180) result -= 360;
+  while (result < -180) result += 360;
+  return result;
+}
+
 function distanceNm(a: Position, b: Waypoint) {
   const r = 3440.065;
   const p1 = a.lat * Math.PI / 180, p2 = b.lat * Math.PI / 180;
-  const dp = (b.lat - a.lat) * Math.PI / 180, dl = (b.lon - a.lon) * Math.PI / 180;
+  const dp = (b.lat - a.lat) * Math.PI / 180;
+  const dl = normalizedLonDelta(b.lon - a.lon) * Math.PI / 180;
   const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
   return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
 }
+
 function normalizeRoute(data: any) {
-  const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : []).map((wp: any) => ({ lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : [])
+    .map((wp: any) => ({ lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) }))
+    .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   const rawIndex = Number(data?.activeWaypointIndex);
   const activeWaypointIndex = Number.isFinite(rawIndex) ? Math.max(1, Math.min(waypoints.length - 1, Math.trunc(rawIndex))) : 1;
   return { waypoints, activeWaypointIndex };
+}
+
+function routeSignature(route: Waypoint[]) {
+  return route.map((wp) => `${wp.lat.toFixed(6)},${wp.lon.toFixed(6)}`).join(";");
+}
+
+function passageMetrics(position: Position, from: Waypoint, to: Waypoint) {
+  const meanLat = ((from.lat + to.lat) / 2) * Math.PI / 180;
+  const nmPerDegLon = 60 * Math.max(0.01, Math.cos(meanLat));
+  const vx = normalizedLonDelta(to.lon - from.lon) * nmPerDegLon;
+  const vy = (to.lat - from.lat) * 60;
+  const wx = normalizedLonDelta(position.lon - from.lon) * nmPerDegLon;
+  const wy = (position.lat - from.lat) * 60;
+  const legSq = vx * vx + vy * vy;
+  if (legSq <= 0.000001) return { projectionRatio: 0, crossTrackNm: Infinity };
+  const projectionRatio = (wx * vx + wy * vy) / legSq;
+  const crossTrackNm = Math.abs(wx * vy - wy * vx) / Math.sqrt(legSq);
+  return { projectionRatio, crossTrackNm };
 }
 
 export function BridgeNextWaypointDistance() {
@@ -41,8 +71,45 @@ export function BridgeNextWaypointDistance() {
     let position: Position | null = null;
     let route: Waypoint[] = [];
     let activeWaypointIndex = 1;
+    let currentRouteSignature = "";
+    let closestDistanceToTarget = Infinity;
+
+    const acceptRoute = (data: any) => {
+      const normalized = normalizeRoute(data);
+      if (normalized.waypoints.length < 2) return;
+      const signature = routeSignature(normalized.waypoints);
+      if (signature !== currentRouteSignature) {
+        route = normalized.waypoints;
+        currentRouteSignature = signature;
+        activeWaypointIndex = normalized.activeWaypointIndex;
+        closestDistanceToTarget = Infinity;
+      } else {
+        route = normalized.waypoints;
+        activeWaypointIndex = Math.max(activeWaypointIndex, normalized.activeWaypointIndex);
+      }
+    };
+
+    const advancePassedWaypoint = () => {
+      if (!position || route.length < 2) return;
+
+      while (activeWaypointIndex > 0 && activeWaypointIndex < route.length - 1) {
+        const previous = route[activeWaypointIndex - 1];
+        const target = route[activeWaypointIndex];
+        const currentDistance = distanceNm(position, target);
+        closestDistanceToTarget = Math.min(closestDistanceToTarget, currentDistance);
+        const { projectionRatio, crossTrackNm } = passageMetrics(position, previous, target);
+
+        const crossedWaypointPlane = projectionRatio >= 1 && crossTrackNm <= 5;
+        const passedAfterCloseApproach = closestDistanceToTarget <= 2 && currentDistance >= closestDistanceToTarget + 0.2;
+        if (!crossedWaypointPlane && !passedAfterCloseApproach) break;
+
+        activeWaypointIndex += 1;
+        closestDistanceToTarget = Infinity;
+      }
+    };
 
     const render = () => {
+      advancePassedWaypoint();
       const center = document.querySelector<HTMLElement>("#bc-v2-topbar .bc2-center");
       if (!center) return;
       let display = document.getElementById("bc2-top-nextwpt") as HTMLElement | null;
@@ -67,10 +134,7 @@ export function BridgeNextWaypointDistance() {
           const response = await fetch("/api/route-state", { cache: "no-store" });
           if (response.ok) data = await response.json();
         }
-        if (data) {
-          const normalized = normalizeRoute(data);
-          if (normalized.waypoints.length >= 2) { route = normalized.waypoints; activeWaypointIndex = normalized.activeWaypointIndex; }
-        }
+        if (data) acceptRoute(data);
       } catch {}
       render();
       routeTimer = window.setTimeout(loadRoute, 1500);
@@ -85,13 +149,19 @@ export function BridgeNextWaypointDistance() {
           try {
             const json = JSON.parse(raw);
             if (json?.type === "route-state") {
-              const normalized = normalizeRoute(json);
-              if (normalized.waypoints.length >= 2) { route = normalized.waypoints; activeWaypointIndex = normalized.activeWaypointIndex; render(); }
+              acceptRoute(json);
+              render();
               return;
             }
             raw = typeof json === "string" ? json : json?.sentence || json?.nmea || json?.raw || json?.line || raw;
           } catch {}
-          for (const line of raw.split(/\r?\n/)) { const decoded = decodeOwnShip(line.trim()); if (decoded) { position = decoded; render(); } }
+          for (const line of raw.split(/\r?\n/)) {
+            const decoded = decodeOwnShip(line.trim());
+            if (decoded) {
+              position = decoded;
+              render();
+            }
+          }
         };
         socket.onclose = () => { if (!closed) retryTimer = window.setTimeout(connect, 2000); };
       } catch { retryTimer = window.setTimeout(connect, 2000); }
@@ -100,7 +170,14 @@ export function BridgeNextWaypointDistance() {
     loadRoute();
     connect();
     const initialTimer = window.setTimeout(render, 250);
-    return () => { closed = true; window.clearTimeout(initialTimer); window.clearTimeout(retryTimer); window.clearTimeout(routeTimer); if (socket) { socket.onclose = null; socket.close(); } document.getElementById("bc2-top-nextwpt")?.remove(); };
+    return () => {
+      closed = true;
+      window.clearTimeout(initialTimer);
+      window.clearTimeout(retryTimer);
+      window.clearTimeout(routeTimer);
+      if (socket) { socket.onclose = null; socket.close(); }
+      document.getElementById("bc2-top-nextwpt")?.remove();
+    };
   }, []);
   return null;
 }
