@@ -132,6 +132,11 @@ main.min-h-screen[class*="circle_at_12"] .bg-red-500 { background-color: rgb(239
   letter-spacing: .08em;
 }
 
+/* Keep the range/bearing label clear of its measurement line. */
+.navmap-measure-label {
+  margin-top: -18px !important;
+}
+
 @media (max-width: 640px) {
   html, body { width: 100%; overflow-x: hidden; }
   body { -webkit-text-size-adjust: 100%; }
