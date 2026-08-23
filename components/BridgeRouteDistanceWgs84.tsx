@@ -3,125 +3,217 @@
 import { useEffect } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
+type Position = { lat: number; lon: number };
 type Waypoint = { lat: number; lon: number };
-const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 
-function rad(v:number){return v*Math.PI/180;}
-function gcNm(a:Waypoint,b:Waypoint){
-  const dLat=rad(b.lat-a.lat), dLon=rad(b.lon-a.lon), p1=rad(a.lat), p2=rad(b.lat);
-  const h=Math.sin(dLat/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dLon/2)**2;
-  return 3440.065*2*Math.atan2(Math.sqrt(h),Math.sqrt(Math.max(0,1-h)));
+function rad(value: number) { return value * Math.PI / 180; }
+function normalizedLonDelta(value: number) {
+  let result = value;
+  while (result > 180) result -= 360;
+  while (result < -180) result += 360;
+  return result;
 }
 
-function rhumbWgs84Nm(a:Waypoint,b:Waypoint){
-  const A=6378137, f=1/298.257223563, e2=f*(2-f), e=Math.sqrt(e2);
-  const p1=rad(a.lat), p2=rad(b.lat);
-  let dl=rad(b.lon-a.lon); if(dl>Math.PI)dl-=2*Math.PI; if(dl< -Math.PI)dl+=2*Math.PI;
-  const iso=(p:number)=>Math.log(Math.tan(Math.PI/4+p/2))-e/2*Math.log((1+e*Math.sin(p))/(1-e*Math.sin(p)));
-  const M=(p:number)=>A*((1-e2/4-3*e2*e2/64-5*e2**3/256)*p-(3*e2/8+3*e2*e2/32+45*e2**3/1024)*Math.sin(2*p)+(15*e2*e2/256+45*e2**3/1024)*Math.sin(4*p)-(35*e2**3/3072)*Math.sin(6*p));
-  const dPsi=iso(p2)-iso(p1), dM=M(p2)-M(p1);
-  const q=Math.abs(dPsi)>1e-12?dM/dPsi:A*Math.cos(p1)/Math.sqrt(1-e2*Math.sin(p1)**2);
-  return Math.hypot(dM,q*dl)/1852;
+function gcNm(a: Position, b: Waypoint) {
+  const r = 3440.065;
+  const p1 = rad(a.lat), p2 = rad(b.lat);
+  const dLat = rad(b.lat - a.lat);
+  const dLon = rad(normalizedLonDelta(b.lon - a.lon));
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
-function normalizeRoute(data:any):Waypoint[]{
-  const raw=Array.isArray(data?.waypoints)?data.waypoints:Array.isArray(data)?data:[];
-  return raw
-    .map((w:any)=>({lat:Number(w?.lat??w?.latitude),lon:Number(w?.lon??w?.lng??w?.longitude)}))
-    .filter((w:Waypoint)=>Number.isFinite(w.lat)&&Number.isFinite(w.lon));
+function rhumbWgs84Nm(a: Waypoint, b: Waypoint) {
+  const A = 6378137;
+  const f = 1 / 298.257223563;
+  const e2 = f * (2 - f);
+  const e = Math.sqrt(e2);
+  const p1 = rad(a.lat), p2 = rad(b.lat);
+  let dl = rad(normalizedLonDelta(b.lon - a.lon));
+  const iso = (p: number) => Math.log(Math.tan(Math.PI / 4 + p / 2)) - e / 2 * Math.log((1 + e * Math.sin(p)) / (1 - e * Math.sin(p)));
+  const M = (p: number) => A * (
+    (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256) * p
+    - (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
+    + (15 * e2 * e2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p)
+    - (35 * e2 ** 3 / 3072) * Math.sin(6 * p)
+  );
+  const dPsi = iso(p2) - iso(p1);
+  const dM = M(p2) - M(p1);
+  const q = Math.abs(dPsi) > 1e-12 ? dM / dPsi : A * Math.cos(p1) / Math.sqrt(1 - e2 * Math.sin(p1) ** 2);
+  return Math.hypot(dM, q * dl) / 1852;
 }
 
-function routeFromStorage():Waypoint[]{
-  try{
-    const raw=localStorage.getItem(ROUTE_STORAGE_KEY); if(!raw)return[];
-    return normalizeRoute(JSON.parse(raw));
-  }catch{return[];}
+function sixBit(char: string) { let value = char.charCodeAt(0) - 48; if (value > 40) value -= 8; return value; }
+function unsigned(bits: string, start: number, length: number) { return parseInt(bits.slice(start, start + length), 2); }
+function signed(bits: string, start: number, length: number) {
+  const raw = bits.slice(start, start + length);
+  const value = parseInt(raw, 2);
+  const sign = 2 ** (length - 1);
+  return value >= sign ? value - 2 ** length : value;
+}
+function decodeOwnShip(line: string): Position | null {
+  try {
+    if (!line.startsWith("!AIVDO")) return null;
+    const parts = line.split(",");
+    if (Number(parts[1]) !== 1 || !parts[5]) return null;
+    const bits = parts[5].split("").map((char) => sixBit(char).toString(2).padStart(6, "0")).join("");
+    if (![1, 2, 3].includes(unsigned(bits, 0, 6))) return null;
+    const lon = signed(bits, 61, 28) / 600000;
+    const lat = signed(bits, 89, 27) / 600000;
+    return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
+  } catch { return null; }
 }
 
-function numberFrom(text:string){const m=text.match(/(-?\d+(?:\.\d+)?)/);return m?Number(m[1]):NaN;}
+function normalizeRoute(data: any) {
+  const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : [])
+    .map((wp: any) => ({ lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) }))
+    .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  const rawIndex = Number(data?.activeWaypointIndex);
+  const activeWaypointIndex = Number.isFinite(rawIndex) ? Math.max(1, Math.min(waypoints.length - 1, Math.trunc(rawIndex))) : 1;
+  return { waypoints, activeWaypointIndex };
+}
 
-export function BridgeRouteDistanceWgs84(){
-  useEffect(()=>{
-    let closed=false;
-    let route:Waypoint[]=routeFromStorage();
-    let socket:WebSocket|null=null;
-    let retryTimer=0;
-    let routeTimer=0;
+function routeSignature(route: Waypoint[]) {
+  return route.map((wp) => `${wp.lat.toFixed(6)},${wp.lon.toFixed(6)}`).join(";");
+}
 
-    const refreshRouteFallback=async()=>{
-      if(closed)return;
-      const local=routeFromStorage();
-      if(local.length>=2) route=local;
-      else if(route.length<2){
-        try{
-          const response=await fetch("/api/route-state",{cache:"no-store"});
-          if(response.ok){
-            const fetched=normalizeRoute(await response.json());
-            if(fetched.length>=2) route=fetched;
-          }
-        }catch{}
+function passageMetrics(position: Position, from: Waypoint, to: Waypoint) {
+  const meanLat = rad((from.lat + to.lat) / 2);
+  const nmPerDegLon = 60 * Math.max(0.01, Math.cos(meanLat));
+  const vx = normalizedLonDelta(to.lon - from.lon) * nmPerDegLon;
+  const vy = (to.lat - from.lat) * 60;
+  const wx = normalizedLonDelta(position.lon - from.lon) * nmPerDegLon;
+  const wy = (position.lat - from.lat) * 60;
+  const legSq = vx * vx + vy * vy;
+  if (legSq <= 0.000001) return { projectionRatio: 0, crossTrackNm: Infinity };
+  return {
+    projectionRatio: (wx * vx + wy * vy) / legSq,
+    crossTrackNm: Math.abs(wx * vy - wy * vx) / Math.sqrt(legSq),
+  };
+}
+
+export function BridgeRouteDistanceWgs84() {
+  useEffect(() => {
+    let closed = false;
+    let socket: WebSocket | null = null;
+    let retryTimer = 0;
+    let routeTimer = 0;
+    let renderTimer = 0;
+    let position: Position | null = null;
+    let route: Waypoint[] = [];
+    let activeWaypointIndex = 1;
+    let currentRouteSignature = "";
+    let closestDistanceToTarget = Infinity;
+
+    const acceptRoute = (data: any) => {
+      const normalized = normalizeRoute(data);
+      if (normalized.waypoints.length < 2) return;
+      const signature = routeSignature(normalized.waypoints);
+      if (signature !== currentRouteSignature) {
+        route = normalized.waypoints;
+        currentRouteSignature = signature;
+        activeWaypointIndex = normalized.activeWaypointIndex;
+        closestDistanceToTarget = Infinity;
+      } else {
+        route = normalized.waypoints;
+        activeWaypointIndex = Math.max(activeWaypointIndex, normalized.activeWaypointIndex);
       }
-      routeTimer=window.setTimeout(refreshRouteFallback,1500);
     };
 
-    const connect=()=>{
-      if(closed)return;
-      try{
-        socket=new WebSocket(getAisWebSocketUrl());
-        socket.onmessage=(event)=>{
-          try{
-            const msg=JSON.parse(String(event.data||""));
-            if(msg?.type==="route-state"){
-              const shared=normalizeRoute(msg);
-              if(shared.length>=2) route=shared;
-            }
-          }catch{}
-        };
-        socket.onclose=()=>{if(!closed)retryTimer=window.setTimeout(connect,2000);};
-      }catch{retryTimer=window.setTimeout(connect,2000);}
+    const advancePassedWaypoint = () => {
+      if (!position || route.length < 2) return;
+      while (activeWaypointIndex > 0 && activeWaypointIndex < route.length - 1) {
+        const previous = route[activeWaypointIndex - 1];
+        const target = route[activeWaypointIndex];
+        const currentDistance = gcNm(position, target);
+        closestDistanceToTarget = Math.min(closestDistanceToTarget, currentDistance);
+        const { projectionRatio, crossTrackNm } = passageMetrics(position, previous, target);
+        const crossedWaypointPlane = projectionRatio >= 1 && crossTrackNm <= 5;
+        const passedAfterCloseApproach = closestDistanceToTarget <= 2 && currentDistance >= closestDistanceToTarget + 0.2;
+        if (!crossedWaypointPlane && !passedAfterCloseApproach) break;
+        activeWaypointIndex += 1;
+        closestDistanceToTarget = Infinity;
+      }
     };
 
-    const tick=()=>{
-      if(route.length<2)return;
-      const legText=document.getElementById("bc2-top-leg")?.textContent||"";
-      const m=legText.match(/(\d+)\s*[→>-]\s*(\d+)/) || legText.match(/LEG\s*(\d+)/i);
-      if(!m)return;
+    const calculateDtg = () => {
+      if (!position || route.length < 2 || activeWaypointIndex >= route.length) return null;
+      advancePassedWaypoint();
+      const target = route[activeWaypointIndex];
+      let total = gcNm(position, target);
+      for (let i = activeWaypointIndex; i < route.length - 1; i += 1) {
+        total += rhumbWgs84Nm(route[i], route[i + 1]);
+      }
+      return total;
+    };
 
-      const dest=Math.max(1,Math.min(route.length,Number(m[2]||m[1])));
-      let correction=0;
-      for(let i=dest-1;i<route.length-1;i++) correction+=rhumbWgs84Nm(route[i],route[i+1])-gcNm(route[i],route[i+1]);
+    const render = () => {
+      const dtg = calculateDtg();
+      if (dtg === null || !Number.isFinite(dtg)) return;
+      for (const id of ["bc2-top-dtg", "bc2-dtg"]) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const existing = el.textContent || "";
+        const decimals = existing.match(/\.(\d+)/)?.[1]?.length ?? 0;
+        el.textContent = `${id === "bc2-top-dtg" ? "DTG " : ""}${dtg.toFixed(decimals)} NM`;
+      }
+    };
 
-      for(const id of ["bc2-top-dtg","bc2-dtg"]){
-        const el=document.getElementById(id); if(!el)continue;
-        const currentText=el.textContent||"";
-        const lastCorrected=el.dataset.lastCorrected||"";
-
-        if(!lastCorrected || currentText!==lastCorrected){
-          const freshBase=numberFrom(currentText);
-          if(Number.isFinite(freshBase)) el.dataset.gcBase=String(freshBase);
+    const loadRoute = async () => {
+      if (closed) return;
+      try {
+        let data: any = null;
+        const local = window.localStorage.getItem("navconsole-saved-route");
+        if (local) data = JSON.parse(local);
+        if (!data?.waypoints?.length) {
+          const response = await fetch("/api/route-state", { cache: "no-store" });
+          if (response.ok) data = await response.json();
         }
-
-        const base=Number(el.dataset.gcBase);
-        if(!Number.isFinite(base))continue;
-        const corrected=base+correction;
-        const decimals=currentText.match(/\.(\d+)/)?.[1]?.length??0;
-        const output=(id==="bc2-top-dtg"?"DTG ":"")+corrected.toFixed(decimals)+" NM";
-        el.textContent=output;
-        el.dataset.lastCorrected=output;
-      }
+        if (data) acceptRoute(data);
+      } catch {}
+      render();
+      routeTimer = window.setTimeout(loadRoute, 1500);
     };
 
-    refreshRouteFallback();
-    connect();
-    const timer=window.setInterval(tick,1000); tick();
+    const connect = () => {
+      if (closed) return;
+      try {
+        socket = new WebSocket(getAisWebSocketUrl());
+        socket.onmessage = (event) => {
+          let raw = String(event.data || "");
+          try {
+            const json = JSON.parse(raw);
+            if (json?.type === "route-state") {
+              acceptRoute(json);
+              render();
+              return;
+            }
+            raw = typeof json === "string" ? json : json?.sentence || json?.nmea || json?.raw || json?.line || raw;
+          } catch {}
+          for (const line of raw.split(/\r?\n/)) {
+            const decoded = decodeOwnShip(line.trim());
+            if (decoded) {
+              position = decoded;
+              render();
+            }
+          }
+        };
+        socket.onclose = () => { if (!closed) retryTimer = window.setTimeout(connect, 2000); };
+      } catch { retryTimer = window.setTimeout(connect, 2000); }
+    };
 
-    return()=>{
-      closed=true;
-      window.clearInterval(timer);
+    loadRoute();
+    connect();
+    renderTimer = window.setInterval(render, 250);
+
+    return () => {
+      closed = true;
+      window.clearInterval(renderTimer);
       window.clearTimeout(retryTimer);
       window.clearTimeout(routeTimer);
-      if(socket){socket.onclose=null;socket.close();}
+      if (socket) { socket.onclose = null; socket.close(); }
     };
-  },[]);
+  }, []);
+
   return null;
 }
