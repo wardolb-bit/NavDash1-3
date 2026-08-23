@@ -14,22 +14,13 @@ function normalizedLonDelta(value: number) {
   return result;
 }
 
-function gcNm(a: Position, b: Waypoint) {
-  const r = 3440.065;
-  const p1 = rad(a.lat), p2 = rad(b.lat);
-  const dLat = rad(b.lat - a.lat);
-  const dLon = rad(normalizedLonDelta(b.lon - a.lon));
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-function rhumbWgs84Nm(a: Waypoint, b: Waypoint) {
+function rhumbWgs84Nm(a: Position | Waypoint, b: Waypoint) {
   const A = 6378137;
   const f = 1 / 298.257223563;
   const e2 = f * (2 - f);
   const e = Math.sqrt(e2);
   const p1 = rad(a.lat), p2 = rad(b.lat);
-  let dl = rad(normalizedLonDelta(b.lon - a.lon));
+  const dl = rad(normalizedLonDelta(b.lon - a.lon));
   const iso = (p: number) => Math.log(Math.tan(Math.PI / 4 + p / 2)) - e / 2 * Math.log((1 + e * Math.sin(p)) / (1 - e * Math.sin(p)));
   const M = (p: number) => A * (
     (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256) * p
@@ -104,6 +95,9 @@ export function BridgeRouteDistanceWgs84() {
     let activeWaypointIndex = 1;
     let currentRouteSignature = "";
     let closestDistanceToTarget = Infinity;
+    let desiredTop = "";
+    let desiredRail = "";
+    let mutationObserver: MutationObserver | null = null;
 
     const acceptRoute = (data: any) => {
       const normalized = normalizeRoute(data);
@@ -125,7 +119,7 @@ export function BridgeRouteDistanceWgs84() {
       while (activeWaypointIndex > 0 && activeWaypointIndex < route.length - 1) {
         const previous = route[activeWaypointIndex - 1];
         const target = route[activeWaypointIndex];
-        const currentDistance = gcNm(position, target);
+        const currentDistance = rhumbWgs84Nm(position, target);
         closestDistanceToTarget = Math.min(closestDistanceToTarget, currentDistance);
         const { projectionRatio, crossTrackNm } = passageMetrics(position, previous, target);
         const crossedWaypointPlane = projectionRatio >= 1 && crossTrackNm <= 5;
@@ -147,15 +141,27 @@ export function BridgeRouteDistanceWgs84() {
       return total;
     };
 
+    const enforceDisplay = () => {
+      const top = document.getElementById("bc2-top-dtg");
+      const rail = document.getElementById("bc2-dtg");
+      if (top && desiredTop && top.textContent !== desiredTop) top.textContent = desiredTop;
+      if (rail && desiredRail && rail.textContent !== desiredRail) rail.textContent = desiredRail;
+    };
+
     const render = () => {
       const dtg = calculateDtg();
       if (dtg === null || !Number.isFinite(dtg)) return;
-      for (const id of ["bc2-top-dtg", "bc2-dtg"]) {
-        const el = document.getElementById(id);
-        if (!el) continue;
-        const existing = el.textContent || "";
-        const decimals = existing.match(/\.(\d+)/)?.[1]?.length ?? 0;
-        el.textContent = `${id === "bc2-top-dtg" ? "DTG " : ""}${dtg.toFixed(decimals)} NM`;
+      const top = document.getElementById("bc2-top-dtg");
+      const rail = document.getElementById("bc2-dtg");
+      const decimals = (top?.textContent || rail?.textContent || "").match(/\.(\d+)/)?.[1]?.length ?? 0;
+      desiredTop = `DTG ${dtg.toFixed(decimals)} NM`;
+      desiredRail = `${dtg.toFixed(decimals)} NM`;
+      enforceDisplay();
+
+      if (!mutationObserver) {
+        mutationObserver = new MutationObserver(enforceDisplay);
+        if (top) mutationObserver.observe(top, { childList: true, characterData: true, subtree: true });
+        if (rail) mutationObserver.observe(rail, { childList: true, characterData: true, subtree: true });
       }
     };
 
@@ -211,6 +217,7 @@ export function BridgeRouteDistanceWgs84() {
       window.clearInterval(renderTimer);
       window.clearTimeout(retryTimer);
       window.clearTimeout(routeTimer);
+      mutationObserver?.disconnect();
       if (socket) { socket.onclose = null; socket.close(); }
     };
   }, []);
