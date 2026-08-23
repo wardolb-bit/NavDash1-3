@@ -87,12 +87,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         tools.setAttribute("data-map-tools-open", "true");
                       }
                       if (button instanceof HTMLElement) button.blur();
-                    } else if (text === "CLEAR MEASURE") {
-                      event.preventDefault();
-                      event.stopImmediatePropagation();
-                      document.getElementById("navdash-measure-readout")?.remove();
-                      window.setTimeout(() => window.location.reload(), 30);
-                      return;
                     } else if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
                       event.preventDefault();
                       event.stopImmediatePropagation();
