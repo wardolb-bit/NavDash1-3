@@ -24,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 const saved = localStorage.getItem("navConsoleTheme");
                 const theme = saved === "day" ? "day" : "bridge-night";
                 document.documentElement.setAttribute("data-navdash-theme", theme);
+                localStorage.removeItem("navdash-user-chart-v1");
               } catch {
                 document.documentElement.setAttribute("data-navdash-theme", "bridge-night");
               }
@@ -34,7 +35,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="navdash-map-tools-behavior" strategy="afterInteractive">
           {`
             (() => {
-              const USER_CHART_STORAGE_KEY = "navdash-user-chart-v1";
               const getMap = () => document.getElementById("v12-map");
               const getTools = () => {
                 const map = getMap();
@@ -75,7 +75,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 if (tools instanceof HTMLElement && target instanceof Element) {
                   const button = target.closest("button");
                   if (button && tools.contains(button)) {
-                    const text = (button.textContent || "").trim().toUpperCase();
                     const firstButton = tools.querySelector("button");
 
                     if (button === firstButton) {
@@ -87,12 +86,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         tools.setAttribute("data-map-tools-open", "true");
                       }
                       if (button instanceof HTMLElement) button.blur();
-                    } else if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
-                      event.preventDefault();
-                      event.stopImmediatePropagation();
-                      try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, "[]"); } catch {}
-                      window.setTimeout(() => window.location.reload(), 30);
-                      return;
                     }
                   }
                 }
