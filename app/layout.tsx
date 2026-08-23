@@ -45,21 +45,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 }) || null;
               };
 
-              const clearMeasureReadout = () => {
-                document.getElementById("navdash-measure-readout")?.remove();
-              };
-
-              const clearMeasureGraphics = () => {
-                const map = getMap();
-                clearMeasureReadout();
-                if (!map) return;
-                map.querySelectorAll(".navmap-measure-label").forEach((el) => el.remove());
-                const pane = map.querySelector(".navmap-main-tools-v1-pane");
-                if (pane) {
-                  pane.querySelectorAll('path[stroke="#22d3ee"], circle[stroke="#22d3ee"]').forEach((el) => el.remove());
-                }
-              };
-
               const syncMeasureReadout = () => {
                 const map = getMap();
                 if (!map) return;
@@ -103,9 +88,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       }
                       if (button instanceof HTMLElement) button.blur();
                     } else if (text === "CLEAR MEASURE") {
-                      clearMeasureGraphics();
-                      window.setTimeout(clearMeasureGraphics, 60);
-                      window.setTimeout(clearMeasureGraphics, 180);
+                      event.preventDefault();
+                      event.stopImmediatePropagation();
+                      document.getElementById("navdash-measure-readout")?.remove();
+                      window.setTimeout(() => window.location.reload(), 30);
                       return;
                     } else if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
                       event.preventDefault();
