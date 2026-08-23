@@ -21,169 +21,138 @@ body::before { content: none !important; display: none !important; }
   min-width: 108px !important;
   height: 30px !important;
   box-sizing: border-box;
+  flex: 0 0 108px !important;
 }
 
-/* Preserve semantic ECR threshold/status colors against bridge-console night-mode overrides. */
-main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-green-500 {
-  background: rgb(34 197 94) !important;
-  background-color: rgb(34 197 94) !important;
-  border-color: rgb(34 197 94) !important;
-  color: #000 !important;
-}
-main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-yellow-400 {
-  background: rgb(250 204 21) !important;
-  background-color: rgb(250 204 21) !important;
-  border-color: rgb(250 204 21) !important;
-  color: #000 !important;
-}
-main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-red-500 {
-  background: rgb(239 68 68) !important;
-  background-color: rgb(239 68 68) !important;
-  border-color: rgb(239 68 68) !important;
-  color: #000 !important;
+/* Keep the full top control row visible and aligned left-to-right. */
+.navdash-v12-day > header > :first-child,
+.navdash-v12-night > header > :first-child {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  gap: 5px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  scrollbar-width: thin;
 }
 
-/* Keep the broader semantic utilities intact for any ECR variants. */
-main.min-h-screen[class*="circle_at_12"] .bg-green-500 {
-  background-color: rgb(34 197 94) !important;
-  border-color: rgb(34 197 94) !important;
-  color: #000 !important;
+/* Day mode: force every injected bridge-console instrument cell and footer light. */
+.navdash-v12-day #bc-v2-instruments,
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title,
+.navdash-v12-day #bc-v2-instruments .bc2-pos,
+.navdash-v12-day #bc-v2-instruments .bc2-big-grid,
+.navdash-v12-day #bc-v2-instruments .bc2-big-grid > div,
+.navdash-v12-day #bc-v2-instruments .bc2-leg,
+.navdash-v12-day #bc-v2-instruments .bc2-small-grid,
+.navdash-v12-day #bc-v2-instruments .bc2-small-grid > div,
+.navdash-v12-day #bc-v2-instruments .bc2-wx {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: #17212b !important;
+  border-color: rgba(15,23,42,.22) !important;
 }
-main.min-h-screen[class*="circle_at_12"] .bg-yellow-400 {
-  background-color: rgb(250 204 21) !important;
-  border-color: rgb(250 204 21) !important;
-  color: #000 !important;
+
+.navdash-v12-day #bc-v2-instruments label,
+.navdash-v12-day #bc-v2-instruments small {
+  color: #586773 !important;
 }
-main.min-h-screen[class*="circle_at_12"] .bg-red-500 {
-  background-color: rgb(239 68 68) !important;
-  border-color: rgb(239 68 68) !important;
-  color: #000 !important;
+
+.navdash-v12-day #bc-v2-instruments .bc2-big-grid strong,
+.navdash-v12-day #bc-v2-instruments .bc2-small-grid strong {
+  color: #17212b !important;
+}
+
+.navdash-v12-day #bc-v2-instruments .bc2-pos strong { color: #006f78 !important; }
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title span,
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title b,
+.navdash-v12-day #bc-v2-instruments .bc2-leg strong { color: #7a5b00 !important; }
+
+.navdash-v12-day #bc-v2-instruments ~ *,
+.navdash-v12-day #bc-v2-instruments ~ * *,
+.navdash-v12-day #bc-v2-instruments + * {
+  background-color: #ffffff !important;
+  color: #17212b !important;
+  border-color: rgba(15,23,42,.22) !important;
+}
+
+.navdash-v12-day #bc-v2-instruments ~ * [class*="green"],
+.navdash-v12-day #bc-v2-instruments ~ * [style*="34d399"],
+.navdash-v12-day #bc-v2-instruments ~ * [style*="green"] { color: #067647 !important; }
+
+main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-green-500,
+main.min-h-screen[class*="circle_at_12"] .bg-green-500 { background-color: rgb(34 197 94) !important; border-color: rgb(34 197 94) !important; color: #000 !important; }
+main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-yellow-400,
+main.min-h-screen[class*="circle_at_12"] .bg-yellow-400 { background-color: rgb(250 204 21) !important; border-color: rgb(250 204 21) !important; color: #000 !important; }
+main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-red-500,
+main.min-h-screen[class*="circle_at_12"] .bg-red-500 { background-color: rgb(239 68 68) !important; border-color: rgb(239 68 68) !important; color: #000 !important; }
+
+/* Preview map tools: keep experimental controls clear of the original map controls. */
+#v12-map > div[style*="z-index: 760"],
+#v12-map > div[style*="z-index:760"] {
+  top: auto !important;
+  bottom: 12px !important;
+  left: auto !important;
+  right: 12px !important;
+  max-width: calc(100% - 24px) !important;
+  justify-content: flex-end !important;
+}
+
+#v12-map > div[style*="z-index: 760"] > div:first-child,
+#v12-map > div[style*="z-index:760"] > div:first-child { transition: opacity .16s ease, transform .16s ease; }
+
+#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child button:not(:first-child),
+#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child button:not(:first-child),
+#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:nth-child(2),
+#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:nth-child(2) { display: none !important; }
+
+#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child,
+#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child {
+  padding: 0 !important;
+  border-color: transparent !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+}
+
+#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child button:first-child,
+#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child button:first-child {
+  position: relative;
+  width: 104px !important;
+  min-width: 104px !important;
+  font-size: 0 !important;
+}
+
+#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child button:first-child::after,
+#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child button:first-child::after {
+  content: "MAP TOOLS";
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
 }
 
 @media (max-width: 640px) {
-  html, body {
-    width: 100%;
-    overflow-x: hidden;
-  }
-
-  body {
-    -webkit-text-size-adjust: 100%;
-  }
-
-  nav.sticky {
-    position: sticky;
-  }
-
-  nav select {
-    width: min(58vw, 14rem);
-    min-width: 0;
-  }
-
-  main {
-    width: 100%;
-    max-width: 100vw;
-    overflow-x: hidden;
-  }
-
-  main > div {
-    width: 100%;
-    max-width: 100% !important;
-    padding-left: 0.75rem !important;
-    padding-right: 0.75rem !important;
-  }
-
-  main section,
-  main aside,
-  main article,
-  main header,
-  main form,
-  main div {
-    min-width: 0;
-  }
-
-  main [class*="text-5xl"],
-  main [class*="text-4xl"] {
-    font-size: 1.875rem !important;
-    line-height: 2.25rem !important;
-  }
-
-  main [class*="text-3xl"] {
-    font-size: 1.5rem !important;
-    line-height: 2rem !important;
-  }
-
-  main [class*="tracking-[0.42em]"],
-  main [class*="tracking-[0.32em]"] {
-    letter-spacing: 0.16em !important;
-  }
-
-  main [class*="rounded-[2rem]"],
-  main [class*="rounded-3xl"] {
-    border-radius: 1rem !important;
-  }
-
-  main [class*="p-7"],
-  main [class*="p-6"],
-  main [class*="p-5"] {
-    padding: 1rem !important;
-  }
-
-  main [class*="px-8"],
-  main [class*="px-7"],
-  main [class*="px-6"],
-  main [class*="px-5"] {
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
-  }
-
-  main [class*="py-7"],
-  main [class*="py-6"],
-  main [class*="py-5"] {
-    padding-top: 1rem !important;
-    padding-bottom: 1rem !important;
-  }
-
-  main [class*="w-[156px]"],
-  main [class*="w-[138px]"],
-  main [class*="w-[190px]"] {
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  main header > div[class*="flex"] {
-    align-items: stretch !important;
-  }
-
-  main header [class*="justify-end"] {
-    justify-content: stretch !important;
-  }
-
-  main header button,
-  main header [role="button"] {
-    width: 100%;
-  }
-
-  main [class*="grid-cols-4"],
-  main [class*="grid-cols-3"],
-  main [class*="grid-cols-2"] {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-
-  main [class*="min-w-[760px]"],
-  main [class*="min-w-[860px]"] {
-    min-width: 42rem !important;
-  }
-
-  main table {
-    display: block;
-    max-width: 100%;
-    overflow-x: auto;
-    white-space: nowrap;
-  }
-
-  main [id$="-map"],
-  main [class*="h-[560px]"] {
-    height: 58vh !important;
-    min-height: 22rem !important;
-  }
+  html, body { width: 100%; overflow-x: hidden; }
+  body { -webkit-text-size-adjust: 100%; }
+  nav.sticky { position: sticky; }
+  nav select { width: min(58vw, 14rem); min-width: 0; }
+  main { width: 100%; max-width: 100vw; overflow-x: hidden; }
+  main > div { width: 100%; max-width: 100% !important; padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  main section, main aside, main article, main header, main form, main div { min-width: 0; }
+  main [class*="text-5xl"], main [class*="text-4xl"] { font-size: 1.875rem !important; line-height: 2.25rem !important; }
+  main [class*="text-3xl"] { font-size: 1.5rem !important; line-height: 2rem !important; }
+  main [class*="tracking-[0.42em]"], main [class*="tracking-[0.32em]"] { letter-spacing: 0.16em !important; }
+  main [class*="rounded-[2rem]"], main [class*="rounded-3xl"] { border-radius: 1rem !important; }
+  main [class*="p-7"], main [class*="p-6"], main [class*="p-5"] { padding: 1rem !important; }
+  main [class*="px-8"], main [class*="px-7"], main [class*="px-6"], main [class*="px-5"] { padding-left: 1rem !important; padding-right: 1rem !important; }
+  main [class*="py-7"], main [class*="py-6"], main [class*="py-5"] { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+  main [class*="w-[156px]"], main [class*="w-[138px]"], main [class*="w-[190px]"] { width: 100% !important; max-width: 100% !important; }
+  main header > div[class*="flex"] { align-items: stretch !important; }
+  main header [class*="justify-end"] { justify-content: stretch !important; }
+  main header button, main header [role="button"] { width: 100%; }
+  main [class*="grid-cols-4"], main [class*="grid-cols-3"], main [class*="grid-cols-2"] { grid-template-columns: minmax(0, 1fr) !important; }
+  main [class*="min-w-[760px]"], main [class*="min-w-[860px]"] { min-width: 42rem !important; }
+  main table { display: block; max-width: 100%; overflow-x: auto; white-space: nowrap; }
+  main [id$="-map"], main [class*="h-[560px]"] { height: 58vh !important; min-height: 22rem !important; }
 }
