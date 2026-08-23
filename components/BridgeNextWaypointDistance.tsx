@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
 type Position = { lat: number; lon: number };
-type Waypoint = { lat: number; lon: number };
+type Waypoint = { id?: string; name?: string; lat: number; lon: number };
 
 function sixBit(char: string) { let value = char.charCodeAt(0) - 48; if (value > 40) value -= 8; return value; }
 function unsigned(bits: string, start: number, length: number) { return parseInt(bits.slice(start, start + length), 2); }
@@ -61,7 +61,12 @@ function rhumbWgs84Nm(a: Position, b: Waypoint) {
 
 function normalizeRoute(data: any) {
   const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : [])
-    .map((wp: any) => ({ lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) }))
+    .map((wp: any) => ({
+      id: typeof wp?.id === "string" ? wp.id : undefined,
+      name: typeof wp?.name === "string" ? wp.name : undefined,
+      lat: Number(wp?.lat ?? wp?.latitude),
+      lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+    }))
     .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   const rawIndex = Number(data?.activeWaypointIndex);
   const activeWaypointIndex = Number.isFinite(rawIndex) ? Math.max(1, Math.min(waypoints.length - 1, Math.trunc(rawIndex))) : 1;
@@ -70,6 +75,11 @@ function normalizeRoute(data: any) {
 
 function routeSignature(route: Waypoint[]) {
   return route.map((wp) => `${wp.lat.toFixed(6)},${wp.lon.toFixed(6)}`).join(";");
+}
+
+function waypointLabel(wp: Waypoint | undefined, index: number) {
+  const id = wp?.id?.trim();
+  return id || String(index + 1);
 }
 
 function passageMetrics(position: Position, from: Waypoint, to: Waypoint) {
@@ -138,7 +148,17 @@ export function BridgeNextWaypointDistance() {
         dtg?.insertAdjacentElement("afterend", display);
         display.style.cssText = "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px";
       }
+
+      const previous = route[activeWaypointIndex - 1];
       const next = route[activeWaypointIndex];
+      if (previous && next) {
+        const legText = `${waypointLabel(previous, activeWaypointIndex - 1)} → ${waypointLabel(next, activeWaypointIndex)}`;
+        const topLeg = document.getElementById("bc2-top-leg");
+        const railLeg = document.getElementById("bc2-leg");
+        if (topLeg) topLeg.textContent = `LEG ${legText}`;
+        if (railLeg) railLeg.textContent = legText;
+      }
+
       display.textContent = position && next ? `NEXT WPT ${rhumbWgs84Nm(position, next).toFixed(1)} NM` : "NEXT WPT --";
     };
 
@@ -188,9 +208,11 @@ export function BridgeNextWaypointDistance() {
     loadRoute();
     connect();
     const initialTimer = window.setTimeout(render, 250);
+    const syncTimer = window.setInterval(render, 500);
     return () => {
       closed = true;
       window.clearTimeout(initialTimer);
+      window.clearInterval(syncTimer);
       window.clearTimeout(retryTimer);
       window.clearTimeout(routeTimer);
       if (socket) { socket.onclose = null; socket.close(); }
