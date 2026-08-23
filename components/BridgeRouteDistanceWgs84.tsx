@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
 type Waypoint = { lat: number; lon: number };
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
@@ -23,11 +24,17 @@ function rhumbWgs84Nm(a:Waypoint,b:Waypoint){
   return Math.hypot(dM,q*dl)/1852;
 }
 
+function normalizeRoute(data:any):Waypoint[]{
+  const raw=Array.isArray(data?.waypoints)?data.waypoints:Array.isArray(data)?data:[];
+  return raw
+    .map((w:any)=>({lat:Number(w?.lat??w?.latitude),lon:Number(w?.lon??w?.lng??w?.longitude)}))
+    .filter((w:Waypoint)=>Number.isFinite(w.lat)&&Number.isFinite(w.lon));
+}
+
 function routeFromStorage():Waypoint[]{
   try{
     const raw=localStorage.getItem(ROUTE_STORAGE_KEY); if(!raw)return[];
-    const p=JSON.parse(raw); const r=Array.isArray(p?.waypoints)?p.waypoints:Array.isArray(p)?p:[];
-    return r.map((w:any)=>({lat:Number(w.lat??w.latitude),lon:Number(w.lon??w.lng??w.longitude)})).filter((w:Waypoint)=>Number.isFinite(w.lat)&&Number.isFinite(w.lon));
+    return normalizeRoute(JSON.parse(raw));
   }catch{return[];}
 }
 
@@ -35,8 +42,47 @@ function numberFrom(text:string){const m=text.match(/(-?\d+(?:\.\d+)?)/);return 
 
 export function BridgeRouteDistanceWgs84(){
   useEffect(()=>{
+    let closed=false;
+    let route:Waypoint[]=routeFromStorage();
+    let socket:WebSocket|null=null;
+    let retryTimer=0;
+    let routeTimer=0;
+
+    const refreshRouteFallback=async()=>{
+      if(closed)return;
+      const local=routeFromStorage();
+      if(local.length>=2) route=local;
+      else if(route.length<2){
+        try{
+          const response=await fetch("/api/route-state",{cache:"no-store"});
+          if(response.ok){
+            const fetched=normalizeRoute(await response.json());
+            if(fetched.length>=2) route=fetched;
+          }
+        }catch{}
+      }
+      routeTimer=window.setTimeout(refreshRouteFallback,1500);
+    };
+
+    const connect=()=>{
+      if(closed)return;
+      try{
+        socket=new WebSocket(getAisWebSocketUrl());
+        socket.onmessage=(event)=>{
+          try{
+            const msg=JSON.parse(String(event.data||""));
+            if(msg?.type==="route-state"){
+              const shared=normalizeRoute(msg);
+              if(shared.length>=2) route=shared;
+            }
+          }catch{}
+        };
+        socket.onclose=()=>{if(!closed)retryTimer=window.setTimeout(connect,2000);};
+      }catch{retryTimer=window.setTimeout(connect,2000);}
+    };
+
     const tick=()=>{
-      const route=routeFromStorage(); if(route.length<2)return;
+      if(route.length<2)return;
       const legText=document.getElementById("bc2-top-leg")?.textContent||"";
       const m=legText.match(/(\d+)\s*[→>-]\s*(\d+)/) || legText.match(/LEG\s*(\d+)/i);
       if(!m)return;
@@ -50,9 +96,6 @@ export function BridgeRouteDistanceWgs84(){
         const currentText=el.textContent||"";
         const lastCorrected=el.dataset.lastCorrected||"";
 
-        // The underlying bridge console keeps writing a fresh live DTG as the
-        // ship moves. Capture each fresh value as the new great-circle base;
-        // do not freeze the first value we ever saw.
         if(!lastCorrected || currentText!==lastCorrected){
           const freshBase=numberFrom(currentText);
           if(Number.isFinite(freshBase)) el.dataset.gcBase=String(freshBase);
@@ -68,8 +111,17 @@ export function BridgeRouteDistanceWgs84(){
       }
     };
 
+    refreshRouteFallback();
+    connect();
     const timer=window.setInterval(tick,1000); tick();
-    return()=>window.clearInterval(timer);
+
+    return()=>{
+      closed=true;
+      window.clearInterval(timer);
+      window.clearTimeout(retryTimer);
+      window.clearTimeout(routeTimer);
+      if(socket){socket.onclose=null;socket.close();}
+    };
   },[]);
   return null;
 }
