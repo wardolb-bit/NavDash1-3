@@ -89,7 +89,7 @@ main.min-h-screen[class*="circle_at_12"] .bg-yellow-400 { background-color: rgb(
 main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-red-500,
 main.min-h-screen[class*="circle_at_12"] .bg-red-500 { background-color: rgb(239 68 68) !important; border-color: rgb(239 68 68) !important; color: #000 !important; }
 
-/* Preview map tools: keep experimental controls clear of the original map controls. */
+/* Map tools: keep controls clear of the original map controls. */
 #v12-map > div[style*="z-index: 760"],
 #v12-map > div[style*="z-index:760"] {
   top: auto !important;
@@ -103,39 +103,37 @@ main.min-h-screen[class*="circle_at_12"] .bg-red-500 { background-color: rgb(239
 #v12-map > div[style*="z-index: 760"] > div:first-child,
 #v12-map > div[style*="z-index:760"] > div:first-child { transition: opacity .16s ease, transform .16s ease; }
 
-#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child button:not(:first-child),
-#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child button:not(:first-child),
-#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:nth-child(2),
-#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:nth-child(2) { display: none !important; }
+#v12-map > div[style*="z-index: 760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child button:not(:first-child),
+#v12-map > div[style*="z-index:760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child button:not(:first-child),
+#v12-map > div[style*="z-index: 760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:nth-child(2),
+#v12-map > div[style*="z-index:760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:nth-child(2) { display: none !important; }
 
-#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child,
-#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child {
+#v12-map > div[style*="z-index: 760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child,
+#v12-map > div[style*="z-index:760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child {
   padding: 0 !important;
   border-color: transparent !important;
   background: transparent !important;
   backdrop-filter: none !important;
 }
 
-#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child button:first-child,
-#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child button:first-child {
+#v12-map > div[style*="z-index: 760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child button:first-child,
+#v12-map > div[style*="z-index:760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child button:first-child {
   position: relative;
   width: 104px !important;
   min-width: 104px !important;
   font-size: 0 !important;
 }
 
-#v12-map > div[style*="z-index: 760"]:not(:hover):not(:focus-within) > div:first-child button:first-child::after,
-#v12-map > div[style*="z-index:760"]:not(:hover):not(:focus-within) > div:first-child button:first-child::after {
+#v12-map > div[style*="z-index: 760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child button:first-child::after,
+#v12-map > div[style*="z-index:760"]:not([data-map-tools-open="true"]):not(:hover):not(:focus-within) > div:first-child button:first-child::after {
   content: "MAP TOOLS";
   font-size: 11px;
   font-weight: 700;
   letter-spacing: .08em;
 }
 
-/* Keep the range/bearing label clear of its measurement line. */
-.navmap-measure-label {
-  margin-top: -18px !important;
-}
+/* Range/bearing label placement is controlled by the map behavior script. */
+.navmap-measure-label { margin: 0 !important; }
 
 @media (max-width: 640px) {
   html, body { width: 100%; overflow-x: hidden; }
