@@ -34,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="navdash-map-tools-behavior" strategy="afterInteractive">
           {`
             (() => {
+              const USER_CHART_STORAGE_KEY = "navdash-user-chart-v1";
               const getMap = () => document.getElementById("v12-map");
               const getTools = () => {
                 const map = getMap();
@@ -63,15 +64,25 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 if (!button || !tools.contains(button)) return;
 
                 const text = (button.textContent || "").trim().toUpperCase();
-                const isCollapsed = tools.getAttribute("data-map-tools-open") !== "true";
-                if (isCollapsed) {
-                  tools.setAttribute("data-map-tools-open", "true");
+                const firstButton = tools.querySelector("button");
+
+                if (button === firstButton) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (tools.getAttribute("data-map-tools-open") === "true") {
+                    tools.removeAttribute("data-map-tools-open");
+                  } else {
+                    tools.setAttribute("data-map-tools-open", "true");
+                  }
+                  if (button instanceof HTMLElement) button.blur();
                   return;
                 }
 
-                if (text === "PAN") {
-                  tools.removeAttribute("data-map-tools-open");
-                  button.blur();
+                if (text === "CLEAR MARKS") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, "[]"); } catch {}
+                  window.location.reload();
                 }
               }, true);
 
