@@ -140,7 +140,7 @@ export function BridgeRouteDistanceWgs84() {
       if (!position || route.length < 2 || activeWaypointIndex >= route.length) return null;
       advancePassedWaypoint();
       const target = route[activeWaypointIndex];
-      let total = gcNm(position, target);
+      let total = rhumbWgs84Nm(position, target);
       for (let i = activeWaypointIndex; i < route.length - 1; i += 1) {
         total += rhumbWgs84Nm(route[i], route[i + 1]);
       }
