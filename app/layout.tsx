@@ -49,7 +49,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 const label = map?.querySelector(".navmap-measure-label");
                 if (!map || !(label instanceof HTMLElement)) return;
                 const x = Math.max(12, map.clientWidth - label.offsetWidth - 14);
-                label.style.setProperty("transform", `translate3d(${x}px, 58px, 0)`, "important");
+                label.style.setProperty("transform", "translate3d(" + x + "px, 58px, 0)", "important");
                 label.style.setProperty("margin", "0", "important");
                 label.style.setProperty("z-index", "1200", "important");
               };
