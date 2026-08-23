@@ -12,6 +12,17 @@ html, body { height: 100%; margin: 0; background: #071019; }
 /* Production: suppress the preview-only banner while preserving bridge-console styling. */
 body::before { content: none !important; display: none !important; }
 
+/* Keep the bridge-console header controls visually uniform. */
+.navdash-v12-day > header button,
+.navdash-v12-day > header label,
+.navdash-v12-night > header button,
+.navdash-v12-night > header label {
+  width: 108px !important;
+  min-width: 108px !important;
+  height: 30px !important;
+  box-sizing: border-box;
+}
+
 /* Preserve semantic ECR threshold/status colors against bridge-console night-mode overrides. */
 main.min-h-screen[class*="circle_at_12"] .rounded-3xl.border.p-4.text-center.bg-green-500 {
   background: rgb(34 197 94) !important;
