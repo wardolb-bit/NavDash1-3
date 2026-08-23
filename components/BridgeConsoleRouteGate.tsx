@@ -9,6 +9,7 @@ import { BridgeRailPolish } from "./BridgeRailPolish";
 import { BridgeMapWakeup } from "./BridgeMapWakeup";
 import { BridgeMapLayerControls } from "./BridgeMapLayerControls";
 import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
+import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 
 /**
@@ -67,6 +68,7 @@ export function BridgeConsoleRouteGate() {
       <BridgeRailPolish />
       <BridgeQuickAccess />
       <BridgeNextWaypointDistance />
+      <BridgeRouteDistanceWgs84 />
     </>
   );
 }
