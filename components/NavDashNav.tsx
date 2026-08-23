@@ -63,7 +63,7 @@ export function NavDashNav() {
     ) || navGroups[0];
 
   return (
-    <nav className="sticky top-0 z-[1000] border-b border-slate-700 bg-slate-950 text-slate-100 shadow-lg shadow-black/25">
+    <nav className="navdash-global-nav sticky top-0 z-[1000] border-b border-slate-700 bg-slate-950 text-slate-100 shadow-lg shadow-black/25">
       <div className="mx-auto flex max-w-none flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
