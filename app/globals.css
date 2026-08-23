@@ -60,6 +60,17 @@ main.min-h-screen[class*="circle_at_12"] .bg-red-500 {
   color: #000 !important;
 }
 
+/* Preview map tools: keep experimental controls clear of the original map controls. */
+#v12-map > div[style*="z-index: 760"],
+#v12-map > div[style*="z-index:760"] {
+  top: auto !important;
+  bottom: 12px !important;
+  left: auto !important;
+  right: 12px !important;
+  max-width: calc(100% - 24px) !important;
+  justify-content: flex-end !important;
+}
+
 @media (max-width: 640px) {
   html, body {
     width: 100%;
