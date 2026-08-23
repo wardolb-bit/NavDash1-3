@@ -58,8 +58,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 const tools = getTools();
                 if (!(tools instanceof HTMLElement)) return;
                 const target = event.target;
-                if (target instanceof Node && tools.contains(target)) {
+                if (!(target instanceof Element)) return;
+                const button = target.closest("button");
+                if (!button || !tools.contains(button)) return;
+
+                const text = (button.textContent || "").trim().toUpperCase();
+                const isCollapsed = tools.getAttribute("data-map-tools-open") !== "true";
+                if (isCollapsed) {
                   tools.setAttribute("data-map-tools-open", "true");
+                  return;
+                }
+
+                if (text === "PAN") {
+                  tools.removeAttribute("data-map-tools-open");
+                  button.blur();
                 }
               }, true);
 
