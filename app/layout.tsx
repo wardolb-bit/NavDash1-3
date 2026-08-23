@@ -1,5 +1,7 @@
 import './globals.css';
 import './bridge-console.css';
+import './day-fixes.css';
+import './global-theme.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { NavDashNav } from '../components/NavDashNav';
@@ -13,8 +15,22 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
+        <Script id="navdash-theme-bootstrap" strategy="beforeInteractive">
+          {`
+            (() => {
+              try {
+                const saved = localStorage.getItem("navConsoleTheme");
+                const theme = saved === "day" ? "day" : "bridge-night";
+                document.documentElement.setAttribute("data-navdash-theme", theme);
+              } catch {
+                document.documentElement.setAttribute("data-navdash-theme", "bridge-night");
+              }
+            })();
+          `}
+        </Script>
+
         <Script id="navconsole-fullscreen-manager" strategy="afterInteractive">
           {`
             (() => {
