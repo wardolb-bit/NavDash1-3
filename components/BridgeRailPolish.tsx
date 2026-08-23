@@ -21,6 +21,9 @@ export function BridgeRailPolish() {
     let lastGoodLon = "--";
     const observers: MutationObserver[] = [];
 
+    const getShell = () => document.querySelector<HTMLElement>(".navdash-v12-day, .navdash-v12-night");
+    const isDay = () => !!getShell()?.classList.contains("navdash-v12-day");
+
     const setTextIfChanged = (el: HTMLElement | null, text: string) => {
       if (!el || el.textContent === text) return;
       el.textContent = text;
@@ -30,9 +33,7 @@ export function BridgeRailPolish() {
       if (cancelled) return;
       const latEl = document.getElementById("bc2-lat");
       const lonEl = document.getElementById("bc2-lon");
-      const parsed = extractBridgeCoordinates(
-        `${latEl?.textContent?.trim() || ""} ${lonEl?.textContent?.trim() || ""}`,
-      );
+      const parsed = extractBridgeCoordinates(`${latEl?.textContent?.trim() || ""} ${lonEl?.textContent?.trim() || ""}`);
 
       if (parsed.lat) lastGoodLat = parsed.lat;
       if (parsed.lon) lastGoodLon = parsed.lon;
@@ -42,6 +43,7 @@ export function BridgeRailPolish() {
 
     const updateStatus = () => {
       if (cancelled) return;
+      const day = isDay();
       const routeName = document.getElementById("bc2-route")?.textContent?.trim() || "--";
       const routeLoaded = routeName !== "--" && routeName.toLowerCase() !== "no route loaded";
       const topLive = document.querySelector<HTMLElement>("#bc-v2-topbar .live");
@@ -53,21 +55,28 @@ export function BridgeRailPolish() {
         setTextIfChanged(el, `${ok ? "●" : "◆"} ${text}`);
         el.style.padding = "10px 5px";
         el.style.textAlign = "center";
-        el.style.background = "#050b10";
-        el.style.color = ok ? "#45d6a8" : "#d4ad45";
+        el.style.background = day ? "#ffffff" : "#050b10";
+        el.style.color = ok ? (day ? "#067647" : "#45d6a8") : (day ? "#8a6500" : "#d4ad45");
+        el.style.borderColor = day ? "rgba(15,23,42,.22)" : "rgba(148,163,184,.14)";
         el.style.font = "800 8px system-ui";
         el.style.letterSpacing = ".09em";
         el.style.whiteSpace = "nowrap";
       };
 
+      const strip = document.getElementById("bc2-system-strip");
+      if (strip) {
+        strip.style.background = day ? "rgba(15,23,42,.12)" : "rgba(148,163,184,.12)";
+        strip.style.borderTopColor = day ? "rgba(15,23,42,.22)" : "rgba(148,163,184,.14)";
+      }
+
       styleStatus("bc2-status-ais", aisLive ? "AIS LIVE" : "AIS CHECK", aisLive);
       styleStatus("bc2-status-route", routeLoaded ? "ROUTE LOADED" : "NO ROUTE", routeLoaded);
     };
 
-    const observe = (el: Node | null, callback: () => void) => {
+    const observe = (el: Node | null, callback: () => void, attributes = false) => {
       if (!el) return;
       const observer = new MutationObserver(callback);
-      observer.observe(el, { childList: true, subtree: true, characterData: true });
+      observer.observe(el, attributes ? { attributes: true, attributeFilter: ["class"] } : { childList: true, subtree: true, characterData: true });
       observers.push(observer);
     };
 
@@ -143,6 +152,7 @@ export function BridgeRailPolish() {
       observe(document.getElementById("bc2-lon"), updateCoordinates);
       observe(document.getElementById("bc2-route"), updateStatus);
       observe(document.querySelector("#bc-v2-topbar .live"), updateStatus);
+      observe(getShell(), updateStatus, true);
     };
 
     applyOnce();
