@@ -1,0 +1,48 @@
+/* Preview-only Day Mode corrections for bridge header controls and status rail. */
+
+.navdash-v12-day > header > :first-child > :last-child {
+  width: 100% !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  justify-content: flex-start !important;
+  align-items: center !important;
+  gap: 5px !important;
+  overflow-x: auto !important;
+  overflow-y: hidden !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.navdash-v12-day > header > :first-child > :last-child button,
+.navdash-v12-day > header > :first-child > :last-child label,
+.navdash-v12-day > header > :first-child > :last-child [role="button"] {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  flex: 0 0 108px !important;
+  width: 108px !important;
+  min-width: 108px !important;
+  height: 30px !important;
+  box-sizing: border-box !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #ffffff !important;
+  color: #17212b !important;
+  border-color: rgba(15,23,42,.28) !important;
+}
+
+/* The AIS LIVE / ROUTE LOADED strip is the final visible rail block, outside bc-v2-instruments. */
+.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child,
+.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child > *,
+.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child > * > * {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  border-color: rgba(15,23,42,.22) !important;
+}
+
+.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child [class*="green"],
+.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child [style*="34d399"],
+.navdash-v12-day *:has(> #bc-v2-instruments) > :last-child [style*="green"] {
+  color: #067647 !important;
+}
