@@ -45,6 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 }) || null;
               };
 
+              const clearMeasureReadout = () => {
+                document.getElementById("navdash-measure-readout")?.remove();
+              };
+
               const syncMeasureReadout = () => {
                 const map = getMap();
                 if (!map) return;
@@ -87,6 +91,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         tools.setAttribute("data-map-tools-open", "true");
                       }
                       if (button instanceof HTMLElement) button.blur();
+                    } else if (text === "CLEAR MEASURE") {
+                      clearMeasureReadout();
+                      window.setTimeout(clearMeasureReadout, 80);
+                      return;
                     } else if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
                       event.preventDefault();
                       event.stopImmediatePropagation();
