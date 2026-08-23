@@ -70,55 +70,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
               document.addEventListener("click", (event) => {
                 const tools = getTools();
-                if (!(tools instanceof HTMLElement)) return;
                 const target = event.target;
-                if (!(target instanceof Element)) return;
-                const button = target.closest("button");
-                if (!button || !tools.contains(button)) return;
 
-                const text = (button.textContent || "").trim().toUpperCase();
-                const firstButton = tools.querySelector("button");
+                if (tools instanceof HTMLElement && target instanceof Element) {
+                  const button = target.closest("button");
+                  if (button && tools.contains(button)) {
+                    const text = (button.textContent || "").trim().toUpperCase();
+                    const firstButton = tools.querySelector("button");
 
-                if (button === firstButton) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (tools.getAttribute("data-map-tools-open") === "true") {
-                    tools.removeAttribute("data-map-tools-open");
-                  } else {
-                    tools.setAttribute("data-map-tools-open", "true");
+                    if (button === firstButton) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (tools.getAttribute("data-map-tools-open") === "true") {
+                        tools.removeAttribute("data-map-tools-open");
+                      } else {
+                        tools.setAttribute("data-map-tools-open", "true");
+                      }
+                      if (button instanceof HTMLElement) button.blur();
+                    } else if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
+                      event.preventDefault();
+                      event.stopImmediatePropagation();
+                      try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, "[]"); } catch {}
+                      window.setTimeout(() => window.location.reload(), 30);
+                      return;
+                    }
                   }
-                  if (button instanceof HTMLElement) button.blur();
-                  return;
                 }
 
-                if (text === "CLEAR MARKS" || text === "CLEAR MAP") {
-                  event.preventDefault();
-                  event.stopImmediatePropagation();
-                  try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, "[]"); } catch {}
-
-                  const toolPane = getMap()?.querySelector(".leaflet-pane.navmap-main-tools-v1-pane");
-                  if (toolPane instanceof HTMLElement) {
-                    toolPane.querySelectorAll("path, circle").forEach((el) => el.remove());
-                  }
-
-                  window.setTimeout(() => window.location.reload(), 50);
-                }
+                window.setTimeout(syncMeasureReadout, 60);
               }, true);
 
-              const observer = new MutationObserver(syncMeasureReadout);
-
-              const start = () => {
-                const map = getMap();
-                if (!map) {
-                  window.setTimeout(start, 150);
-                  return;
-                }
-                observer.observe(map, { childList: true, subtree: true, characterData: true });
-                syncMeasureReadout();
-              };
-
-              window.addEventListener("resize", syncMeasureReadout);
-              start();
+              window.addEventListener("resize", () => window.setTimeout(syncMeasureReadout, 30));
             })();
           `}
         </Script>
