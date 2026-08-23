@@ -8,184 +8,25 @@ type Waypoint = { id?: string; name?: string; lat: number; lon: number };
 
 function sixBit(char: string) { let value = char.charCodeAt(0) - 48; if (value > 40) value -= 8; return value; }
 function unsigned(bits: string, start: number, length: number) { return parseInt(bits.slice(start, start + length), 2); }
-function signed(bits: string, start: number, length: number) { const raw = bits.slice(start, start + length); const value = parseInt(bits.slice(start, start + length), 2); const sign = 2 ** (length - 1); return value >= sign ? value - 2 ** length : value; }
-function decodeOwnShip(line: string): Position | null {
-  try {
-    if (!line.startsWith("!AIVDO")) return null;
-    const parts = line.split(",");
-    if (Number(parts[1]) !== 1 || !parts[5]) return null;
-    const bits = parts[5].split("").map((char) => sixBit(char).toString(2).padStart(6, "0")).join("");
-    if (![1, 2, 3].includes(unsigned(bits, 0, 6))) return null;
-    const lon = signed(bits, 61, 28) / 600000;
-    const lat = signed(bits, 89, 27) / 600000;
-    return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 ? { lat, lon } : null;
-  } catch { return null; }
-}
+function signed(bits: string, start: number, length: number) { const value = parseInt(bits.slice(start, start + length), 2); const sign = 2 ** (length - 1); return value >= sign ? value - 2 ** length : value; }
+function decodeOwnShip(line: string): Position | null { try { if (!line.startsWith("!AIVDO")) return null; const parts=line.split(","); if(Number(parts[1])!==1||!parts[5])return null; const bits=parts[5].split("").map(c=>sixBit(c).toString(2).padStart(6,"0")).join(""); if(![1,2,3].includes(unsigned(bits,0,6)))return null; const lon=signed(bits,61,28)/600000,lat=signed(bits,89,27)/600000; return Math.abs(lat)<=90&&Math.abs(lon)<=180?{lat,lon}:null;}catch{return null;} }
+function normalizedLonDelta(value:number){let result=value;while(result>180)result-=360;while(result< -180)result+=360;return result;}
+function distanceNm(a:Position,b:Waypoint){const r=3440.065,p1=a.lat*Math.PI/180,p2=b.lat*Math.PI/180,dp=(b.lat-a.lat)*Math.PI/180,dl=normalizedLonDelta(b.lon-a.lon)*Math.PI/180,h=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;return 2*r*Math.asin(Math.min(1,Math.sqrt(h)));}
+function rhumbWgs84Nm(a:Position,b:Waypoint){const A=6378137,f=1/298.257223563,e2=f*(2-f),e=Math.sqrt(e2),p1=a.lat*Math.PI/180,p2=b.lat*Math.PI/180,dl=normalizedLonDelta(b.lon-a.lon)*Math.PI/180;const iso=(p:number)=>Math.log(Math.tan(Math.PI/4+p/2))-e/2*Math.log((1+e*Math.sin(p))/(1-e*Math.sin(p)));const M=(p:number)=>A*((1-e2/4-3*e2*e2/64-5*e2**3/256)*p-(3*e2/8+3*e2*e2/32+45*e2**3/1024)*Math.sin(2*p)+(15*e2*e2/256+45*e2**3/1024)*Math.sin(4*p)-(35*e2**3/3072)*Math.sin(6*p));const dPsi=iso(p2)-iso(p1),dM=M(p2)-M(p1),q=Math.abs(dPsi)>1e-12?dM/dPsi:A*Math.cos(p1)/Math.sqrt(1-e2*Math.sin(p1)**2);return Math.hypot(dM,q*dl)/1852;}
+function normalizeRoute(data:any){const waypoints:Waypoint[]=(Array.isArray(data?.waypoints)?data.waypoints:[]).map((wp:any)=>({id:typeof wp?.id==="string"?wp.id:undefined,name:typeof wp?.name==="string"?wp.name:undefined,lat:Number(wp?.lat??wp?.latitude),lon:Number(wp?.lon??wp?.lng??wp?.longitude)})).filter((wp:Waypoint)=>Number.isFinite(wp.lat)&&Number.isFinite(wp.lon));const rawIndex=Number(data?.activeWaypointIndex),activeWaypointIndex=Number.isFinite(rawIndex)?Math.max(1,Math.min(waypoints.length-1,Math.trunc(rawIndex))):1;return{waypoints,activeWaypointIndex};}
+function routeSignature(route:Waypoint[]){return route.map(wp=>`${wp.lat.toFixed(6)},${wp.lon.toFixed(6)}`).join(";");}
+function waypointLabel(wp:Waypoint|undefined,index:number){return wp?.id?.trim()||String(index+1);}
+function passageMetrics(position:Position,from:Waypoint,to:Waypoint){const meanLat=((from.lat+to.lat)/2)*Math.PI/180,nmPerDegLon=60*Math.max(.01,Math.cos(meanLat)),vx=normalizedLonDelta(to.lon-from.lon)*nmPerDegLon,vy=(to.lat-from.lat)*60,wx=normalizedLonDelta(position.lon-from.lon)*nmPerDegLon,wy=(position.lat-from.lat)*60,legSq=vx*vx+vy*vy;return{projectionRatio:legSq<=.000001?0:(wx*vx+wy*vy)/legSq};}
+function zoneIndex(lon:number){return Math.floor((lon+7.5)/15);}
+function zoneLabel(index:number){const hours=Math.max(-12,Math.min(12,index));return hours===0?"ZD 0":`ZD ${hours>0?"+":""}${hours}`;}
+function nextZoneTransition(position:Position,route:Waypoint[],activeIndex:number){if(route.length<2||activeIndex<=0||activeIndex>=route.length)return null;let travelled=0;let from:Position=position;for(let i=activeIndex;i<route.length;i++){const to=route[i],delta=normalizedLonDelta(to.lon-from.lon);if(Math.abs(delta)<1e-9){travelled+=rhumbWgs84Nm(from,to);from=to;continue;}const unwrappedTo=from.lon+delta,lo=Math.min(from.lon,unwrappedTo),hi=Math.max(from.lon,unwrappedTo),boundaries:{lon:number;idl:boolean}[]=[];for(let k=-24;k<=24;k++){const b=7.5+15*k;if(b>lo+1e-9&&b<=hi+1e-9)boundaries.push({lon:b,idl:false});}for(const b of[-180,180])if(b>lo+1e-9&&b<=hi+1e-9)boundaries.push({lon:b,idl:true});boundaries.sort((a,b)=>delta>0?a.lon-b.lon:b.lon-a.lon);const hit=boundaries[0];if(hit){const fraction=(hit.lon-from.lon)/delta,cross:Waypoint={lat:from.lat+(to.lat-from.lat)*fraction,lon:((hit.lon+180)%360+360)%360-180},afterLon=hit.lon+(delta>0?.001:-.001),after=zoneIndex(((afterLon+180)%360+360)%360-180);return{distance:travelled+rhumbWgs84Nm(from,cross),label:hit.idl?"IDL":`NEXT ${zoneLabel(after)}`};}travelled+=rhumbWgs84Nm(from,to);from=to;}return null;}
 
-function normalizedLonDelta(value: number) {
-  let result = value;
-  while (result > 180) result -= 360;
-  while (result < -180) result += 360;
-  return result;
-}
-
-function distanceNm(a: Position, b: Waypoint) {
-  const r = 3440.065;
-  const p1 = a.lat * Math.PI / 180, p2 = b.lat * Math.PI / 180;
-  const dp = (b.lat - a.lat) * Math.PI / 180;
-  const dl = normalizedLonDelta(b.lon - a.lon) * Math.PI / 180;
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
-}
-
-function rhumbWgs84Nm(a: Position, b: Waypoint) {
-  const A = 6378137;
-  const f = 1 / 298.257223563;
-  const e2 = f * (2 - f);
-  const e = Math.sqrt(e2);
-  const p1 = a.lat * Math.PI / 180;
-  const p2 = b.lat * Math.PI / 180;
-  const dl = normalizedLonDelta(b.lon - a.lon) * Math.PI / 180;
-  const iso = (p: number) => Math.log(Math.tan(Math.PI / 4 + p / 2)) - e / 2 * Math.log((1 + e * Math.sin(p)) / (1 - e * Math.sin(p)));
-  const M = (p: number) => A * (
-    (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256) * p
-    - (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * p)
-    + (15 * e2 * e2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * p)
-    - (35 * e2 ** 3 / 3072) * Math.sin(6 * p)
-  );
-  const dPsi = iso(p2) - iso(p1);
-  const dM = M(p2) - M(p1);
-  const q = Math.abs(dPsi) > 1e-12 ? dM / dPsi : A * Math.cos(p1) / Math.sqrt(1 - e2 * Math.sin(p1) ** 2);
-  return Math.hypot(dM, q * dl) / 1852;
-}
-
-function normalizeRoute(data: any) {
-  const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : [])
-    .map((wp: any) => ({ id: typeof wp?.id === "string" ? wp.id : undefined, name: typeof wp?.name === "string" ? wp.name : undefined, lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) }))
-    .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
-  const rawIndex = Number(data?.activeWaypointIndex);
-  const activeWaypointIndex = Number.isFinite(rawIndex) ? Math.max(1, Math.min(waypoints.length - 1, Math.trunc(rawIndex))) : 1;
-  return { waypoints, activeWaypointIndex };
-}
-
-function routeSignature(route: Waypoint[]) { return route.map((wp) => `${wp.lat.toFixed(6)},${wp.lon.toFixed(6)}`).join(";"); }
-function waypointLabel(wp: Waypoint | undefined, index: number) { const id = wp?.id?.trim(); return id || String(index + 1); }
-
-function passageMetrics(position: Position, from: Waypoint, to: Waypoint) {
-  const meanLat = ((from.lat + to.lat) / 2) * Math.PI / 180;
-  const nmPerDegLon = 60 * Math.max(0.01, Math.cos(meanLat));
-  const vx = normalizedLonDelta(to.lon - from.lon) * nmPerDegLon;
-  const vy = (to.lat - from.lat) * 60;
-  const wx = normalizedLonDelta(position.lon - from.lon) * nmPerDegLon;
-  const wy = (position.lat - from.lat) * 60;
-  const legSq = vx * vx + vy * vy;
-  if (legSq <= 0.000001) return { projectionRatio: 0 };
-  return { projectionRatio: (wx * vx + wy * vy) / legSq };
-}
-
-function zoneIndex(lon: number) { return Math.floor((lon + 7.5) / 15); }
-function zoneLabel(index: number) { const hours = Math.max(-12, Math.min(12, index)); return hours === 0 ? "ZD 0" : `ZD ${hours > 0 ? "+" : ""}${hours}`; }
-function nextZoneTransition(position: Position, route: Waypoint[], activeIndex: number) {
-  if (route.length < 2 || activeIndex <= 0 || activeIndex >= route.length) return null;
-  let travelled = 0;
-  let from: Position = position;
-  for (let i = activeIndex; i < route.length; i++) {
-    const to = route[i];
-    const rawDelta = to.lon - from.lon;
-    let delta = normalizedLonDelta(rawDelta);
-    if (Math.abs(delta) < 1e-9) { travelled += rhumbWgs84Nm(from, to); from = to; continue; }
-    const unwrappedTo = from.lon + delta;
-    const lo = Math.min(from.lon, unwrappedTo), hi = Math.max(from.lon, unwrappedTo);
-    const boundaries: { lon: number; idl: boolean }[] = [];
-    for (let k = -24; k <= 24; k++) {
-      const b = 7.5 + 15 * k;
-      if (b > lo + 1e-9 && b <= hi + 1e-9) boundaries.push({ lon: b, idl: false });
-    }
-    for (const b of [-180, 180]) if (b > lo + 1e-9 && b <= hi + 1e-9) boundaries.push({ lon: b, idl: true });
-    boundaries.sort((a, b) => delta > 0 ? a.lon - b.lon : b.lon - a.lon);
-    const hit = boundaries[0];
-    if (hit) {
-      const fraction = (hit.lon - from.lon) / delta;
-      const cross: Waypoint = { lat: from.lat + (to.lat - from.lat) * fraction, lon: ((hit.lon + 180) % 360 + 360) % 360 - 180 };
-      const before = zoneIndex(from.lon);
-      const afterLon = hit.lon + (delta > 0 ? 0.001 : -0.001);
-      const after = zoneIndex(((afterLon + 180) % 360 + 360) % 360 - 180);
-      return { distance: travelled + rhumbWgs84Nm(from, cross), label: hit.idl ? "IDL" : `NEXT ${zoneLabel(after)}`, fromZone: before, toZone: after };
-    }
-    travelled += rhumbWgs84Nm(from, to);
-    from = to;
-  }
-  return null;
-}
-
-export function BridgeNextWaypointDistance() {
-  useEffect(() => {
-    let closed = false, socket: WebSocket | null = null, retryTimer = 0, routeTimer = 0;
-    let position: Position | null = null;
-    let route: Waypoint[] = [];
-    let activeWaypointIndex = 1;
-    let currentRouteSignature = "";
-    let closestDistanceToTarget = Infinity;
-
-    const acceptRoute = (data: any) => {
-      const normalized = normalizeRoute(data);
-      if (normalized.waypoints.length < 2) return;
-      const signature = routeSignature(normalized.waypoints);
-      if (signature !== currentRouteSignature) { route = normalized.waypoints; currentRouteSignature = signature; activeWaypointIndex = normalized.activeWaypointIndex; closestDistanceToTarget = Infinity; }
-      else { route = normalized.waypoints; activeWaypointIndex = Math.max(activeWaypointIndex, normalized.activeWaypointIndex); }
-    };
-
-    const advancePassedWaypoint = () => {
-      if (!position || route.length < 2) return;
-      while (activeWaypointIndex > 0 && activeWaypointIndex < route.length - 1) {
-        const previous = route[activeWaypointIndex - 1], target = route[activeWaypointIndex];
-        const currentDistance = distanceNm(position, target);
-        closestDistanceToTarget = Math.min(closestDistanceToTarget, currentDistance);
-        const { projectionRatio } = passageMetrics(position, previous, target);
-        const crossedWaypointPlane = projectionRatio >= 1;
-        const passedAfterCloseApproach = closestDistanceToTarget <= 2 && currentDistance >= closestDistanceToTarget + 0.2;
-        if (!crossedWaypointPlane && !passedAfterCloseApproach) break;
-        activeWaypointIndex += 1; closestDistanceToTarget = Infinity;
-      }
-    };
-
-    const render = () => {
-      advancePassedWaypoint();
-      const center = document.querySelector<HTMLElement>("#bc-v2-topbar .bc2-center");
-      if (!center) return;
-      let display = document.getElementById("bc2-top-nextwpt") as HTMLElement | null;
-      if (!display) { display = document.createElement("span"); display.id = "bc2-top-nextwpt"; const dtg = document.getElementById("bc2-top-dtg"); dtg?.insertAdjacentElement("afterend", display); display.style.cssText = "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px"; }
-      let zoneDisplay = document.getElementById("bc2-top-zone") as HTMLElement | null;
-      if (!zoneDisplay) { zoneDisplay = document.createElement("span"); zoneDisplay.id = "bc2-top-zone"; display.insertAdjacentElement("afterend", zoneDisplay); zoneDisplay.style.cssText = "padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px"; }
-      const previous = route[activeWaypointIndex - 1], next = route[activeWaypointIndex];
-      if (previous && next) { const legText = `${waypointLabel(previous, activeWaypointIndex - 1)} → ${waypointLabel(next, activeWaypointIndex)}`; const topLeg = document.getElementById("bc2-top-leg"), railLeg = document.getElementById("bc2-leg"); if (topLeg) topLeg.textContent = `LEG ${legText}`; if (railLeg) railLeg.textContent = legText; }
-      display.textContent = position && next ? `NEXT WPT ${rhumbWgs84Nm(position, next).toFixed(1)} NM` : "NEXT WPT --";
-      const transition = position ? nextZoneTransition(position, route, activeWaypointIndex) : null;
-      zoneDisplay.textContent = transition ? `${transition.label} ${transition.distance.toFixed(0)} NM` : "NEXT ZD --";
-    };
-
-    const loadRoute = async () => {
-      if (closed) return;
-      try { let data: any = null; const local = window.localStorage.getItem("navconsole-saved-route"); if (local) data = JSON.parse(local); if (!data?.waypoints?.length) { const response = await fetch("/api/route-state", { cache: "no-store" }); if (response.ok) data = await response.json(); } if (data) acceptRoute(data); } catch {}
-      render(); routeTimer = window.setTimeout(loadRoute, 1500);
-    };
-
-    const connect = () => {
-      if (closed) return;
-      try {
-        socket = new WebSocket(getAisWebSocketUrl());
-        socket.onmessage = (event) => {
-          let raw = String(event.data || "");
-          try { const json = JSON.parse(raw); if (json?.type === "route-state") { acceptRoute(json); render(); return; } raw = typeof json === "string" ? json : json?.sentence || json?.nmea || json?.raw || json?.line || raw; } catch {}
-          for (const line of raw.split(/\r?\n/)) { const decoded = decodeOwnShip(line.trim()); if (decoded) { position = decoded; render(); } }
-        };
-        socket.onclose = () => { if (!closed) retryTimer = window.setTimeout(connect, 2000); };
-      } catch { retryTimer = window.setTimeout(connect, 2000); }
-    };
-
-    loadRoute(); connect();
-    const initialTimer = window.setTimeout(render, 250), syncTimer = window.setInterval(render, 500);
-    return () => { closed = true; window.clearTimeout(initialTimer); window.clearInterval(syncTimer); window.clearTimeout(retryTimer); window.clearTimeout(routeTimer); if (socket) { socket.onclose = null; socket.close(); } document.getElementById("bc2-top-nextwpt")?.remove(); document.getElementById("bc2-top-zone")?.remove(); };
-  }, []);
-  return null;
-}
+export function BridgeNextWaypointDistance(){useEffect(()=>{let closed=false,socket:WebSocket|null=null,retryTimer=0,routeTimer=0;let position:Position|null=null,route:Waypoint[]=[],activeWaypointIndex=1,currentRouteSignature="",closestDistanceToTarget=Infinity;
+const styleChip=(el:HTMLElement)=>{const day=document.documentElement.dataset.navdashTheme==="day"||document.documentElement.classList.contains("day-mode");el.style.cssText=day?"padding:5px 9px;border:1px solid #cbd5e1;background:#ffffff;color:#334155;font-size:9px":"padding:5px 9px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:9px";};
+const acceptRoute=(data:any)=>{const normalized=normalizeRoute(data);if(normalized.waypoints.length<2)return;const signature=routeSignature(normalized.waypoints);if(signature!==currentRouteSignature){route=normalized.waypoints;currentRouteSignature=signature;activeWaypointIndex=normalized.activeWaypointIndex;closestDistanceToTarget=Infinity;}else{route=normalized.waypoints;activeWaypointIndex=Math.max(activeWaypointIndex,normalized.activeWaypointIndex);}};
+const advancePassedWaypoint=()=>{if(!position||route.length<2)return;while(activeWaypointIndex>0&&activeWaypointIndex<route.length-1){const previous=route[activeWaypointIndex-1],target=route[activeWaypointIndex],currentDistance=distanceNm(position,target);closestDistanceToTarget=Math.min(closestDistanceToTarget,currentDistance);const{projectionRatio}=passageMetrics(position,previous,target),crossedWaypointPlane=projectionRatio>=1,passedAfterCloseApproach=closestDistanceToTarget<=2&&currentDistance>=closestDistanceToTarget+.2;if(!crossedWaypointPlane&&!passedAfterCloseApproach)break;activeWaypointIndex++;closestDistanceToTarget=Infinity;}};
+const render=()=>{advancePassedWaypoint();const center=document.querySelector<HTMLElement>("#bc-v2-topbar .bc2-center");if(!center)return;let display=document.getElementById("bc2-top-nextwpt") as HTMLElement|null;if(!display){display=document.createElement("span");display.id="bc2-top-nextwpt";document.getElementById("bc2-top-dtg")?.insertAdjacentElement("afterend",display);}styleChip(display);let zoneDisplay=document.getElementById("bc2-top-zone") as HTMLElement|null;if(!zoneDisplay){zoneDisplay=document.createElement("span");zoneDisplay.id="bc2-top-zone";display.insertAdjacentElement("afterend",zoneDisplay);}styleChip(zoneDisplay);const previous=route[activeWaypointIndex-1],next=route[activeWaypointIndex];if(previous&&next){const legText=`${waypointLabel(previous,activeWaypointIndex-1)} → ${waypointLabel(next,activeWaypointIndex)}`,topLeg=document.getElementById("bc2-top-leg"),railLeg=document.getElementById("bc2-leg");if(topLeg)topLeg.textContent=`LEG ${legText}`;if(railLeg)railLeg.textContent=legText;}display.textContent=position&&next?`NEXT WPT ${rhumbWgs84Nm(position,next).toFixed(1)} NM`:"NEXT WPT --";const transition=position?nextZoneTransition(position,route,activeWaypointIndex):null;zoneDisplay.textContent=transition?`${transition.label} ${transition.distance.toFixed(0)} NM`:"NEXT ZD --";};
+const themeObserver=new MutationObserver(render);themeObserver.observe(document.documentElement,{attributes:true,attributeFilter:["class","data-navdash-theme"]});
+const loadRoute=async()=>{if(closed)return;try{let data:any=null;const local=window.localStorage.getItem("navconsole-saved-route");if(local)data=JSON.parse(local);if(!data?.waypoints?.length){const response=await fetch("/api/route-state",{cache:"no-store"});if(response.ok)data=await response.json();}if(data)acceptRoute(data);}catch{}render();routeTimer=window.setTimeout(loadRoute,1500);};
+const connect=()=>{if(closed)return;try{socket=new WebSocket(getAisWebSocketUrl());socket.onmessage=(event)=>{let raw=String(event.data||"");try{const json=JSON.parse(raw);if(json?.type==="route-state"){acceptRoute(json);render();return;}raw=typeof json==="string"?json:json?.sentence||json?.nmea||json?.raw||json?.line||raw;}catch{}for(const line of raw.split(/\r?\n/)){const decoded=decodeOwnShip(line.trim());if(decoded){position=decoded;render();}}};socket.onclose=()=>{if(!closed)retryTimer=window.setTimeout(connect,2000);};}catch{retryTimer=window.setTimeout(connect,2000);}};
+loadRoute();connect();const initialTimer=window.setTimeout(render,250),syncTimer=window.setInterval(render,500);return()=>{closed=true;themeObserver.disconnect();window.clearTimeout(initialTimer);window.clearInterval(syncTimer);window.clearTimeout(retryTimer);window.clearTimeout(routeTimer);if(socket){socket.onclose=null;socket.close();}document.getElementById("bc2-top-nextwpt")?.remove();document.getElementById("bc2-top-zone")?.remove();};},[]);return null;}
