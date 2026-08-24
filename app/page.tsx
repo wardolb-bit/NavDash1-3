@@ -498,8 +498,9 @@ function routeLatLngsForChart(route: Waypoint[]) {
 function routePointToXY(lat: number, lon: number, refLat: number, refLon: number) {
   const nmPerDegLat = 60;
   const nmPerDegLon = 60 * Math.cos(toRad(refLat));
+  const adjustedLon = unwrapLongitudeNear(lon, refLon);
   return {
-    x: (lon - refLon) * nmPerDegLon,
+    x: (adjustedLon - refLon) * nmPerDegLon,
     y: (lat - refLat) * nmPerDegLat,
   };
 }
