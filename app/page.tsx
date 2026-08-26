@@ -6,12 +6,25 @@ import { useBridgeTheme } from "../lib/useBridgeTheme";
 
 const FULLSCREEN_PREF_KEY = "navconsole-fullscreen";
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
+const ROUTE_ALERT_STORAGE_KEY = "navconsole-route-alerts";
 
 type Waypoint = {
   id: string;
   name: string;
   lat: number;
   lon: number;
+};
+
+type RouteAlert = {
+  id: string;
+  routeName: string;
+  waypointId: string;
+  waypointName: string;
+  lat: number;
+  lon: number;
+  message: string;
+  triggerNm: number;
+  acknowledged: boolean;
 };
 
 type WeatherSnapshot = {
@@ -750,7 +763,7 @@ function selectedRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, selecte
     alongTrack: result.alongTrack,
     legLength: result.legLength,
     side: result.side,
-    projectionRatio: result.projectionRatio,
+    projectionRatio,
   };
 }
 
@@ -1129,6 +1142,11 @@ export default function NavDashHomePage() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherStatusText, setWeatherStatusText] = useState("Weather not loaded yet");
   const [displayScale, setDisplayScale] = useState<"compact" | "laptop" | "wide">("wide");
+  const [routeAlerts, setRouteAlerts] = useState<RouteAlert[]>([]);
+  const [selectedWaypoint, setSelectedWaypoint] = useState<Waypoint | null>(null);
+  const [routeAlertMessage, setRouteAlertMessage] = useState("");
+  const [routeAlertTriggerNm, setRouteAlertTriggerNm] = useState("2");
+  const [activeRouteAlert, setActiveRouteAlert] = useState<RouteAlert | null>(null);
 
   const safeActiveIndex = Math.min(Math.max(activeWaypointIndex, 1), Math.max(route.length - 1, 1));
   const autoLeg = logicalRouteLeg(route, ownShip, safeActiveIndex);
@@ -1165,6 +1183,36 @@ export default function NavDashHomePage() {
       { label: "Coastline Pro", value: coastlinePro?.risk || "WAITING", status: coastlinePro?.status || "AMBER" },
     ];
   }, [absXte, aisStatus, coastlinePro, corridorNm, encLayerOn, ownShip, route.length, side, weather]);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(ROUTE_ALERT_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) setRouteAlerts(parsed);
+    } catch {
+      // Locked-down browsers can block localStorage.
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ROUTE_ALERT_STORAGE_KEY, JSON.stringify(routeAlerts));
+    } catch {
+      // Keep route monitoring usable if localStorage is unavailable.
+    }
+  }, [routeAlerts]);
+
+  useEffect(() => {
+    if (!ownShip || activeRouteAlert) return;
+    const candidate = routeAlerts.find(
+      (alert) =>
+        alert.routeName === routeName &&
+        !alert.acknowledged &&
+        distanceNm(ownShip.lat, ownShip.lon, alert.lat, alert.lon) <= alert.triggerNm,
+    );
+    if (candidate) setActiveRouteAlert(candidate);
+  }, [activeRouteAlert, ownShip?.lat, ownShip?.lon, routeAlerts, routeName]);
 
   useEffect(() => {
     const updateDisplayScale = () => {
@@ -1448,17 +1496,34 @@ export default function NavDashHomePage() {
         opacity: 0.95,
       }).addTo(map);
 
-      routeMarkersRef.current = route.map((wp, index) =>
-        L.circleMarker(routeLatLngs[index], {
-          radius: 5,
-          color: "#c9a227",
-          fillColor: "#c9a227",
-          fillOpacity: 0.85,
-          weight: 2,
+      routeMarkersRef.current = route.map((wp, index) => {
+        const armedAlert = routeAlerts.find(
+          (alert) => alert.routeName === routeName && alert.waypointId === wp.id && !alert.acknowledged,
+        );
+        const marker = L.circleMarker(routeLatLngs[index], {
+          radius: armedAlert ? 8 : 5,
+          color: armedAlert ? "#fb7185" : "#c9a227",
+          fillColor: armedAlert ? "#fb7185" : "#c9a227",
+          fillOpacity: armedAlert ? 0.3 : 0.85,
+          weight: armedAlert ? 3 : 2,
         })
-          .bindTooltip(`${wp.id} ${wp.name}`, { permanent: false })
-          .addTo(map),
-      );
+          .bindTooltip(
+            armedAlert
+              ? `${wp.id} ${wp.name} · ALERT ${armedAlert.triggerNm.toFixed(1)} NM`
+              : `${wp.id} ${wp.name}`,
+            { permanent: false },
+          )
+          .on("click", () => {
+            const existing = routeAlerts.find(
+              (alert) => alert.routeName === routeName && alert.waypointId === wp.id,
+            );
+            setSelectedWaypoint(wp);
+            setRouteAlertMessage(existing?.message || "");
+            setRouteAlertTriggerNm(String(existing?.triggerNm ?? 2));
+          })
+          .addTo(map);
+        return marker;
+      });
 
       try {
         const bounds = L.latLngBounds(routeLatLngs as any);
@@ -1471,7 +1536,7 @@ export default function NavDashHomePage() {
     }
 
     updateRouteLayer();
-  }, [route, routeName]);
+  }, [route, routeAlerts, routeName]);
 
   useEffect(() => {
     async function updateOwnShipMarker() {
@@ -1612,6 +1677,43 @@ export default function NavDashHomePage() {
     mapRef.current.panTo([ownShip.lat, ownShip.lon], { animate: true, duration: 0.5 });
   }
 
+  function saveWaypointAlert() {
+    if (!selectedWaypoint || !routeAlertMessage.trim()) return;
+    const triggerNm = Math.max(0.1, Number(routeAlertTriggerNm) || 2);
+    const alert: RouteAlert = {
+      id: `${routeName}:${selectedWaypoint.id}`,
+      routeName,
+      waypointId: selectedWaypoint.id,
+      waypointName: selectedWaypoint.name,
+      lat: selectedWaypoint.lat,
+      lon: selectedWaypoint.lon,
+      message: routeAlertMessage.trim(),
+      triggerNm,
+      acknowledged: false,
+    };
+    setRouteAlerts((current) => [
+      ...current.filter((item) => !(item.routeName === routeName && item.waypointId === selectedWaypoint.id)),
+      alert,
+    ]);
+    setSelectedWaypoint(null);
+  }
+
+  function deleteWaypointAlert() {
+    if (!selectedWaypoint) return;
+    setRouteAlerts((current) =>
+      current.filter((item) => !(item.routeName === routeName && item.waypointId === selectedWaypoint.id)),
+    );
+    setSelectedWaypoint(null);
+  }
+
+  function acknowledgeRouteAlert() {
+    if (!activeRouteAlert) return;
+    setRouteAlerts((current) =>
+      current.map((item) => (item.id === activeRouteAlert.id ? { ...item, acknowledged: true } : item)),
+    );
+    setActiveRouteAlert(null);
+  }
+
   function clearLoadedRoute() {
     clearSharedRouteState();
 
@@ -1633,6 +1735,8 @@ export default function NavDashHomePage() {
     setRouteName("No route loaded");
     setActiveWaypointIndex(1);
     setLegMode("auto");
+    setSelectedWaypoint(null);
+    setActiveRouteAlert(null);
     setRouteLoadStatus("Route cleared. Import an RTZ/XML route when ready.");
     sendRouteClearOverWebSocket(routeWsRef.current);
   }
@@ -1780,6 +1884,9 @@ export default function NavDashHomePage() {
   }
 
   const readableFontClass = "navdash-readable-font";
+  const selectedWaypointExistingAlert = selectedWaypoint
+    ? routeAlerts.find((alert) => alert.routeName === routeName && alert.waypointId === selectedWaypoint.id)
+    : null;
 
   return (
     <main className={`${pageClass} ${readableFontClass}`}>
@@ -2215,6 +2322,67 @@ export default function NavDashHomePage() {
         </section>
 
       </div>
+
+      {selectedWaypoint && (
+        <div className="fixed inset-0 z-[2000] grid place-items-center bg-black/55 p-4">
+          <div className={dayMode ? "w-full max-w-lg rounded-3xl border border-slate-300 bg-white p-5 text-slate-950 shadow-2xl" : "w-full max-w-lg rounded-3xl border border-cyan-300/25 bg-[#071019] p-5 text-slate-100 shadow-2xl shadow-black/60"}>
+            <div className="text-xs font-black uppercase tracking-[0.22em] text-cyan-400">Waypoint Route Alert</div>
+            <div className="mt-2 text-2xl font-black">{selectedWaypoint.id} · {selectedWaypoint.name}</div>
+            <div className={`mt-1 text-sm ${mutedClass}`}>{formatPositionDdm(selectedWaypoint.lat, selectedWaypoint.lon)}</div>
+            <label className="mt-5 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+              Alert note
+              <textarea
+                autoFocus
+                value={routeAlertMessage}
+                onChange={(event) => setRouteAlertMessage(event.target.value)}
+                placeholder="Call Harbor Control Ch. 69"
+                className={dayMode ? "mt-2 min-h-28 w-full rounded-2xl border border-slate-300 bg-white p-3 text-base text-slate-950 outline-none focus:border-cyan-500" : "mt-2 min-h-28 w-full rounded-2xl border border-white/15 bg-black/30 p-3 text-base text-white outline-none focus:border-cyan-400"}
+              />
+            </label>
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+              Trigger distance
+              <div className="mt-2 flex items-center gap-3">
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={routeAlertTriggerNm}
+                  onChange={(event) => setRouteAlertTriggerNm(event.target.value)}
+                  className={dayMode ? "h-12 w-32 rounded-2xl border border-slate-300 bg-white px-3 text-base font-black text-slate-950 outline-none focus:border-cyan-500" : "h-12 w-32 rounded-2xl border border-white/15 bg-black/30 px-3 text-base font-black text-white outline-none focus:border-cyan-400"}
+                />
+                <span className="text-sm font-black">NM before waypoint</span>
+              </div>
+            </label>
+            <div className="mt-5 flex flex-wrap justify-end gap-3">
+              {selectedWaypointExistingAlert && (
+                <button type="button" onClick={deleteWaypointAlert} className="rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-black text-red-100">
+                  Delete Alert
+                </button>
+              )}
+              <button type="button" onClick={() => setSelectedWaypoint(null)} className={dayMode ? "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white"}>
+                Cancel
+              </button>
+              <button type="button" onClick={saveWaypointAlert} disabled={!routeAlertMessage.trim()} className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:opacity-40">
+                Arm Alert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeRouteAlert && (
+        <div className="fixed inset-0 z-[2100] grid place-items-center bg-black/65 p-4">
+          <div className={dayMode ? "w-full max-w-xl rounded-3xl border-2 border-red-500 bg-white p-6 text-slate-950 shadow-2xl" : "w-full max-w-xl rounded-3xl border-2 border-red-400 bg-[#130b0d] p-6 text-slate-100 shadow-2xl shadow-red-950/50"}>
+            <div className="text-sm font-black uppercase tracking-[0.24em] text-red-400">Route Alert</div>
+            <div className="mt-2 text-xl font-black text-wardGold">{activeRouteAlert.waypointId} · {activeRouteAlert.waypointName}</div>
+            <div className="mt-4 text-3xl font-black leading-tight">{activeRouteAlert.message}</div>
+            <div className={`mt-3 text-sm font-bold ${mutedClass}`}>Triggered within {activeRouteAlert.triggerNm.toFixed(1)} NM of the waypoint.</div>
+            <button type="button" onClick={acknowledgeRouteAlert} className="mt-6 w-full rounded-2xl border border-red-400 bg-red-500 px-5 py-4 text-base font-black text-white">
+              Acknowledge
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
