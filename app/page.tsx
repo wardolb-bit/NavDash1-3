@@ -6,12 +6,25 @@ import { useBridgeTheme } from "../lib/useBridgeTheme";
 
 const FULLSCREEN_PREF_KEY = "navconsole-fullscreen";
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
+const ROUTE_ALERTS_STORAGE_KEY = "navconsole-route-alerts";
 
 type Waypoint = {
   id: string;
   name: string;
   lat: number;
   lon: number;
+};
+
+type RouteAlert = {
+  id: string;
+  routeName: string;
+  waypointIndex: number;
+  triggerDistanceNm: number;
+  message: string;
+  vhfChannel: string;
+  priority: "ADVISORY" | "CAUTION" | "CRITICAL";
+  sound: boolean;
+  repeatUntilAcknowledged: boolean;
 };
 
 type WeatherSnapshot = {
@@ -766,6 +779,43 @@ function remainingRouteDistanceNm(route: Waypoint[], leg: ReturnType<typeof sele
   return total;
 }
 
+function distanceAlongRouteToWaypoint(
+  route: Waypoint[],
+  leg: ReturnType<typeof selectedRouteLeg>,
+  waypointIndex: number,
+) {
+  if (!leg || waypointIndex < leg.index || waypointIndex >= route.length) return null;
+
+  let total = Math.max(0, leg.legLength - leg.alongTrack);
+  for (let i = leg.index; i < waypointIndex; i += 1) {
+    total += distanceNm(route[i].lat, route[i].lon, route[i + 1].lat, route[i + 1].lon);
+  }
+  return total;
+}
+
+function readRouteAlerts(routeName: string) {
+  if (typeof window === "undefined") return [] as RouteAlert[];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ROUTE_ALERTS_STORAGE_KEY) || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((alert: RouteAlert) => alert?.routeName === routeName);
+  } catch {
+    return [];
+  }
+}
+
+function writeRouteAlerts(routeName: string, alerts: RouteAlert[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ROUTE_ALERTS_STORAGE_KEY) || "[]");
+    const allAlerts: RouteAlert[] = Array.isArray(parsed) ? parsed : [];
+    const preserved = allAlerts.filter((alert) => alert.routeName !== routeName);
+    window.localStorage.setItem(ROUTE_ALERTS_STORAGE_KEY, JSON.stringify([...preserved, ...alerts]));
+  } catch {
+    // Keep the bridge display working if localStorage is unavailable.
+  }
+}
+
 function formatNm(value: number | null | undefined, digits = 2) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "--";
   return value.toFixed(digits);
@@ -1129,6 +1179,18 @@ export default function NavDashHomePage() {
   const [weatherLoading, setWeatherLoading] = useState(false);
   const [weatherStatusText, setWeatherStatusText] = useState("Weather not loaded yet");
   const [displayScale, setDisplayScale] = useState<"compact" | "laptop" | "wide">("wide");
+  const [routeAlerts, setRouteAlerts] = useState<RouteAlert[]>([]);
+  const [showAlertEditor, setShowAlertEditor] = useState(false);
+  const [alertWaypointIndex, setAlertWaypointIndex] = useState(1);
+  const [alertDistanceNm, setAlertDistanceNm] = useState(5);
+  const [alertMessage, setAlertMessage] = useState("");
+  const [alertVhfChannel, setAlertVhfChannel] = useState("");
+  const [alertPriority, setAlertPriority] = useState<RouteAlert["priority"]>("ADVISORY");
+  const [alertSound, setAlertSound] = useState(true);
+  const [alertRepeat, setAlertRepeat] = useState(true);
+  const [activeRouteAlertId, setActiveRouteAlertId] = useState<string | null>(null);
+  const [acknowledgedAlertIds, setAcknowledgedAlertIds] = useState<string[]>([]);
+  const [snoozedAlerts, setSnoozedAlerts] = useState<Record<string, number>>({});
 
   const safeActiveIndex = Math.min(Math.max(activeWaypointIndex, 1), Math.max(route.length - 1, 1));
   const autoLeg = logicalRouteLeg(route, ownShip, safeActiveIndex);
@@ -1150,6 +1212,15 @@ export default function NavDashHomePage() {
   const destination = route[route.length - 1] || routeFallback;
   const destinationEta = formatEtaAtDestination(etaHours, destination);
   const coastlinePro = computeCoastlinePro(ownShip, coastlineMode, route);
+  const routeAlertsWithDistance = routeAlerts
+    .map((alert) => ({
+      alert,
+      distanceNm: distanceAlongRouteToWaypoint(route, activeLeg, alert.waypointIndex),
+    }))
+    .filter((item) => item.distanceNm !== null)
+    .sort((a, b) => (a.distanceNm ?? Infinity) - (b.distanceNm ?? Infinity));
+  const nextRouteAlert = routeAlertsWithDistance.find((item) => !acknowledgedAlertIds.includes(item.alert.id)) || null;
+  const activeRouteAlert = routeAlerts.find((alert) => alert.id === activeRouteAlertId) || null;
 
   const statusItems = useMemo(() => {
     const hasRoute = route.length >= 2;
@@ -1226,6 +1297,57 @@ export default function NavDashHomePage() {
       saveRouteState(routeName, route, activeWaypointIndex);
     }
   }, [route, routeName, activeWaypointIndex]);
+
+  useEffect(() => {
+    if (route.length < 2 || routeName === "No route loaded") {
+      setRouteAlerts([]);
+      setActiveRouteAlertId(null);
+      return;
+    }
+    setRouteAlerts(readRouteAlerts(routeName));
+    setAcknowledgedAlertIds([]);
+    setSnoozedAlerts({});
+    setActiveRouteAlertId(null);
+    setAlertWaypointIndex(Math.min(Math.max(activeWaypointIndex, 1), route.length - 1));
+  }, [routeName]);
+
+  useEffect(() => {
+    if (routeName === "No route loaded") return;
+    writeRouteAlerts(routeName, routeAlerts);
+  }, [routeAlerts, routeName]);
+
+  useEffect(() => {
+    if (activeRouteAlertId || !ownShip) return;
+    const now = Date.now();
+    const due = routeAlertsWithDistance.find(({ alert, distanceNm }) =>
+      distanceNm !== null &&
+      distanceNm <= alert.triggerDistanceNm &&
+      !acknowledgedAlertIds.includes(alert.id) &&
+      (snoozedAlerts[alert.id] || 0) <= now,
+    );
+    if (due) setActiveRouteAlertId(due.alert.id);
+  }, [activeRouteAlertId, acknowledgedAlertIds, ownShip, routeAlertsWithDistance, snoozedAlerts]);
+
+  useEffect(() => {
+    if (!activeRouteAlert?.sound || typeof window === "undefined") return;
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const context = new AudioContextClass();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = activeRouteAlert.priority === "CRITICAL" ? 880 : 660;
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.45);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.5);
+      oscillator.onended = () => context.close();
+    } catch {
+      // Browsers may block audio until the operator interacts with the page.
+    }
+  }, [activeRouteAlert?.id]);
 
   useEffect(() => {
     const ws = new WebSocket(getAisWebSocketUrl());
@@ -1612,6 +1734,41 @@ export default function NavDashHomePage() {
     mapRef.current.panTo([ownShip.lat, ownShip.lon], { animate: true, duration: 0.5 });
   }
 
+  function addRouteAlert() {
+    const message = alertMessage.trim();
+    if (!message || route.length < 2) return;
+
+    const waypointIndex = Math.min(Math.max(alertWaypointIndex, 1), route.length - 1);
+    const alert: RouteAlert = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      routeName,
+      waypointIndex,
+      triggerDistanceNm: Math.max(0, Number(alertDistanceNm) || 0),
+      message,
+      vhfChannel: alertVhfChannel.trim(),
+      priority: alertPriority,
+      sound: alertSound,
+      repeatUntilAcknowledged: alertRepeat,
+    };
+
+    setRouteAlerts((current) => [...current, alert]);
+    setAlertMessage("");
+    setAlertVhfChannel("");
+    setShowAlertEditor(false);
+  }
+
+  function acknowledgeRouteAlert() {
+    if (!activeRouteAlertId) return;
+    setAcknowledgedAlertIds((current) => Array.from(new Set([...current, activeRouteAlertId])));
+    setActiveRouteAlertId(null);
+  }
+
+  function snoozeRouteAlert() {
+    if (!activeRouteAlertId) return;
+    setSnoozedAlerts((current) => ({ ...current, [activeRouteAlertId]: Date.now() + 5 * 60 * 1000 }));
+    setActiveRouteAlertId(null);
+  }
+
   function clearLoadedRoute() {
     clearSharedRouteState();
 
@@ -1790,6 +1947,31 @@ export default function NavDashHomePage() {
             : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)]"
         }
       />
+
+      {activeRouteAlert && (
+        <div className="fixed inset-x-0 top-4 z-[2000] mx-auto w-[min(94vw,760px)] px-3">
+          <div className={
+            activeRouteAlert.priority === "CRITICAL"
+              ? "rounded-3xl border-2 border-red-300 bg-red-700 p-5 text-white shadow-2xl shadow-black/60"
+              : activeRouteAlert.priority === "CAUTION"
+                ? "rounded-3xl border-2 border-amber-200 bg-amber-500 p-5 text-slate-950 shadow-2xl shadow-black/60"
+                : dayMode
+                  ? "rounded-3xl border-2 border-amber-400 bg-white p-5 text-slate-950 shadow-2xl shadow-black/45"
+                  : "rounded-3xl border-2 border-wardGold bg-[#111827] p-5 text-white shadow-2xl shadow-black/70"
+          }>
+            <div className="text-xs font-black uppercase tracking-[0.28em]">Route Alert · {activeRouteAlert.priority}</div>
+            <div className="mt-2 text-2xl font-black">{activeRouteAlert.message}</div>
+            {activeRouteAlert.vhfChannel && <div className="mt-1 text-xl font-black">VHF Ch. {activeRouteAlert.vhfChannel}</div>}
+            <div className="mt-2 text-sm font-bold opacity-80">
+              Triggered {activeRouteAlert.triggerDistanceNm.toFixed(1)} NM before {route[activeRouteAlert.waypointIndex]?.id} {route[activeRouteAlert.waypointIndex]?.name}
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button type="button" onClick={acknowledgeRouteAlert} className="rounded-2xl bg-emerald-400 px-4 py-4 text-sm font-black text-slate-950">Acknowledge</button>
+              <button type="button" onClick={snoozeRouteAlert} className="rounded-2xl border border-current/25 bg-black/15 px-4 py-4 text-sm font-black">Snooze 5 Min</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx global>{`
         .navdash-v12-day .leaflet-container {
@@ -2058,6 +2240,92 @@ export default function NavDashHomePage() {
               <p className={`mt-3 text-sm leading-6 ${mutedClass}`}>
                 Auto mode picks the most logical route leg from live AIS position. Manual mode lets the watch advance or back up the active leg.
               </p>
+
+              <div className="mt-5 border-t border-white/10 pt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className={labelClass}>Route Alerts</div>
+                    <div className={dayMode ? "mt-1 text-sm font-bold text-slate-800" : "mt-1 text-sm font-bold text-slate-200"}>
+                      {routeAlerts.length} configured
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={route.length < 2}
+                    onClick={() => {
+                      setAlertWaypointIndex(Math.min(Math.max(activeWaypointIndex, 1), Math.max(route.length - 1, 1)));
+                      setShowAlertEditor((current) => !current);
+                    }}
+                    className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {showAlertEditor ? "Cancel" : "+ Add Alert"}
+                  </button>
+                </div>
+
+                {nextRouteAlert ? (
+                  <div className={dayMode ? "mt-3 rounded-2xl border border-amber-300 bg-amber-50 p-4" : "mt-3 rounded-2xl border border-wardGold/30 bg-wardGold/10 p-4"}>
+                    <div className={labelClass}>Next Alert</div>
+                    <div className={dayMode ? "mt-2 font-black text-slate-950" : "mt-2 font-black text-white"}>
+                      {nextRouteAlert.alert.message}{nextRouteAlert.alert.vhfChannel ? ` — Ch. ${nextRouteAlert.alert.vhfChannel}` : ""}
+                    </div>
+                    <div className={`mt-1 text-sm ${mutedClass}`}>
+                      {formatNm(nextRouteAlert.distanceNm, 1)} NM to {route[nextRouteAlert.alert.waypointIndex]?.id}; triggers at {formatNm(nextRouteAlert.alert.triggerDistanceNm, 1)} NM
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`mt-3 text-sm ${mutedClass}`}>{routeAlerts.length ? "No unacknowledged alerts remain ahead." : "No alerts have been added to this route."}</div>
+                )}
+
+                {showAlertEditor && (
+                  <div className={dayMode ? "mt-4 grid gap-3 rounded-3xl border border-slate-300 bg-slate-50 p-4" : "mt-4 grid gap-3 rounded-3xl border border-white/10 bg-black/20 p-4"}>
+                    <label className={`grid gap-1 text-sm font-bold ${mutedClass}`}>
+                      Waypoint
+                      <select value={alertWaypointIndex} onChange={(event) => setAlertWaypointIndex(Number(event.target.value))} className={dayMode ? "rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-950" : "rounded-xl border border-white/15 bg-slate-900 px-3 py-3 text-white"}>
+                        {route.slice(1).map((waypoint, index) => <option key={`${waypoint.id}-${index}`} value={index + 1}>{waypoint.id} — {waypoint.name}</option>)}
+                      </select>
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className={`grid gap-1 text-sm font-bold ${mutedClass}`}>
+                        Trigger NM before
+                        <input type="number" min="0" step="0.5" value={alertDistanceNm} onChange={(event) => setAlertDistanceNm(Number(event.target.value))} className={dayMode ? "rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-950" : "rounded-xl border border-white/15 bg-slate-900 px-3 py-3 text-white"} />
+                      </label>
+                      <label className={`grid gap-1 text-sm font-bold ${mutedClass}`}>
+                        VHF channel
+                        <input value={alertVhfChannel} onChange={(event) => setAlertVhfChannel(event.target.value)} placeholder="69" className={dayMode ? "rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-950" : "rounded-xl border border-white/15 bg-slate-900 px-3 py-3 text-white"} />
+                      </label>
+                    </div>
+                    <label className={`grid gap-1 text-sm font-bold ${mutedClass}`}>
+                      Bridge note
+                      <input value={alertMessage} onChange={(event) => setAlertMessage(event.target.value)} placeholder="Call Harbor Control" className={dayMode ? "rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-950" : "rounded-xl border border-white/15 bg-slate-900 px-3 py-3 text-white"} />
+                    </label>
+                    <label className={`grid gap-1 text-sm font-bold ${mutedClass}`}>
+                      Priority
+                      <select value={alertPriority} onChange={(event) => setAlertPriority(event.target.value as RouteAlert["priority"])} className={dayMode ? "rounded-xl border border-slate-300 bg-white px-3 py-3 text-slate-950" : "rounded-xl border border-white/15 bg-slate-900 px-3 py-3 text-white"}>
+                        <option value="ADVISORY">Advisory</option><option value="CAUTION">Caution</option><option value="CRITICAL">Critical</option>
+                      </select>
+                    </label>
+                    <div className={`flex flex-wrap gap-4 text-sm font-bold ${mutedClass}`}>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={alertSound} onChange={(event) => setAlertSound(event.target.checked)} /> Sound</label>
+                      <label className="flex items-center gap-2"><input type="checkbox" checked={alertRepeat} onChange={(event) => setAlertRepeat(event.target.checked)} /> Repeat until acknowledged</label>
+                    </div>
+                    <button type="button" disabled={!alertMessage.trim()} onClick={addRouteAlert} className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:opacity-40">Save Route Alert</button>
+                  </div>
+                )}
+
+                {routeAlerts.length > 0 && (
+                  <div className="mt-3 grid gap-2">
+                    {routeAlerts.map((alert) => (
+                      <div key={alert.id} className={dayMode ? "flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3" : "flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 p-3"}>
+                        <div className="min-w-0">
+                          <div className={dayMode ? "truncate text-sm font-black text-slate-950" : "truncate text-sm font-black text-white"}>{route[alert.waypointIndex]?.id} · {alert.triggerDistanceNm} NM · {alert.message}</div>
+                          <div className={`text-xs ${mutedClass}`}>{alert.priority}{alert.vhfChannel ? ` · VHF ${alert.vhfChannel}` : ""}</div>
+                        </div>
+                        <button type="button" onClick={() => setRouteAlerts((current) => current.filter((item) => item.id !== alert.id))} className="rounded-xl border border-red-400/30 px-3 py-2 text-xs font-black text-red-400">Delete</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
           </aside>
         </div>
