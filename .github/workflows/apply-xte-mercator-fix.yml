@@ -1,0 +1,125 @@
+name: Apply XTE Mercator fix
+
+on:
+  push:
+    branches:
+      - fix/xte-mercator-track
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/xte-mercator-track
+
+      - name: Patch route XTE geometry only
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('app/page.tsx')
+          text = path.read_text(encoding='utf-8')
+
+          marker = 'function distancePointToSegmentNm(\n'
+          if marker not in text:
+              raise SystemExit('distancePointToSegmentNm marker not found')
+
+          helper = r'''function mercatorYForRouteLat(lat: number) {
+            const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+            const phi = toRad(clampedLat);
+            return Math.log(Math.tan(Math.PI / 4 + phi / 2));
+          }
+
+          function distancePointToRouteSegmentNm(
+            shipLat: number,
+            shipLon: number,
+            startLat: number,
+            startLon: number,
+            endLat: number,
+            endLon: number,
+          ) {
+            const startLonUnwrapped = unwrapLongitudeNear(startLon, shipLon);
+            const endLonUnwrapped = unwrapLongitudeNear(endLon, startLonUnwrapped);
+            const shipLonUnwrapped = unwrapLongitudeNear(shipLon, startLonUnwrapped);
+
+            const ship = { x: toRad(shipLonUnwrapped), y: mercatorYForRouteLat(shipLat) };
+            const start = { x: toRad(startLonUnwrapped), y: mercatorYForRouteLat(startLat) };
+            const end = { x: toRad(endLonUnwrapped), y: mercatorYForRouteLat(endLat) };
+
+            const vx = end.x - start.x;
+            const vy = end.y - start.y;
+            const wx = ship.x - start.x;
+            const wy = ship.y - start.y;
+            const legLengthSquared = vx * vx + vy * vy;
+
+            if (legLengthSquared <= 0) {
+              return {
+                distance: distanceNm(shipLat, shipLon, startLat, startLon),
+                alongTrack: 0,
+                legLength: 0,
+                side: '--',
+                projectionRatio: 0,
+              };
+            }
+
+            const rawRatio = (wx * vx + wy * vy) / legLengthSquared;
+            const projectionRatio = Math.max(0, Math.min(1, rawRatio));
+            const closestX = start.x + projectionRatio * vx;
+            const closestY = start.y + projectionRatio * vy;
+            const signedCross = vx * wy - vy * wx;
+
+            const closestLat = toDeg(2 * Math.atan(Math.exp(closestY)) - Math.PI / 2);
+            const closestLon = toDeg(closestX);
+            const legLength = distanceNm(startLat, startLonUnwrapped, endLat, endLonUnwrapped);
+
+            return {
+              distance: distanceNm(shipLat, shipLonUnwrapped, closestLat, closestLon),
+              alongTrack: legLength * projectionRatio,
+              legLength,
+              side: signedCross > 0 ? 'STBD' : signedCross < 0 ? 'PORT' : '--',
+              projectionRatio,
+            };
+          }
+
+          '''
+
+          if 'function distancePointToRouteSegmentNm(' not in text:
+              text = text.replace(marker, helper + marker, 1)
+
+          def patch_section(source: str, start_marker: str, end_marker: str) -> str:
+              start = source.index(start_marker)
+              end = source.index(end_marker, start)
+              section = source[start:end]
+              old = 'const result = distancePointToSegmentNm('
+              new = 'const result = distancePointToRouteSegmentNm('
+              if old not in section:
+                  if new in section:
+                      return source
+                  raise SystemExit(f'XTE call not found in {start_marker}')
+              section = section.replace(old, new, 1)
+              return source[:start] + section + source[end:]
+
+          text = patch_section(text, 'function logicalRouteLeg(', 'function selectedRouteLeg(')
+          text = patch_section(text, 'function selectedRouteLeg(', 'function remainingRouteDistanceNm(')
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build sanity check
+        run: npm run build
+
+      - name: Remove one-shot workflow and commit fix
+        run: |
+          git rm .github/workflows/apply-xte-mercator-fix.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "Match XTE to displayed Mercator route track"
+          git push origin HEAD:fix/xte-mercator-track
