@@ -566,6 +566,64 @@ function distancePointToSegmentNm(
   };
 }
 
+function routeXteToSegmentNm(
+  shipLat: number,
+  shipLon: number,
+  startLat: number,
+  startLon: number,
+  endLat: number,
+  endLon: number,
+) {
+  const mercatorY = (lat: number) => {
+    const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+    return Math.log(Math.tan(Math.PI / 4 + toRad(clampedLat) / 2));
+  };
+
+  const startLonUnwrapped = startLon;
+  const endLonUnwrapped = unwrapLongitudeNear(endLon, startLonUnwrapped);
+  const shipLonUnwrapped = unwrapLongitudeNear(shipLon, startLonUnwrapped);
+
+  const startX = toRad(startLonUnwrapped);
+  const startY = mercatorY(startLat);
+  const endX = toRad(endLonUnwrapped);
+  const endY = mercatorY(endLat);
+  const shipX = toRad(shipLonUnwrapped);
+  const shipY = mercatorY(shipLat);
+
+  const vx = endX - startX;
+  const vy = endY - startY;
+  const wx = shipX - startX;
+  const wy = shipY - startY;
+  const legLengthSquared = vx * vx + vy * vy;
+
+  if (legLengthSquared <= 0) {
+    return {
+      distance: distanceNm(shipLat, shipLon, startLat, startLon),
+      alongTrack: 0,
+      legLength: 0,
+      side: "--",
+      projectionRatio: 0,
+    };
+  }
+
+  const rawRatio = (wx * vx + wy * vy) / legLengthSquared;
+  const projectionRatio = Math.max(0, Math.min(1, rawRatio));
+  const closestX = startX + projectionRatio * vx;
+  const closestY = startY + projectionRatio * vy;
+  const closestLat = toDeg(Math.atan(Math.sinh(closestY)));
+  const closestLon = toDeg(closestX);
+  const signedCross = vx * wy - vy * wx;
+  const legLength = distanceNm(startLat, startLon, endLat, endLon);
+
+  return {
+    distance: distanceNm(shipLat, shipLon, closestLat, closestLon),
+    alongTrack: legLength * projectionRatio,
+    legLength,
+    side: signedCross > 0 ? "STBD" : signedCross < 0 ? "PORT" : "--",
+    projectionRatio,
+  };
+}
+
 function nearestPointOnSegmentForBearing(
   shipLat: number,
   shipLon: number,
@@ -710,7 +768,7 @@ function logicalRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, currentL
   for (let i = 1; i < route.length; i += 1) {
     const start = route[i - 1];
     const end = route[i];
-    const result = distancePointToSegmentNm(
+    const result = routeXteToSegmentNm(
       ownShip.lat,
       ownShip.lon,
       start.lat,
@@ -746,7 +804,7 @@ function selectedRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, selecte
   const clampedIndex = Math.min(Math.max(selectedLegIndex, 1), route.length - 1);
   const start = route[clampedIndex - 1];
   const end = route[clampedIndex];
-  const result = distancePointToSegmentNm(
+  const result = routeXteToSegmentNm(
     ownShip.lat,
     ownShip.lon,
     start.lat,
