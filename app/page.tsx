@@ -763,7 +763,7 @@ function selectedRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, selecte
     alongTrack: result.alongTrack,
     legLength: result.legLength,
     side: result.side,
-    projectionRatio,
+    projectionRatio: result.projectionRatio,
   };
 }
 
