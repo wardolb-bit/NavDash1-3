@@ -1,0 +1,65 @@
+name: XTE Mercator Fix
+
+on:
+  push:
+    branches:
+      - fix/xte-mercator-track-2
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/xte-mercator-track-2
+          fetch-depth: 0
+      - name: Patch route XTE geometry only
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('app/page.tsx')
+          text = path.read_text()
+
+          anchor = '''function nearestPointOnSegmentForBearing(\n'''
+          helper = '''function routeXteToSegmentNm(\n  shipLat: number,\n  shipLon: number,\n  startLat: number,\n  startLon: number,\n  endLat: number,\n  endLon: number,\n) {\n  const mercatorY = (lat: number) => {\n    const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));\n    return Math.log(Math.tan(Math.PI / 4 + toRad(clampedLat) / 2));\n  };\n\n  const startLonUnwrapped = startLon;\n  const endLonUnwrapped = unwrapLongitudeNear(endLon, startLonUnwrapped);\n  const shipLonUnwrapped = unwrapLongitudeNear(shipLon, startLonUnwrapped);\n\n  const startX = toRad(startLonUnwrapped);\n  const startY = mercatorY(startLat);\n  const endX = toRad(endLonUnwrapped);\n  const endY = mercatorY(endLat);\n  const shipX = toRad(shipLonUnwrapped);\n  const shipY = mercatorY(shipLat);\n\n  const vx = endX - startX;\n  const vy = endY - startY;\n  const wx = shipX - startX;\n  const wy = shipY - startY;\n  const legLengthSquared = vx * vx + vy * vy;\n\n  if (legLengthSquared <= 0) {\n    return {\n      distance: distanceNm(shipLat, shipLon, startLat, startLon),\n      alongTrack: 0,\n      legLength: 0,\n      side: \"--\",\n      projectionRatio: 0,\n    };\n  }\n\n  const rawRatio = (wx * vx + wy * vy) / legLengthSquared;\n  const projectionRatio = Math.max(0, Math.min(1, rawRatio));\n  const closestX = startX + projectionRatio * vx;\n  const closestY = startY + projectionRatio * vy;\n  const closestLat = toDeg(Math.atan(Math.sinh(closestY)));\n  const closestLon = toDeg(closestX);\n  const signedCross = vx * wy - vy * wx;\n  const legLength = distanceNm(startLat, startLon, endLat, endLon);\n\n  return {\n    distance: distanceNm(shipLat, shipLon, closestLat, closestLon),\n    alongTrack: legLength * projectionRatio,\n    legLength,\n    side: signedCross > 0 ? \"STBD\" : signedCross < 0 ? \"PORT\" : \"--\",\n    projectionRatio,\n  };\n}\n\n'''
+
+          if 'function routeXteToSegmentNm(' in text:
+              raise SystemExit('routeXteToSegmentNm already exists; refusing to patch twice')
+          if anchor not in text:
+              raise SystemExit('expected insertion anchor not found')
+
+          text = text.replace(anchor, helper + anchor, 1)
+
+          logical_start = text.index('function logicalRouteLeg(')
+          selected_start = text.index('function selectedRouteLeg(')
+          remaining_start = text.index('function remainingRouteDistanceNm(')
+
+          logical = text[logical_start:selected_start]
+          selected = text[selected_start:remaining_start]
+
+          old_call = 'const result = distancePointToSegmentNm('
+          if logical.count(old_call) != 1:
+              raise SystemExit(f'expected exactly one logicalRouteLeg call, found {logical.count(old_call)}')
+          if selected.count(old_call) != 1:
+              raise SystemExit(f'expected exactly one selectedRouteLeg call, found {selected.count(old_call)}')
+
+          logical = logical.replace(old_call, 'const result = routeXteToSegmentNm(', 1)
+          selected = selected.replace(old_call, 'const result = routeXteToSegmentNm(', 1)
+          text = text[:logical_start] + logical + selected + text[remaining_start:]
+
+          path.write_text(text)
+          PY
+
+          git diff --check
+          git diff -- app/page.tsx
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "Fix XTE against displayed Mercator route track"
+          git push origin HEAD:fix/xte-mercator-track-2
