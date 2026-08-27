@@ -94,6 +94,17 @@ export function CelestialConsoleSkin() {
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {
           color:#000000 !important;
         }
+
+        /* MAIN is an anchor rather than a button, so give it the same explicit
+           Day-mode treatment as the rest of the console controls. */
+        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/"] {
+          background:#ffffff !important;
+          color:#000000 !important;
+          border-color:rgba(15,23,42,.28) !important;
+        }
+        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/"]:hover {
+          background:#f3f6f8 !important;
+        }
       `;
       document.head.appendChild(style);
     }
