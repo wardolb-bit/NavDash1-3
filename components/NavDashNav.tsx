@@ -42,7 +42,10 @@ const navGroups: NavGroup[] = [
   },
   {
     label: "Tools",
-    items: [{ label: "Watch Tools", href: "/tools" }],
+    items: [
+      { label: "Watch Tools", href: "/tools" },
+      { label: "Star Finder", href: "/celestial" },
+    ],
   },
   {
     label: "Mobile",
