@@ -56,8 +56,6 @@ export function CelestialConsoleSkin() {
           font-size:10px !important;
           letter-spacing:.08em !important;
         }
-        /* Active Celestial mode/view buttons use a dark label on the gold fill.
-           Tailwind's night-theme text override was otherwise making these white. */
         .bc-celestial-console button[class*="bg-[#c9a227]"] {
           color:#071019 !important;
           font-weight:900 !important;
@@ -70,46 +68,48 @@ export function CelestialConsoleSkin() {
           color:#dbe5ee !important;
           box-shadow:none !important;
         }
-        .bc-celestial-console [class*="rounded-"] {
-          border-radius:0 !important;
-        }
-        .bc-celestial-console [class*="shadow-"] {
-          box-shadow:none !important;
-        }
-        .bc-celestial-console [class*="backdrop-blur"] {
-          backdrop-filter:none !important;
-        }
+        .bc-celestial-console [class*="rounded-"] { border-radius:0 !important; }
+        .bc-celestial-console [class*="shadow-"] { box-shadow:none !important; }
+        .bc-celestial-console [class*="backdrop-blur"] { backdrop-filter:none !important; }
         .bc-celestial-console table,
-        .bc-celestial-console [role="table"] {
-          border-collapse:collapse !important;
-        }
+        .bc-celestial-console [role="table"] { border-collapse:collapse !important; }
         .bc-celestial-console ::-webkit-scrollbar { width:8px; height:8px; }
         .bc-celestial-console ::-webkit-scrollbar-track { background:#04080c; }
         .bc-celestial-console ::-webkit-scrollbar-thumb { background:#263442; }
 
-        /* Celestial banner/status information is plain black in Day mode.
-           This overrides gold, teal, grey and white informational utility text
-           while leaving button labels to the normal day-mode control styling. */
         html[data-navdash-theme="day"] .bc-celestial-console header [class*="text-"],
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {
           color:#000000 !important;
-        }
-
-        /* MAIN is an anchor rather than a button, so give it the same explicit
-           Day-mode treatment as the rest of the console controls. */
-        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/"] {
-          background:#ffffff !important;
-          color:#000000 !important;
-          border-color:rgba(15,23,42,.28) !important;
-        }
-        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/"]:hover {
-          background:#f3f6f8 !important;
         }
       `;
       document.head.appendChild(style);
     }
 
+    const syncMainLink = () => {
+      const link = main.querySelector<HTMLAnchorElement>('header a[href="/"]');
+      if (!link) return;
+      const isDay = document.documentElement.getAttribute("data-navdash-theme") === "day";
+      if (isDay) {
+        link.style.setProperty("background", "#ffffff", "important");
+        link.style.setProperty("background-color", "#ffffff", "important");
+        link.style.setProperty("color", "#000000", "important");
+        link.style.setProperty("border-color", "rgba(15,23,42,.28)", "important");
+      } else {
+        link.style.removeProperty("background");
+        link.style.removeProperty("background-color");
+        link.style.removeProperty("color");
+        link.style.removeProperty("border-color");
+      }
+    };
+
+    syncMainLink();
+    const observer = new MutationObserver(syncMainLink);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-navdash-theme"] });
+    const timer = window.setTimeout(syncMainLink, 250);
+
     return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
       main.classList.remove("bc-celestial-console");
     };
   }, [pathname]);
