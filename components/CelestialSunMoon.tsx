@@ -38,6 +38,7 @@ function localDayStartUtc(date:Date,offset:number){
 }
 function minutesToLocalText(minutes:EventValue){if(minutes===null)return"--";let m=((minutes%1440)+1440)%1440;const h=Math.floor(m/60),mm=Math.round(m%60);const hh=(h+(mm===60?1:0))%24;return`${String(hh).padStart(2,"0")}:${String(mm===60?0:mm).padStart(2,"0")}`}
 function utcMinutesToLocal(utcMinutes:number,offset:number){return utcMinutes+offset*60}
+function azText(value:number){return`${String(Math.round(norm(value))).padStart(3,"0")}°T`}
 
 function solarParams(date:Date){
  const jd=date.getTime()/86400000+2440587.5,t=(jd-2451545)/36525;
@@ -51,7 +52,7 @@ function solarParams(date:Date){
  const decl=deg(Math.asin(Math.sin(rad(eps))*Math.sin(rad(lambda))));
  const y=Math.tan(rad(eps/2))**2;
  const eq=4*deg(y*Math.sin(2*rad(L0))-2*e*Math.sin(rad(M))+4*e*y*Math.sin(rad(M))*Math.cos(2*rad(L0))-0.5*y*y*Math.sin(4*rad(L0))-1.25*e*e*Math.sin(2*rad(M)));
- return{decl,eq};
+ return{decl,eq,lambda,eps};
 }
 function solarEvent(lat:number,lon:number,date:Date,alt:number,rise:boolean){
  const noonUtc=new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth(),date.getUTCDate(),12));
@@ -66,6 +67,7 @@ function solarEvents(lat:number,lon:number,date:Date,offset:number):SolarEvents{
  const p=solarParams(noon),lan=utcMinutesToLocal(720-4*lon-p.eq,offset);
  return{sunrise:e(-0.833,true),sunset:e(-0.833,false),civilDawn:e(-6,true),civilDusk:e(-6,false),nauticalDawn:e(-12,true),nauticalDusk:e(-12,false),astroDawn:e(-18,true),astroDusk:e(-18,false),lan};
 }
+function sunRaDec(date:Date){const p=solarParams(date),lambda=rad(p.lambda),eps=rad(p.eps);return{ra:norm(deg(Math.atan2(Math.cos(eps)*Math.sin(lambda),Math.cos(lambda)))),dec:deg(Math.asin(Math.sin(eps)*Math.sin(lambda)))}}
 
 function moonRaDec(date:Date){
  const d=date.getTime()/86400000+2440587.5-2451543.5;
@@ -82,6 +84,7 @@ function moonRaDec(date:Date){
  return{ra:norm(deg(Math.atan2(yeq,xeq))),dec:deg(Math.atan2(zeq,Math.sqrt(xeq*xeq+yeq*yeq)))};
 }
 function gmst(date:Date){const jd=date.getTime()/86400000+2440587.5,t=(jd-2451545)/36525;return norm(280.46061837+360.98564736629*(jd-2451545)+0.000387933*t*t-t*t*t/38710000)}
+function bodyAzimuth(lat:number,lon:number,date:Date,body:{ra:number;dec:number}){const H=rad(norm(gmst(date)+lon-body.ra));const az=deg(Math.atan2(Math.sin(H),Math.cos(H)*Math.sin(rad(lat))-Math.tan(rad(body.dec))*Math.cos(rad(lat))));return norm(az+180)}
 function moonAlt(lat:number,lon:number,date:Date){const m=moonRaDec(date),H=rad(norm(gmst(date)+lon-m.ra));return deg(Math.asin(Math.sin(rad(lat))*Math.sin(rad(m.dec))+Math.cos(rad(lat))*Math.cos(rad(m.dec))*Math.cos(H)))}
 function sunEclipticLon(date:Date){const jd=date.getTime()/86400000+2440587.5,t=(jd-2451545)/36525,L0=norm(280.46646+t*(36000.76983+t*0.0003032)),M=norm(357.52911+t*(35999.05029-0.0001537*t)),C=Math.sin(rad(M))*(1.914602-t*(0.004817+0.000014*t))+Math.sin(rad(2*M))*(0.019993-0.000101*t)+Math.sin(rad(3*M))*0.000289;return norm(L0+C)}
 function moonEclipticLon(date:Date){const d=date.getTime()/86400000+2440587.5-2451543.5,N=norm(125.1228-0.0529538083*d),w=norm(318.0634+0.1643573223*d),M=norm(115.3654+13.0649929509*d);return norm(N+w+M)}
@@ -106,18 +109,22 @@ export function CelestialSunMoon(){
  useEffect(()=>{if(!pathname.startsWith("/celestial")){setBannerTarget(null);setPlannerTarget(null);return}let stop=false,timer=0;const scan=()=>{if(stop)return;const main=document.querySelector("main");const header=main?.querySelector("header") as HTMLElement|null;if(header){let slot=document.getElementById("celestial-sunmoon-banner-slot") as HTMLElement|null;if(!slot){slot=document.createElement("div");slot.id="celestial-sunmoon-banner-slot";header.insertAdjacentElement("afterend",slot)}setBannerTarget(slot)}const buttons=Array.from(main?.querySelectorAll("button")||[]);const planner=buttons.find(b=>b.textContent?.trim()==="SIGHT PLANNER") as HTMLButtonElement|undefined;const active=!!planner&&(getComputedStyle(planner).backgroundColor!=="rgb(8, 18, 27)");setPlannerActive(active);const input=main?.querySelector('input[type="datetime-local"]') as HTMLInputElement|null;if(input?.value){const d=new Date(input.value);if(!Number.isNaN(d.getTime()))setPlannerDate(d)}if(active){let pslot=document.getElementById("celestial-sunmoon-planner-slot") as HTMLElement|null;if(!pslot){pslot=document.createElement("div");pslot.id="celestial-sunmoon-planner-slot";slot?.insertAdjacentElement("afterend",pslot)}setPlannerTarget(pslot)}else setPlannerTarget(null);timer=window.setTimeout(scan,300)};scan();return()=>{stop=true;window.clearTimeout(timer)}},[pathname]);
 
  const offset=shipOffsetHours(pos.lon),solar=useMemo(()=>solarEvents(pos.lat,pos.lon,now,offset),[pos.lat,pos.lon,now,offset]),moon=useMemo(()=>moonEvents(pos.lat,pos.lon,now,offset),[pos.lat,pos.lon,now,offset]);
+ const sunAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,now,sunRaDec(now)),[pos.lat,pos.lon,now]),moonAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,now,moonRaDec(now)),[pos.lat,pos.lon,now]);
  const pDate=plannerDate??now,pOffset=shipOffsetHours(pos.lon),pSolar=useMemo(()=>solarEvents(pos.lat,pos.lon,pDate,pOffset),[pos.lat,pos.lon,pDate,pOffset]),pMoon=useMemo(()=>moonEvents(pos.lat,pos.lon,pDate,pOffset),[pos.lat,pos.lon,pDate,pOffset]);
+ const pSunAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,pDate,sunRaDec(pDate)),[pos.lat,pos.lon,pDate]),pMoonAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,pDate,moonRaDec(pDate)),[pos.lat,pos.lon,pDate]);
  if(!pathname.startsWith("/celestial"))return null;
  const cell="border-r border-[#263442] px-3 py-2 last:border-r-0";
  const lab="text-[8px] font-black tracking-[.15em] text-[#708496]";
  const val="mt-1 text-[13px] font-black text-[#dbe5ee]";
  return <>
-  {bannerTarget&&createPortal(<div className="mb-[5px] grid grid-cols-2 border border-[#263442] bg-[#071019] sm:grid-cols-3 xl:grid-cols-6">
+  {bannerTarget&&createPortal(<div className="mb-[5px] grid grid-cols-2 border border-[#263442] bg-[#071019] sm:grid-cols-4 xl:grid-cols-8">
    <div className={cell}><div className={lab}>SHIP LT</div><div className={`${val} text-[#e7c95c]`}>{new Date(now.getTime()+offset*3600000).toISOString().slice(11,16)} · {offsetLabel(offset)}</div></div>
    <div className={cell}><div className={lab}>SUNRISE</div><div className={val}>{minutesToLocalText(solar.sunrise)}</div></div>
    <div className={cell}><div className={lab}>SUNSET</div><div className={val}>{minutesToLocalText(solar.sunset)}</div></div>
+   <div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#e7c95c]`}>{azText(sunAz)}</div></div>
    <div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(moon.moonrise)}</div></div>
    <div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(moon.moonset)}</div></div>
+   <div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#42d3c8]`}>{azText(moonAz)}</div></div>
    <div className={cell}><div className={lab}>MOON</div><div className={`${val} text-[#42d3c8]`}>{moon.illumination.toFixed(0)}% ILLUM</div></div>
   </div>,bannerTarget)}
   {plannerActive&&plannerTarget&&createPortal(<section className="mb-[5px] border border-[#263442] bg-[#071019]">
@@ -125,7 +132,7 @@ export function CelestialSunMoon(){
    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
     {[["ASTRO DAWN",pSolar.astroDawn],["NAUT DAWN",pSolar.nauticalDawn],["CIVIL DAWN",pSolar.civilDawn],["SUNRISE",pSolar.sunrise],["LAN",pSolar.lan],["SUNSET",pSolar.sunset],["NAUT DUSK",pSolar.nauticalDusk],["ASTRO DUSK",pSolar.astroDusk]].map(([a,b])=><div key={String(a)} className={cell}><div className={lab}>{a}</div><div className={a==="NAUT DAWN"||a==="NAUT DUSK"||a==="LAN"?`${val} text-[#e7c95c]`:val}>{minutesToLocalText(b as EventValue)}</div></div>)}
    </div>
-   <div className="grid grid-cols-3 border-t border-[#263442]"><div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(pMoon.moonrise)}</div></div><div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(pMoon.moonset)}</div></div><div className={cell}><div className={lab}>MOON ILLUMINATION</div><div className={`${val} text-[#42d3c8]`}>{pMoon.illumination.toFixed(0)}%</div></div></div>
+   <div className="grid grid-cols-2 border-t border-[#263442] md:grid-cols-5"><div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#e7c95c]`}>{azText(pSunAz)}</div></div><div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(pMoon.moonrise)}</div></div><div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(pMoon.moonset)}</div></div><div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#42d3c8]`}>{azText(pMoonAz)}</div></div><div className={cell}><div className={lab}>MOON ILLUMINATION</div><div className={`${val} text-[#42d3c8]`}>{pMoon.illumination.toFixed(0)}%</div></div></div>
   </section>,plannerTarget)}
  </>;
 }
