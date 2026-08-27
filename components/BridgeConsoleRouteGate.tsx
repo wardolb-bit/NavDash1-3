@@ -11,13 +11,13 @@ import { BridgeMapLayerControls } from "./BridgeMapLayerControls";
 import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
 import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
+import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 
 /**
- * Keep the bridge-console DOM enhancers scoped to the main Nav Console route.
- *
- * The helpers also wait until Leaflet has actually initialized the main map.
- * This avoids racing the map mount on route return, which can leave the map
- * container resized before Leaflet has created its panes/tiles.
+ * Keep the main bridge-console DOM enhancers scoped to the main Nav Console route.
+ * Celestial gets its own presentation-only skin so every workstation mode uses
+ * the same current compact bridge-console visual language without touching the
+ * celestial calculations or AIS logic.
  */
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
@@ -55,6 +55,10 @@ export function BridgeConsoleRouteGate() {
       window.clearTimeout(timer);
     };
   }, [pathname]);
+
+  if (pathname.startsWith("/celestial")) {
+    return <CelestialConsoleSkin />;
+  }
 
   if (pathname !== "/" || !mapReady) return null;
 
