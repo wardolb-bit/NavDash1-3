@@ -86,6 +86,14 @@ export function CelestialConsoleSkin() {
         .bc-celestial-console ::-webkit-scrollbar { width:8px; height:8px; }
         .bc-celestial-console ::-webkit-scrollbar-track { background:#04080c; }
         .bc-celestial-console ::-webkit-scrollbar-thumb { background:#263442; }
+
+        /* Celestial banner/status information is plain black in Day mode.
+           This overrides gold, teal, grey and white informational utility text
+           while leaving button labels to the normal day-mode control styling. */
+        html[data-navdash-theme="day"] .bc-celestial-console header [class*="text-"],
+        html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {
+          color:#000000 !important;
+        }
       `;
       document.head.appendChild(style);
     }
