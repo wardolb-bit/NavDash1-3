@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { getAisWebSocketUrl } from "../../../lib/aisWebSocket";
 import { solveNavStars, type StarSolution } from "../../../lib/celestial";
-import { useBridgeTheme } from "../../../lib/useBridgeTheme";
 
 type ViewMode = "ahead" | "port" | "starboard" | "astern" | "360";
 type NavState = { lat: number; lon: number; heading: number | null; cog: number | null };
@@ -37,55 +36,56 @@ function decode(line: string): Partial<NavState> | null {
   return null;
 }
 
-function BridgeSky({ stars, center, dayMode }: { stars: StarSolution[]; center: number; dayMode: boolean }) {
-  const w = 1000, h = 560, left = 55, right = 945, top = 35, horizon = 455, maxAlt = 75;
+function BridgeSky({ stars, center }: { stars: StarSolution[]; center: number }) {
+  const w = 1200, h = 640, left = 64, right = 1136, top = 34, horizon = 515, maxAlt = 75;
   const shown = stars.map(s => ({ ...s, rel: signedRel(s.zn, center) })).filter(s => Math.abs(s.rel) <= 90 && s.hc >= 0 && s.hc <= maxAlt);
-  const sky = dayMode ? "#f8fafc" : "#020508";
-  const lower = dayMode ? "#e2e8f0" : "#07090b";
-  const grid = dayMode ? "#cbd5e1" : "#18222d";
-  const minor = dayMode ? "#dbe3ec" : "#16202a";
-  const text = dayMode ? "#475569" : "#64748b";
-  return <svg viewBox={`0 0 ${w} ${h}`} className="w-full" aria-label="Bridge window star view">
-    <rect x={left} y={top} width={right - left} height={horizon - top} fill={sky} stroke={dayMode ? "#94a3b8" : "#334155"} />
-    <rect x={left} y={horizon} width={right - left} height="65" fill={lower} stroke={dayMode ? "#94a3b8" : "#334155"} />
-    {[10, 20, 30, 45, 60].map(a => { const y = horizon - (a / maxAlt) * (horizon - top); return <g key={a}><line x1={left} x2={right} y1={y} y2={y} stroke={grid} strokeDasharray="5 7" /><text x={left + 8} y={y - 5} fill={text} fontSize="13">{a}°</text></g>; })}
-    <line x1={left} x2={right} y1={horizon} y2={horizon} stroke="#c9a227" strokeWidth="3" />
-    <text x={left + 8} y={horizon + 20} fill="#c9a227" fontSize="13" fontWeight="800">HORIZON 0°</text>
-    {[-90, -45, 0, 45, 90].map(r => { const x = left + ((r + 90) / 180) * (right - left); return <g key={r}><line x1={x} x2={x} y1={top} y2={horizon} stroke={r === 0 ? (dayMode ? "#64748b" : "#64748b") : minor} strokeDasharray={r === 0 ? "" : "4 8"} /><text x={x} y={542} textAnchor="middle" fill={r === 0 ? "#c9a227" : text} fontSize="14" fontWeight="800">{r === 0 ? "LOOK" : r < 0 ? `P ${Math.abs(r)}°` : `S ${r}°`}</text></g>; })}
-    {shown.map(s => { const x = left + ((s.rel + 90) / 180) * (right - left); const y = horizon - (s.hc / maxAlt) * (horizon - top); const bright = s.mag <= 1.5; return <g key={s.name}><circle cx={x} cy={y} r={bright ? 5 : 3.5} fill={bright ? "#c9a227" : dayMode ? "#be123c" : "#fca5a5"} /><text x={x + 8} y={y - 8} fill={bright ? (dayMode ? "#8a6b00" : "#fde68a") : dayMode ? "#9f1239" : "#fecaca"} fontSize="13" fontWeight="800">{s.name}</text><text x={x + 8} y={y + 8} fill={text} fontSize="10">Hc {s.hc.toFixed(0)}° · Zn {s.zn.toFixed(0)}°T</text></g>; })}
+  return <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full" aria-label="Bridge window star view">
+    <rect x={left} y={top} width={right - left} height={horizon - top} fill="#03070b" stroke="#20303d" />
+    <rect x={left} y={horizon} width={right - left} height="76" fill="#050a0f" stroke="#20303d" />
+    {[10, 20, 30, 45, 60].map(a => { const y = horizon - (a / maxAlt) * (horizon - top); return <g key={a}><line x1={left} x2={right} y1={y} y2={y} stroke="#15232e" strokeDasharray="5 8" /><text x={left + 10} y={y - 6} fill="#708496" fontSize="13" fontWeight="700">{a}°</text></g>; })}
+    <line x1={left} x2={right} y1={horizon} y2={horizon} stroke="#c9a227" strokeWidth="2.5" />
+    <text x={left + 10} y={horizon + 22} fill="#e7c95c" fontSize="13" fontWeight="900">HORIZON 0°</text>
+    {[-90, -45, 0, 45, 90].map(r => { const x = left + ((r + 90) / 180) * (right - left); return <g key={r}><line x1={x} x2={x} y1={top} y2={horizon} stroke={r === 0 ? "#536a7c" : "#13202a"} strokeDasharray={r === 0 ? "" : "4 8"} /><text x={x} y={618} textAnchor="middle" fill={r === 0 ? "#e7c95c" : "#8294a5"} fontSize="13" fontWeight="900">{r === 0 ? "LOOK" : r < 0 ? `P ${Math.abs(r)}°` : `S ${r}°`}</text></g>; })}
+    {shown.map(s => { const x = left + ((s.rel + 90) / 180) * (right - left); const y = horizon - (s.hc / maxAlt) * (horizon - top); const bright = s.mag <= 1.5; return <g key={s.name}><circle cx={x} cy={y} r={bright ? 5 : 3.5} fill={bright ? "#e7c95c" : "#dca0a8"} /><text x={x + 8} y={y - 8} fill={bright ? "#f1df8a" : "#e3b3ba"} fontSize="12" fontWeight="900">{s.name}</text><text x={x + 8} y={y + 8} fill="#708496" fontSize="10">Hc {s.hc.toFixed(0)}°  Zn {s.zn.toFixed(0)}°T</text></g>; })}
   </svg>;
 }
 
-function Horizon360({ stars, dayMode }: { stars: StarSolution[]; dayMode: boolean }) {
+function Horizon360({ stars }: { stars: StarSolution[] }) {
   const size = 680, c = size / 2, radius = 296;
   const shown = stars.filter(s => s.hc >= 0 && s.hc <= 90);
-  return <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-auto w-full max-w-[720px]" aria-label="360 degree navigational star horizon plot">
-    <circle cx={c} cy={c} r={radius} fill={dayMode ? "#f8fafc" : "#020508"} stroke={dayMode ? "#94a3b8" : "#64748b"} strokeWidth="2" />
-    {[10, 20, 30, 45, 60].map(alt => { const r = ((90 - alt) / 90) * radius; return <g key={alt}><circle cx={c} cy={c} r={r} fill="none" stroke={dayMode ? "#cbd5e1" : "#253342"} strokeDasharray="5 7" /><text x={c + 6} y={c - r - 5} fill={dayMode ? "#64748b" : "#64748b"} fontSize="12">{alt}°</text></g>; })}
-    {[0, 90, 180, 270].map(az => { const a = az * Math.PI / 180; return <line key={az} x1={c} y1={c} x2={c + radius * Math.sin(a)} y2={c - radius * Math.cos(a)} stroke={dayMode ? "#cbd5e1" : "#263442"} />; })}
-    <text x={c} y="25" textAnchor="middle" fill="#c9a227" fontWeight="800">N 000°</text><text x={size - 10} y={c + 5} textAnchor="end" fill="#c9a227" fontWeight="800">E 090°</text><text x={c} y={size - 10} textAnchor="middle" fill="#c9a227" fontWeight="800">S 180°</text><text x="10" y={c + 5} fill="#c9a227" fontWeight="800">W 270°</text>
-    {shown.map(s => { const r = ((90 - s.hc) / 90) * radius; const a = s.zn * Math.PI / 180; const x = c + r * Math.sin(a), y = c - r * Math.cos(a); const bright = s.mag <= 1.5; return <g key={s.name}><circle cx={x} cy={y} r={bright ? 5 : 3.5} fill={bright ? "#c9a227" : dayMode ? "#be123c" : "#fca5a5"} /><text x={x + 8} y={y - 7} fill={bright ? (dayMode ? "#8a6b00" : "#fde68a") : dayMode ? "#9f1239" : "#fecaca"} fontSize="12" fontWeight="800">{s.name}</text></g>; })}
+  return <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto h-full max-h-[680px] w-full max-w-[680px]" aria-label="360 degree navigational star horizon plot">
+    <circle cx={c} cy={c} r={radius} fill="#03070b" stroke="#536a7c" strokeWidth="2" />
+    {[10, 20, 30, 45, 60].map(alt => { const r = ((90 - alt) / 90) * radius; return <g key={alt}><circle cx={c} cy={c} r={r} fill="none" stroke="#20303d" strokeDasharray="5 7" /><text x={c + 6} y={c - r - 5} fill="#708496" fontSize="12">{alt}°</text></g>; })}
+    {[0, 90, 180, 270].map(az => { const a = az * Math.PI / 180; return <line key={az} x1={c} y1={c} x2={c + radius * Math.sin(a)} y2={c - radius * Math.cos(a)} stroke="#20303d" />; })}
+    <text x={c} y="25" textAnchor="middle" fill="#e7c95c" fontWeight="900">N 000°</text><text x={size - 10} y={c + 5} textAnchor="end" fill="#e7c95c" fontWeight="900">E 090°</text><text x={c} y={size - 10} textAnchor="middle" fill="#e7c95c" fontWeight="900">S 180°</text><text x="10" y={c + 5} fill="#e7c95c" fontWeight="900">W 270°</text>
+    {shown.map(s => { const r = ((90 - s.hc) / 90) * radius; const a = s.zn * Math.PI / 180; const x = c + r * Math.sin(a), y = c - r * Math.cos(a); const bright = s.mag <= 1.5; return <g key={s.name}><circle cx={x} cy={y} r={bright ? 5 : 3.5} fill={bright ? "#e7c95c" : "#dca0a8"} /><text x={x + 8} y={y - 7} fill={bright ? "#f1df8a" : "#e3b3ba"} fontSize="12" fontWeight="900">{s.name}</text></g>; })}
   </svg>;
 }
 
 export default function BridgeCelestial() {
-  const { dayMode, toggleTheme } = useBridgeTheme();
   const [nav, setNav] = useState<NavState>({ lat: 13.4443, lon: 144.7937, heading: null, cog: null });
   const [mode, setMode] = useState<ViewMode>("ahead");
-  const [status, setStatus] = useState("Connecting AIS…");
+  const [status, setStatus] = useState("CONNECTING");
   const [now, setNow] = useState(new Date());
 
-  useEffect(() => { const id = setInterval(() => setNow(new Date()), 15000); return () => clearInterval(id); }, []);
+  useEffect(() => {
+    const globalNav = document.querySelector<HTMLElement>("body > nav");
+    const prior = globalNav?.style.display;
+    if (globalNav) globalNav.style.setProperty("display", "none", "important");
+    return () => { if (globalNav) globalNav.style.display = prior || ""; };
+  }, []);
+
+  useEffect(() => { const id = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(id); }, []);
   useEffect(() => {
     let ws: WebSocket | null = null, retry: number | undefined, done = false;
     const connect = () => {
       try {
         ws = new WebSocket(getAisWebSocketUrl());
-        ws.onopen = () => setStatus("AIS link connected");
-        ws.onerror = () => setStatus("AIS link unavailable");
-        ws.onclose = () => { setStatus("AIS link unavailable"); if (!done) retry = window.setTimeout(connect, 3000); };
+        ws.onopen = () => setStatus("AIS LIVE");
+        ws.onerror = () => setStatus("AIS OFFLINE");
+        ws.onclose = () => { setStatus("AIS OFFLINE"); if (!done) retry = window.setTimeout(connect, 3000); };
         ws.onmessage = e => { try { const m = JSON.parse(String(e.data)); if (m?.type !== "nmea" || typeof m.line !== "string") return; const d = decode(m.line); if (d) setNav(v => ({ ...v, ...d })); } catch {} };
-      } catch { setStatus("AIS link unavailable"); }
+      } catch { setStatus("AIS OFFLINE"); }
     };
     connect();
     return () => { done = true; if (retry) clearTimeout(retry); ws?.close(); };
@@ -95,93 +95,43 @@ export default function BridgeCelestial() {
   const offset = mode === "port" ? -90 : mode === "starboard" ? 90 : mode === "astern" ? 180 : 0;
   const center = norm(base + offset);
   const stars = useMemo(() => solveNavStars(nav.lat, nav.lon, now), [nav.lat, nav.lon, now]);
-  const labels: { id: ViewMode; label: string }[] = [
-    { id: "port", label: "PORT" },
-    { id: "ahead", label: "AHEAD" },
-    { id: "starboard", label: "STARBOARD" },
-    { id: "astern", label: "ASTERN" },
-    { id: "360", label: "360°" },
+  const modes: { id: ViewMode; label: string }[] = [
+    { id: "port", label: "PORT" }, { id: "ahead", label: "AHEAD" }, { id: "starboard", label: "STARBOARD" }, { id: "astern", label: "ASTERN" }, { id: "360", label: "360°" },
   ];
 
-  const pageClass = dayMode ? "min-h-screen bg-white text-slate-950" : "min-h-screen bg-[#071019] text-slate-100";
-  const panelClass = dayMode
-    ? "rounded-[2rem] border border-slate-300 bg-white p-5 shadow-xl shadow-slate-900/10"
-    : "rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 shadow-2xl shadow-black/40 backdrop-blur-xl";
-  const softPanelClass = dayMode
-    ? "rounded-3xl border border-slate-300 bg-slate-50 p-4"
-    : "rounded-3xl border border-white/10 bg-black/25 p-4";
-  const buttonOff = dayMode
-    ? "rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-800 hover:bg-slate-50"
-    : "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-slate-100 hover:bg-white/15";
-
   return (
-    <main className={`${pageClass} navdash-readable-font relative overflow-hidden`}>
-      <div className={dayMode ? "absolute inset-0 bg-white" : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)]"} />
+    <main className="min-h-screen bg-[#04080c] p-[6px] font-sans text-[#dbe5ee]">
+      <div className="grid h-[46px] grid-cols-[260px_1fr_180px] items-center border border-[#c9a227]/30 bg-[#071019] px-3 text-[11px] font-bold tracking-[0.08em]">
+        <div className="flex items-center gap-2.5"><span className="grid h-7 w-7 place-items-center border border-[#c9a227] text-[15px] font-black text-[#e7c95c]">N</span><span className="flex flex-col leading-none"><b>NAVDASH</b><small className="mt-1 text-[8px] tracking-[0.14em] text-[#8294a5]">M/V MB480 · CELESTIAL CONSOLE</small></span></div>
+        <div className="flex justify-center gap-2"><span className="border border-slate-400/20 bg-[#050a0f] px-2.5 py-1.5 text-[9px] text-[#aebdca]"><i className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${status === "AIS LIVE" ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,.55)]" : "bg-amber-400"}`} />{status}</span><span className="border border-slate-400/20 bg-[#050a0f] px-2.5 py-1.5 text-[9px] text-[#aebdca]">HDG {nav.heading?.toFixed(0) ?? "--"}°</span><span className="border border-slate-400/20 bg-[#050a0f] px-2.5 py-1.5 text-[9px] text-[#aebdca]">COG {nav.cog?.toFixed(0) ?? "--"}°</span></div>
+        <div className="text-right text-[9px] tracking-[0.16em] text-[#e7c95c]">{now.toISOString().slice(11, 19)} UTC</div>
+      </div>
 
-      <div className={`relative z-10 min-h-screen p-4 2xl:p-6 ${dayMode ? "navdash-v12-day" : "navdash-v12-night"}`}>
-        <div className="mx-auto max-w-[1500px] space-y-5">
-          <header className={panelClass}>
-            <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex items-center gap-4">
-                <div className="grid h-16 w-16 place-items-center rounded-3xl border border-[#c9a227]/45 bg-[#c9a227]/15 text-3xl font-black text-[#c9a227]">✦</div>
-                <div>
-                  <div className="text-xs font-bold uppercase tracking-[0.42em] text-[#c9a227]">M/V MB480 · Celestial</div>
-                  <h1 className={dayMode ? "text-4xl font-black tracking-tight text-slate-950 2xl:text-5xl" : "text-4xl font-black tracking-tight text-white 2xl:text-5xl"}>Star Finder</h1>
-                  <div className={dayMode ? "mt-1 text-sm text-slate-700" : "mt-1 text-sm text-slate-300"}>Bridge-oriented celestial identification and sight planning</div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 xl:justify-end">
-                <div className={softPanelClass}>
-                  <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">UTC</div>
-                  <div className="mt-1 text-lg font-black text-[#c9a227]">{now.toISOString().slice(11, 19)}</div>
-                </div>
-                <div className={softPanelClass}>
-                  <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Feed</div>
-                  <div className={`mt-1 text-sm font-black ${status.includes("connected") ? "text-emerald-400" : "text-amber-400"}`}>{status}</div>
-                </div>
-                <Link href="/" className={buttonOff}>Main Console</Link>
-                <button onClick={toggleTheme} className={buttonOff}>{dayMode ? "Bridge Night" : "Day Mode"}</button>
-              </div>
-            </div>
-          </header>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-            {labels.map(v => (
-              <button
-                key={v.id}
-                onClick={() => setMode(v.id)}
-                className={mode === v.id ? "rounded-2xl border border-[#c9a227]/50 bg-[#c9a227] px-4 py-3 text-sm font-black tracking-wider text-[#111827] shadow-lg shadow-[#c9a227]/20" : buttonOff}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
-
-          <section className={panelClass}>
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <div className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Celestial Display</div>
-                <h2 className={dayMode ? "mt-1 text-3xl font-black text-slate-950" : "mt-1 text-3xl font-black text-white"}>{mode === "360" ? "360° Horizon Plot" : `${mode.toUpperCase()} Bridge View`}</h2>
-              </div>
-              <div className="text-sm font-black text-[#c9a227]">{mode === "360" ? "North-up true reference" : `Looking ${center.toFixed(0)}° T`}</div>
-            </div>
-            <div className={dayMode ? "overflow-hidden rounded-[1.6rem] border border-slate-300 bg-slate-50 p-3" : "overflow-hidden rounded-[1.6rem] border border-white/10 bg-black/30 p-3"}>
-              {mode === "360" ? <Horizon360 stars={stars} dayMode={dayMode} /> : <BridgeSky stars={stars} center={center} dayMode={dayMode} />}
-            </div>
-          </section>
-
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <div className={softPanelClass}><div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">View</div><div className="mt-2 text-2xl font-black text-[#c9a227]">{mode === "360" ? "360° TRUE" : `${center.toFixed(0)}° T`}</div></div>
-            <div className={softPanelClass}><div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Reference</div><div className={dayMode ? "mt-2 text-2xl font-black text-slate-950" : "mt-2 text-2xl font-black text-white"}>{nav.heading !== null ? "HEADING" : nav.cog !== null ? "COG" : "NORTH"}</div></div>
-            <div className={softPanelClass}><div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Ship HDG / COG</div><div className={dayMode ? "mt-2 text-2xl font-black text-slate-950" : "mt-2 text-2xl font-black text-white"}>{nav.heading?.toFixed(0) ?? "--"}° / {nav.cog?.toFixed(0) ?? "--"}°</div></div>
-            <div className={softPanelClass}><div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Position</div><div className={dayMode ? "mt-2 text-lg font-black text-slate-950" : "mt-2 text-lg font-black text-white"}>{nav.lat.toFixed(4)}° / {nav.lon.toFixed(4)}°</div></div>
-          </section>
-
-          <div className={dayMode ? "rounded-3xl border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950" : "rounded-3xl border border-amber-300/30 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100"}>
-            <span className="font-black">Celestial note:</span> Bridge View uses true heading when available and COG as fallback. The 360° view is north-up. Use current Nautical Almanac data and normal celestial-navigation procedures for sights and reductions.
-          </div>
+      <div className="mt-[5px] flex h-[40px] items-center justify-between border border-slate-400/15 bg-[#071019] px-1.5">
+        <div className="flex gap-1">
+          {modes.map(v => <button key={v.id} onClick={() => setMode(v.id)} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black tracking-[0.08em] ${mode === v.id ? "border-[#c9a227]/60 bg-[#c9a227]/15 text-[#e7c95c]" : "border-slate-400/25 bg-[#071019] text-[#c7d2dc] hover:border-slate-300/40"}`}>{v.label}</button>)}
         </div>
+        <Link href="/" className="grid h-[30px] min-w-[108px] place-items-center border border-slate-400/25 bg-[#071019] px-2 text-[10px] font-black tracking-[0.08em] text-[#c7d2dc] hover:border-[#c9a227]/60 hover:text-[#e7c95c]">MAIN CONSOLE</Link>
+      </div>
+
+      <div className="mt-[5px] grid min-h-[calc(100vh-102px)] grid-cols-[minmax(0,1fr)_330px] gap-[5px]">
+        <section className="flex min-h-[650px] flex-col border border-slate-400/15 bg-[#071019]">
+          <div className="flex h-[38px] items-center justify-between border-b border-slate-400/15 px-3"><span className="text-[9px] font-black tracking-[0.16em] text-[#c9a227]">CELESTIAL DISPLAY</span><strong className="text-[11px] text-[#e7c95c]">{mode === "360" ? "360° TRUE HORIZON" : `${mode.toUpperCase()} · ${center.toFixed(0)}°T`}</strong></div>
+          <div className="min-h-0 flex-1 p-2">{mode === "360" ? <Horizon360 stars={stars} /> : <BridgeSky stars={stars} center={center} />}</div>
+        </section>
+
+        <aside className="flex min-h-[650px] flex-col border border-slate-400/15 bg-[#071019]">
+          <div className="border-b border-slate-400/15 p-3"><span className="block text-[8px] font-black tracking-[0.16em] text-[#c9a227]">STAR FINDER</span><b className="mt-2 block text-[16px] leading-none text-[#e7c95c]">{mode === "360" ? "TRUE HORIZON" : `${mode.toUpperCase()} VIEW`}</b><small className="mt-1.5 block text-[10px] text-[#9aabba]">Navigational stars only</small></div>
+          <div className="border-b border-slate-400/15 p-3"><label className="mb-1 block text-[8px] font-black tracking-[0.16em] text-[#708496]">OWN SHIP</label><strong className="block text-[20px] font-extrabold leading-tight text-[#42d3c8]">{Math.abs(nav.lat).toFixed(4)}° {nav.lat >= 0 ? "N" : "S"}</strong><strong className="block text-[20px] font-extrabold leading-tight text-[#42d3c8]">{Math.abs(nav.lon).toFixed(4)}° {nav.lon >= 0 ? "E" : "W"}</strong></div>
+          <div className="grid grid-cols-2 border-b border-slate-400/15">
+            <div className="min-h-[86px] border-b border-r border-slate-400/15 p-3"><label className="mb-1 block text-[8px] font-black tracking-[0.16em] text-[#708496]">LOOKING</label><strong className="text-[28px] font-extrabold leading-none text-[#edf4fa]">{mode === "360" ? "360°" : `${center.toFixed(0)}°`}</strong></div>
+            <div className="min-h-[86px] border-b border-slate-400/15 p-3"><label className="mb-1 block text-[8px] font-black tracking-[0.16em] text-[#708496]">REFERENCE</label><strong className="text-[20px] font-extrabold leading-none text-[#edf4fa]">{nav.heading !== null ? "HDG" : nav.cog !== null ? "COG" : "NORTH"}</strong></div>
+            <div className="min-h-[86px] border-r border-slate-400/15 p-3"><label className="mb-1 block text-[8px] font-black tracking-[0.16em] text-[#708496]">HEADING</label><strong className="text-[28px] font-extrabold leading-none text-[#edf4fa]">{nav.heading?.toFixed(0) ?? "--"}°</strong></div>
+            <div className="min-h-[86px] p-3"><label className="mb-1 block text-[8px] font-black tracking-[0.16em] text-[#708496]">COG</label><strong className="text-[28px] font-extrabold leading-none text-[#edf4fa]">{nav.cog?.toFixed(0) ?? "--"}°</strong></div>
+          </div>
+          <div className="p-3"><label className="mb-2 block text-[8px] font-black tracking-[0.16em] text-[#708496]">DISPLAY REFERENCE</label><p className="text-[10px] leading-5 text-[#aab8c4]">Bridge views use true heading when available and COG as fallback. Port, ahead, starboard, and astern are ship-relative. The 360° display is north-up.</p></div>
+          <div className="mt-auto border-t border-amber-300/20 bg-amber-400/[0.06] p-3 text-[9px] leading-4 text-[#d2c58c]">IDENTIFICATION / PLANNING ONLY · Use current Nautical Almanac data and normal celestial-navigation procedures for sights and reductions.</div>
+        </aside>
       </div>
     </main>
   );
