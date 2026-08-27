@@ -5,9 +5,7 @@ import { usePathname } from "next/navigation";
 
 /**
  * Forces every Celestial workstation mode onto the same compact bridge-console
- * visual system used by the current main NavDash console. This is intentionally
- * presentation-only: celestial calculations, AIS, planner, reduction and plot
- * logic remain owned by the Celestial page.
+ * visual system used by the current main NavDash console. Presentation only.
  */
 export function CelestialConsoleSkin() {
   const pathname = usePathname();
@@ -57,6 +55,12 @@ export function CelestialConsoleSkin() {
           min-height:30px !important;
           font-size:10px !important;
           letter-spacing:.08em !important;
+        }
+        /* Active Celestial mode/view buttons use a dark label on the gold fill.
+           Tailwind's night-theme text override was otherwise making these white. */
+        .bc-celestial-console button[class*="bg-[#c9a227]"] {
+          color:#071019 !important;
+          font-weight:900 !important;
         }
         .bc-celestial-console input,
         .bc-celestial-console select {
