@@ -116,6 +116,14 @@ html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen pre {
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section .font-mono.text-lg { color:#17212b !important; }
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section [class*="tracking-[.18em]"] { color:#586773 !important; }
 
+/* NAV CONSOLE is its own anchor, so explicitly switch it out of the night palette. */
+html[data-navdash-theme="day"] .position-report-nav-console {
+  background:#ffffff !important;
+  color:#17212b !important;
+  border-color:rgba(15,23,42,.28) !important;
+}
+html[data-navdash-theme="day"] .position-report-nav-console:hover { background:#f3f6f8 !important; }
+
 @media (max-width:1000px) {
   main > div.relative.z-10.min-h-screen > .grid.w-full.grid-cols-2 { grid-template-columns:1fr !important; }
 }
