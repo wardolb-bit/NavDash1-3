@@ -106,7 +106,37 @@ export function CelestialSunMoon(){
 
  useEffect(()=>{if(!pathname.startsWith("/celestial"))return;const id=window.setInterval(()=>setNow(new Date()),30000);return()=>window.clearInterval(id)},[pathname]);
  useEffect(()=>{if(!pathname.startsWith("/celestial"))return;let ws:WebSocket|null=null,retry:number|undefined,done=false;const connect=()=>{try{ws=new WebSocket(getAisWebSocketUrl());ws.onmessage=e=>{try{const m=JSON.parse(String(e.data));if(m?.type!=="nmea"||typeof m.line!=="string")return;const d=decode(m.line);if(d?.lat!==undefined&&d.lon!==undefined)setPos({lat:d.lat,lon:d.lon})}catch{}};ws.onclose=()=>{if(!done)retry=window.setTimeout(connect,3000)}}catch{retry=window.setTimeout(connect,3000)}};connect();return()=>{done=true;if(retry)clearTimeout(retry);ws?.close()}},[pathname]);
- useEffect(()=>{if(!pathname.startsWith("/celestial")){setBannerTarget(null);setPlannerTarget(null);return}let stop=false,timer=0;const scan=()=>{if(stop)return;const main=document.querySelector("main");const header=main?.querySelector("header") as HTMLElement|null;if(header){let slot=document.getElementById("celestial-sunmoon-banner-slot") as HTMLElement|null;if(!slot){slot=document.createElement("div");slot.id="celestial-sunmoon-banner-slot";header.insertAdjacentElement("afterend",slot)}setBannerTarget(slot)}const buttons=Array.from(main?.querySelectorAll("button")||[]);const planner=buttons.find(b=>b.textContent?.trim()==="SIGHT PLANNER") as HTMLButtonElement|undefined;const active=!!planner&&(getComputedStyle(planner).backgroundColor!=="rgb(8, 18, 27)");setPlannerActive(active);const input=main?.querySelector('input[type="datetime-local"]') as HTMLInputElement|null;if(input?.value){const d=new Date(input.value);if(!Number.isNaN(d.getTime()))setPlannerDate(d)}if(active){let pslot=document.getElementById("celestial-sunmoon-planner-slot") as HTMLElement|null;if(!pslot){pslot=document.createElement("div");pslot.id="celestial-sunmoon-planner-slot";slot?.insertAdjacentElement("afterend",pslot)}setPlannerTarget(pslot)}else setPlannerTarget(null);timer=window.setTimeout(scan,300)};scan();return()=>{stop=true;window.clearTimeout(timer)}},[pathname]);
+ useEffect(()=>{
+  if(!pathname.startsWith("/celestial")){setBannerTarget(null);setPlannerTarget(null);return}
+  let stop=false,timer=0;
+  const scan=()=>{
+   if(stop)return;
+   const main=document.querySelector("main");
+   const header=main?.querySelector("header") as HTMLElement|null;
+   let slot=document.getElementById("celestial-sunmoon-banner-slot") as HTMLElement|null;
+   if(header){
+    if(!slot){slot=document.createElement("div");slot.id="celestial-sunmoon-banner-slot";header.insertAdjacentElement("afterend",slot)}
+    setBannerTarget(prev=>prev===slot?prev:slot);
+   }
+   const buttons=Array.from(main?.querySelectorAll("button")||[]);
+   const planner=buttons.find(b=>b.textContent?.trim()==="SIGHT PLANNER") as HTMLButtonElement|undefined;
+   const active=!!planner&&String(planner.className).includes("bg-[#c9a227]");
+   setPlannerActive(prev=>prev===active?prev:active);
+   const input=main?.querySelector('input[type="datetime-local"]') as HTMLInputElement|null;
+   if(input?.value){
+    const d=new Date(input.value);
+    if(!Number.isNaN(d.getTime()))setPlannerDate(prev=>prev?.getTime()===d.getTime()?prev:d);
+   }
+   if(active){
+    let pslot=document.getElementById("celestial-sunmoon-planner-slot") as HTMLElement|null;
+    if(!pslot&&slot){pslot=document.createElement("div");pslot.id="celestial-sunmoon-planner-slot";slot.insertAdjacentElement("afterend",pslot)}
+    setPlannerTarget(prev=>prev===pslot?prev:pslot);
+   }else setPlannerTarget(prev=>prev===null?prev:null);
+   timer=window.setTimeout(scan,1000);
+  };
+  scan();
+  return()=>{stop=true;window.clearTimeout(timer)};
+ },[pathname]);
 
  const offset=shipOffsetHours(pos.lon),solar=useMemo(()=>solarEvents(pos.lat,pos.lon,now,offset),[pos.lat,pos.lon,now,offset]),moon=useMemo(()=>moonEvents(pos.lat,pos.lon,now,offset),[pos.lat,pos.lon,now,offset]);
  const sunAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,now,sunRaDec(now)),[pos.lat,pos.lon,now]),moonAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,now,moonRaDec(now)),[pos.lat,pos.lon,now]);
