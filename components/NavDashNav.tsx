@@ -54,36 +54,38 @@ export function NavDashNav() {
           </select>
         </div>
 
-        <div className="hidden min-w-0 flex-nowrap items-center gap-2 overflow-x-auto lg:flex">
-          <div className="flex min-w-0 flex-nowrap items-center gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-white/[0.055] p-1.5">
-            {navGroups.map((group) => {
-              const groupActive = group.items.some((item) => itemIsActive(pathname, item.href));
-              return (
-                <div key={group.label} className={`flex shrink-0 items-center gap-1 rounded-xl px-1.5 py-1 ${groupActive ? "bg-[#c9a227]/10" : ""}`}>
-                  <span className="whitespace-nowrap px-2 text-xs font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</span>
-                  {group.items.map((item) => {
-                    const active = itemIsActive(pathname, item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-black transition ${active ? "bg-[#c9a227] text-slate-950 shadow-md shadow-[#c9a227]/20" : "text-slate-200 hover:bg-white/10"}`}
-                      >
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-
+        <div className="hidden min-w-0 flex-1 items-center justify-end gap-2 lg:flex">
           <Link
             href="/celestial"
             className={`inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-2xl border px-4 text-sm font-black shadow-lg transition ${celestialActive ? "border-[#c9a227] bg-[#c9a227] text-slate-950 shadow-[#c9a227]/20" : "border-[#c9a227]/45 bg-[#c9a227]/15 text-[#f6d66d] hover:bg-[#c9a227]/25"}`}
           >
             ✦ Star Finder
           </Link>
+
+          <div className="min-w-0 overflow-x-auto">
+            <div className="flex w-max flex-nowrap items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.055] p-1.5">
+              {navGroups.map((group) => {
+                const groupActive = group.items.some((item) => itemIsActive(pathname, item.href));
+                return (
+                  <div key={group.label} className={`flex shrink-0 items-center gap-1 rounded-xl px-1.5 py-1 ${groupActive ? "bg-[#c9a227]/10" : ""}`}>
+                    <span className="whitespace-nowrap px-2 text-xs font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</span>
+                    {group.items.map((item) => {
+                      const active = itemIsActive(pathname, item.href);
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-black transition ${active ? "bg-[#c9a227] text-slate-950 shadow-md shadow-[#c9a227]/20" : "text-slate-200 hover:bg-white/10"}`}
+                        >
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </nav>
