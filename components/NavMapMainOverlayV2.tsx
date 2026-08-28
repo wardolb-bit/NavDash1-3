@@ -116,7 +116,7 @@ function routeSignature(route: Waypoint[]) {
 }
 
 
-type CelestialKind = "sunrise" | "sunset" | "moonrise" | "moonset";
+type CelestialKind = "sunrise" | "sunset";
 type CelestialEvent = { kind: CelestialKind; date: Date; lat: number; lon: number };
 const cRad = (d: number) => d * Math.PI / 180;
 const cDeg = (r: number) => r * 180 / Math.PI;
@@ -140,22 +140,6 @@ function cSunRaDec(date: Date) {
   const eps0 = 23 + (26 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60) / 60;
   const eps = cRad(eps0 + 0.00256 * Math.cos(cRad(omega)));
   return { ra: cNorm(cDeg(Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda)))), dec: cDeg(Math.asin(Math.sin(eps) * Math.sin(lambda))) };
-}
-
-function cMoonRaDec(date: Date) {
-  const d = date.getTime() / 86400000 + 2440587.5 - 2451543.5;
-  const n = cNorm(125.1228 - 0.0529538083 * d), i = 5.1454, w = cNorm(318.0634 + 0.1643573223 * d), a = 60.2666, e = 0.0549, m = cNorm(115.3654 + 13.0649929509 * d);
-  let E = cRad(m) + e * Math.sin(cRad(m)) * (1 + e * Math.cos(cRad(m)));
-  for (let k = 0; k < 3; k += 1) E -= (E - e * Math.sin(E) - cRad(m)) / (1 - e * Math.cos(E));
-  const xv = a * (Math.cos(E) - e), yv = a * Math.sqrt(1 - e * e) * Math.sin(E), v = cDeg(Math.atan2(yv, xv)), r = Math.sqrt(xv * xv + yv * yv);
-  const xh = r * (Math.cos(cRad(n)) * Math.cos(cRad(v + w)) - Math.sin(cRad(n)) * Math.sin(cRad(v + w)) * Math.cos(cRad(i)));
-  const yh = r * (Math.sin(cRad(n)) * Math.cos(cRad(v + w)) + Math.cos(cRad(n)) * Math.sin(cRad(v + w)) * Math.cos(cRad(i)));
-  const zh = r * Math.sin(cRad(v + w)) * Math.sin(cRad(i));
-  const lon = cDeg(Math.atan2(yh, xh)), lat = cDeg(Math.atan2(zh, Math.sqrt(xh * xh + yh * yh)));
-  const ecl = cRad(23.4393 - 3.563e-7 * d);
-  const xe = r * Math.cos(cRad(lon)) * Math.cos(cRad(lat)), ye = r * Math.sin(cRad(lon)) * Math.cos(cRad(lat)), ze = r * Math.sin(cRad(lat));
-  const xeq = xe, yeq = ye * Math.cos(ecl) - ze * Math.sin(ecl), zeq = ye * Math.sin(ecl) + ze * Math.cos(ecl);
-  return { ra: cNorm(cDeg(Math.atan2(yeq, xeq))), dec: cDeg(Math.atan2(zeq, Math.sqrt(xeq * xeq + yeq * yeq))) };
 }
 
 function cAltitude(lat: number, lon: number, date: Date, body: { ra: number; dec: number }) {
@@ -202,10 +186,22 @@ function cPositionAt(points: Array<[number, number]>, cumulative: number[], dist
   let i = 0;
   while (i < points.length - 2 && cumulative[i + 1] < target) i += 1;
   const start = { lat: points[i][0], lon: points[i][1] }, end = { lat: points[i + 1][0], lon: points[i + 1][1] };
-  const leg = distanceAndBearing(start, end);
-  if (leg.distanceNm <= 0) return start;
-  const pos = destinationPoint(start.lat, start.lon, leg.bearing, target - cumulative[i]);
-  return { lat: pos.lat, lon: longitudeNearReference(pos.lon, start.lon) };
+  const legNm = cumulative[i + 1] - cumulative[i];
+  if (legNm <= 0) return start;
+  const f = Math.max(0, Math.min(1, (target - cumulative[i]) / legNm));
+
+  // Interpolate in Web Mercator, matching the exact geometry Leaflet uses to
+  // draw the visible gold route segment. This keeps the event dot on the line.
+  const mercatorY = (lat: number) => {
+    const clipped = Math.max(-85.05112878, Math.min(85.05112878, lat));
+    return Math.log(Math.tan(Math.PI / 4 + cRad(clipped) / 2));
+  };
+  const inverseMercatorY = (y: number) => cDeg(2 * Math.atan(Math.exp(y)) - Math.PI / 2);
+  const y = mercatorY(start.lat) + (mercatorY(end.lat) - mercatorY(start.lat)) * f;
+  return {
+    lat: inverseMercatorY(y),
+    lon: start.lon + (end.lon - start.lon) * f,
+  };
 }
 
 function cPredictEvents(route: Waypoint[], ship: OwnShip): CelestialEvent[] {
@@ -222,13 +218,13 @@ function cPredictEvents(route: Waypoint[], ship: OwnShip): CelestialEvent[] {
   const sample = (minutes: number) => {
     const pos = cPositionAt(geometry.points, geometry.cumulative, currentAlong + sog * minutes / 60);
     const date = new Date(now.getTime() + minutes * 60000);
-    return { pos, date, sun: cAltitude(pos.lat, pos.lon, date, cSunRaDec(date)) + 0.833, moon: cAltitude(pos.lat, pos.lon, date, cMoonRaDec(date)) + 0.3 };
+    return { pos, date, sun: cAltitude(pos.lat, pos.lon, date, cSunRaDec(date)) + 0.833 };
   };
   const step = 10;
   let previous = sample(0);
   for (let minutes = step; minutes <= maxMinutes; minutes += step) {
     const current = sample(minutes);
-    const checks: Array<[CelestialKind, number, number]> = [["sunrise", previous.sun, current.sun], ["sunset", previous.sun, current.sun], ["moonrise", previous.moon, current.moon], ["moonset", previous.moon, current.moon]];
+    const checks: Array<[CelestialKind, number, number]> = [["sunrise", previous.sun, current.sun], ["sunset", previous.sun, current.sun]];
     for (const [kind, before, after] of checks) {
       if (found.has(kind)) continue;
       const rising = kind.endsWith("rise");
@@ -238,10 +234,10 @@ function cPredictEvents(route: Waypoint[], ship: OwnShip): CelestialEvent[] {
       const refined = sample(minutes - step + step * f);
       found.set(kind, { kind, date: refined.date, lat: refined.pos.lat, lon: refined.pos.lon });
     }
-    if (found.size === 4) break;
+    if (found.size === 2) break;
     previous = current;
   }
-  return (["sunrise", "sunset", "moonrise", "moonset"] as CelestialKind[]).map((kind) => found.get(kind)).filter((event): event is CelestialEvent => Boolean(event));
+  return (["sunrise", "sunset"] as CelestialKind[]).map((kind) => found.get(kind)).filter((event): event is CelestialEvent => Boolean(event));
 }
 
 function cLocalTime(event: CelestialEvent) {
@@ -555,9 +551,8 @@ function IsolatedMainMap() {
       const centerLon = map.getCenter().lng;
       for (const event of events) {
         const baseLon = longitudeNearReference(event.lon, centerLon);
-        const isSun = event.kind.startsWith("sun");
-        const isRise = event.kind.endsWith("rise");
-        const color = isSun ? (isRise ? "#fbbf24" : "#f59e0b") : (isRise ? "#a5b4fc" : "#818cf8");
+        const isRise = event.kind === "sunrise";
+        const color = isRise ? "#fbbf24" : "#f59e0b";
         const label = `${event.kind.toUpperCase()} ${cLocalTime(event)}`;
         for (const offset of [-360, 0, 360]) {
           L.circleMarker([event.lat, baseLon + offset], {
