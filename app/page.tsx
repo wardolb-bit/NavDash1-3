@@ -1602,7 +1602,9 @@ export default function NavDashHomePage() {
       if (!map || !ownShip) return;
 
       const L = await import("leaflet");
-      const displayLon = unwrapLongitudeNear(ownShip.lon, map.getCenter().lng);
+      const routeBounds = routeLayerRef.current?.getBounds?.();
+    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;
+    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);
       const position: [number, number] = [ownShip.lat, displayLon];
 
       if (!ownLayerRef.current) {
@@ -1734,7 +1736,9 @@ export default function NavDashHomePage() {
   function centerOwnShip() {
     if (!ownShip || !mapRef.current) return;
     const map = mapRef.current;
-    const displayLon = unwrapLongitudeNear(ownShip.lon, map.getCenter().lng);
+    const routeBounds = routeLayerRef.current?.getBounds?.();
+    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;
+    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);
     map.panTo([ownShip.lat, displayLon], { animate: true, duration: 0.5 });
   }
 
