@@ -1175,6 +1175,7 @@ export default function NavDashHomePage() {
   const seamarkLayerRef = useRef<any>(null);
   const weatherLoadedFromLiveAisRef = useRef(false);
   const routeWsRef = useRef<WebSocket | null>(null);
+  const hasInitialOwnShipCenterRef = useRef(false);
   const sectionIds = {
     chart: "v12-section-chart",
     route: "v12-section-route",
@@ -1583,13 +1584,6 @@ export default function NavDashHomePage() {
         return marker;
       });
 
-      try {
-        const bounds = L.latLngBounds(routeLatLngs as any);
-        map.fitBounds(bounds, { padding: [35, 35], maxZoom: 10 });
-      } catch {
-        // Keep current view if bounds cannot be calculated.
-      }
-
       setTimeout(() => map.invalidateSize(), 100);
     }
 
@@ -1628,6 +1622,11 @@ export default function NavDashHomePage() {
           ownMarkerRef.current.addTo(ownLayerRef.current);
         }
         ownMarkerRef.current.setLatLng(position);
+      }
+
+      if (!hasInitialOwnShipCenterRef.current) {
+        hasInitialOwnShipCenterRef.current = true;
+        map.setView(position, Math.max(map.getZoom(), 7), { animate: false });
       }
 
       if (ownVectorRef.current) {
