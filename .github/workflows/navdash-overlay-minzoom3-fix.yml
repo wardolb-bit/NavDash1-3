@@ -1,0 +1,40 @@
+name: NavDash overlay min zoom 3 fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/navdash-overlay-minzoom3-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Raise active overlay minimum zoom
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('components/NavMapMainOverlayV2.tsx')
+          s = p.read_text()
+          old = 'worldCopyJump: true, minZoom: 2'
+          new = 'worldCopyJump: true, minZoom: 3'
+          assert old in s, 'expected minZoom 2 map option not found'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          rm .github/workflows/navdash-overlay-minzoom3-fix.yml
+          git diff --check
+          npm ci
+          npm run build
+          git diff -- components/NavMapMainOverlayV2.tsx
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@live.com"
+          git add components/NavMapMainOverlayV2.tsx .github/workflows/navdash-overlay-minzoom3-fix.yml
+          git commit -m "Prevent duplicate world view at extreme zoom"
+          git push
