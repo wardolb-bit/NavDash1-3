@@ -1,0 +1,41 @@
+name: NavDash stable wrapped route fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/navdash-overlay-stable-wrap-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stabilize wrapped route rendering
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('components/NavMapMainOverlayV2.tsx')
+          s = p.read_text()
+
+          old = '''      const referenceLon = ownShip?.lon ?? map.getCenter().lng;\n      const points = unwrapRouteNear(route, referenceLon);\n      routeLayerRef.current = L.polyline(points as any, { color: "#c9a227", weight: 4, opacity: 0.95 }).addTo(map);\n      routeMarkersRef.current = route.map((wp, index) => L.circleMarker(points[index] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));\n      didInitialRouteFitRef.current = true;\n'''
+          new = '''      const referenceLon = ownShip?.lon ?? map.getCenter().lng;\n      const points = unwrapRouteNear(route, referenceLon);\n      const worldOffsets = [-360, 0, 360];\n      const routeCopies = worldOffsets.map((offset) => L.polyline(points.map(([lat, lon]) => [lat, lon + offset]) as any, { color: "#c9a227", weight: 4, opacity: 0.95 }));\n      routeLayerRef.current = L.layerGroup(routeCopies).addTo(map);\n      routeMarkersRef.current = worldOffsets.flatMap((offset) => route.map((wp, index) => L.circleMarker([points[index][0], points[index][1] + offset] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map)));\n      didInitialRouteFitRef.current = true;\n'''
+          assert old in s, 'route render block not found'
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          rm .github/workflows/navdash-overlay-stable-wrap-fix.yml
+          git diff --check
+          npm ci
+          npm run build
+          git diff -- components/NavMapMainOverlayV2.tsx
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@live.com"
+          git add components/NavMapMainOverlayV2.tsx .github/workflows/navdash-overlay-stable-wrap-fix.yml
+          git commit -m "Stabilize Date Line route during pan and zoom"
+          git push
