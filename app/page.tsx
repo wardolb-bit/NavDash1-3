@@ -1270,21 +1270,48 @@ function trackPositionAtDistance(route: Waypoint[], cumulative: number[], distan
 }
 
 function predictedTrackCelestialEvents(route: Waypoint[], activeLeg: ReturnType<typeof selectedRouteLeg>, ownShip: AisOwnShip | null): TrackCelestialEvent[] {
-  if (!activeLeg || !ownShip || route.length < 2) return [];
-  const predictionSog = Number.isFinite(ownShip.sog) ? Math.max(0.1, ownShip.sog) : 0.1;
+  if (!ownShip || route.length < 2) return [];
+
   const cumulative = trackCumulativeDistances(route);
   const total = cumulative[cumulative.length - 1];
-  const legStartIndex = Math.max(0, activeLeg.index - 1);
-  const currentAlong = Math.max(0, Math.min(total, cumulative[legStartIndex] + activeLeg.alongTrack));
+  if (!Number.isFinite(total) || total <= 0) return [];
+
+  // Do not depend on the selected/auto leg for celestial placement. Find the
+  // geometrically nearest route leg directly so Date Line / leg-selection state
+  // cannot suppress the event markers.
+  let nearestIndex = 1;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  let nearestAlong = 0;
+  for (let i = 1; i < route.length; i += 1) {
+    const result = routeXteToSegmentNm(
+      ownShip.lat,
+      ownShip.lon,
+      route[i - 1].lat,
+      route[i - 1].lon,
+      route[i].lat,
+      route[i].lon,
+    );
+    if (result.distance < nearestDistance) {
+      nearestDistance = result.distance;
+      nearestIndex = i;
+      nearestAlong = result.alongTrack;
+    }
+  }
+
+  const currentAlong = Math.max(0, Math.min(total, cumulative[nearestIndex - 1] + nearestAlong));
   const remaining = Math.max(0, total - currentAlong);
   if (remaining < 0.1) return [];
 
+  const predictionSog = Number.isFinite(ownShip.sog) && ownShip.sog > 0.1 ? ownShip.sog : 10;
   const now = new Date();
-  const maxMinutes = Math.min(7 * 24 * 60, (remaining / predictionSog) * 60);
-  const stepMinutes = 10;
+  const routeMinutes = (remaining / predictionSog) * 60;
+  const maxMinutes = Math.min(7 * 24 * 60, routeMinutes);
+  const stepMinutes = 5;
   const found = new Map<TrackCelestialKind, TrackCelestialEvent>();
+
   const sample = (minutesAhead: number) => {
-    const pos = trackPositionAtDistance(route, cumulative, currentAlong + predictionSog * (minutesAhead / 60));
+    const traveledNm = predictionSog * (minutesAhead / 60);
+    const pos = trackPositionAtDistance(route, cumulative, currentAlong + traveledNm);
     if (!pos) return null;
     const date = new Date(now.getTime() + minutesAhead * 60000);
     return {
@@ -1319,7 +1346,9 @@ function predictedTrackCelestialEvents(route: Waypoint[], activeLeg: ReturnType<
     previous = current;
   }
 
-  return (["sunrise", "sunset", "moonrise", "moonset"] as TrackCelestialKind[]).map((kind) => found.get(kind)).filter((event): event is TrackCelestialEvent => Boolean(event));
+  return (["sunrise", "sunset", "moonrise", "moonset"] as TrackCelestialKind[])
+    .map((kind) => found.get(kind))
+    .filter((event): event is TrackCelestialEvent => Boolean(event));
 }
 
 function formatTrackCelestialLocalTime(event: TrackCelestialEvent) {
@@ -1781,7 +1810,21 @@ export default function NavDashHomePage() {
       celestialTrackMarkersRef.current = [];
 
       const events = predictedTrackCelestialEvents(route, activeLeg, ownShip);
-      if (!events.length) return;
+      if (!events.length) {
+        if (ownShip && route.length >= 2) {
+          const diagnostic = L.circleMarker([ownShip.lat, ownShip.lon], {
+            radius: 5,
+            color: "#fb7185",
+            weight: 2,
+            fillColor: "#fb7185",
+            fillOpacity: 1,
+          })
+            .bindTooltip("CELESTIAL EVENTS: 0", { permanent: true, direction: "right", offset: [8, 0] })
+            .addTo(map);
+          celestialTrackMarkersRef.current = [diagnostic];
+        }
+        return;
+      }
 
       const styleFor = (kind: TrackCelestialKind) => {
         if (kind === "sunrise") return { dot: "#fbbf24", text: "#fde68a", label: "SUNRISE", glyph: "☀" };
@@ -1800,7 +1843,6 @@ export default function NavDashHomePage() {
           fillColor: style.dot,
           fillOpacity: 1,
           interactive: true,
-          pane: "markerPane",
         })
           .bindTooltip(label, {
             permanent: true,
