@@ -234,7 +234,7 @@ function IsolatedMainMap() {
       }
 
       const savedView = readSavedMapView();
-      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false, worldCopyJump: true });
+      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false, worldCopyJump: true, minZoom: 2 });
       if (savedView) {
         map.setView([savedView.lat, savedView.lon], savedView.zoom, { animate: false });
         didInitialRouteFitRef.current = true;
