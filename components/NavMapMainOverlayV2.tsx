@@ -12,7 +12,7 @@ type ToolMode = "pan" | "mark" | "measure";
 type MeasureMode = "ship" | "points";
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
-const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v2";
+const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v3";
 const USER_CHART_STORAGE_KEY = "navdash-user-chart-v1";
 
 function sixBitCharToValue(char: string) {
@@ -73,27 +73,24 @@ function distanceAndBearing(from: MeasurePoint, to: MeasurePoint) {
   return { distanceNm, bearing: (bearing + 360) % 360 };
 }
 
-function routeSegmentsForChart(route: Waypoint[]) {
-  if (!route.length) return [] as Array<Array<[number, number]>>;
-  const segments: Array<Array<[number, number]>> = [[[route[0].lat, route[0].lon]]];
+function longitudeNearReference(lon: number, referenceLon: number) {
+  let adjusted = lon;
+  while (adjusted - referenceLon > 180) adjusted -= 360;
+  while (adjusted - referenceLon < -180) adjusted += 360;
+  return adjusted;
+}
+
+function unwrapRouteNear(route: Waypoint[], referenceLon: number) {
+  if (!route.length) return [] as Array<[number, number]>;
+  const points: Array<[number, number]> = [];
+  let previousLon = longitudeNearReference(route[0].lon, referenceLon);
+  points.push([route[0].lat, previousLon]);
   for (let index = 1; index < route.length; index += 1) {
-    const start = route[index - 1];
-    const end = route[index];
-    const delta = end.lon - start.lon;
-    const current = segments[segments.length - 1];
-    if (Math.abs(delta) <= 180) {
-      current.push([end.lat, end.lon]);
-      continue;
-    }
-    const adjustedEndLon = delta > 180 ? end.lon - 360 : end.lon + 360;
-    const seamLon = delta > 180 ? -180 : 180;
-    const oppositeSeamLon = -seamLon;
-    const ratio = (seamLon - start.lon) / (adjustedEndLon - start.lon);
-    const seamLat = start.lat + (end.lat - start.lat) * ratio;
-    current.push([seamLat, seamLon]);
-    segments.push([[seamLat, oppositeSeamLon], [end.lat, end.lon]]);
+    const lon = longitudeNearReference(route[index].lon, previousLon);
+    points.push([route[index].lat, lon]);
+    previousLon = lon;
   }
-  return segments;
+  return points;
 }
 
 function normalizeRoutePayload(payload: any): Waypoint[] {
@@ -184,6 +181,7 @@ function IsolatedMainMap() {
   const measurementLayerRef = useRef<any>(null);
   const routeSignatureRef = useRef("");
   const didInitialRouteFitRef = useRef(false);
+  const didInitialOwnShipCenterRef = useRef(false);
   const toolModeRef = useRef<ToolMode>("pan");
   const measureModeRef = useRef<MeasureMode>("ship");
   const measureStartRef = useRef<MeasurePoint | null>(null);
@@ -236,7 +234,7 @@ function IsolatedMainMap() {
       }
 
       const savedView = readSavedMapView();
-      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false, maxBounds: [[-85.05112878, -180], [85.05112878, 180]], maxBoundsViscosity: 1 });
+      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false, worldCopyJump: true });
       if (savedView) {
         map.setView([savedView.lat, savedView.lon], savedView.zoom, { animate: false });
         didInitialRouteFitRef.current = true;
@@ -244,11 +242,11 @@ function IsolatedMainMap() {
         map.setView([13.4443, 144.7937], 7, { animate: false });
       }
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, noWrap: true }).addTo(map);
-      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18, noWrap: true }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
       try {
         L.tileLayer.wms("https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer", {
-          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85, noWrap: true,
+          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85,
         } as any).addTo(map);
       } catch {}
 
@@ -394,13 +392,14 @@ function IsolatedMainMap() {
       for (const marker of routeMarkersRef.current) { try { map.removeLayer(marker); } catch {} }
       routeMarkersRef.current = [];
       if (route.length < 2) return;
-      const segments = routeSegmentsForChart(route);
-      routeLayerRef.current = L.layerGroup(segments.map((segment) => L.polyline(segment as any, { color: "#c9a227", weight: 4, opacity: 0.95 }))).addTo(map);
-      routeMarkersRef.current = route.map((wp, index) => L.circleMarker([wp.lat, wp.lon] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));
+      const referenceLon = ownShip?.lon ?? map.getCenter().lng;
+      const points = unwrapRouteNear(route, referenceLon);
+      routeLayerRef.current = L.polyline(points as any, { color: "#c9a227", weight: 4, opacity: 0.95 }).addTo(map);
+      routeMarkersRef.current = route.map((wp, index) => L.circleMarker(points[index] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));
       didInitialRouteFitRef.current = true;
     }
     updateRoute();
-  }, [route]);
+  }, [route, ownShip ? Math.round((ownShip.lon - (route[0]?.lon ?? ownShip.lon)) / 360) : 0]);
 
   useEffect(() => {
     async function updateUserChart() {
@@ -422,7 +421,9 @@ function IsolatedMainMap() {
       const layer = ownLayerRef.current;
       if (!map || !layer || !ownShip) return;
       const L = await import("leaflet");
-      const position: [number, number] = [ownShip.lat, ownShip.lon];
+      const displayLon = longitudeNearReference(ownShip.lon, map.getCenter().lng);
+      const position: [number, number] = [ownShip.lat, displayLon];
+      if (!didInitialOwnShipCenterRef.current) { didInitialOwnShipCenterRef.current = true; map.setView(position, Math.max(map.getZoom(), 7), { animate: false }); }
       const orientation = ownShip.heading !== null && Number.isFinite(ownShip.heading) ? ownShip.heading : ownShip.cog;
       const icon = L.divIcon({ className: "navmap-main-ownship-icon", html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f1d56b" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
       if (!ownMarkerRef.current) ownMarkerRef.current = L.marker(position, { icon, pane: "navmap-main-ownship-v2", interactive: false }).addTo(layer);
@@ -432,12 +433,12 @@ function IsolatedMainMap() {
       headingVectorRef.current = null; cogVectorRef.current = null;
       if (ownShip.heading !== null && Number.isFinite(ownShip.heading)) {
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.heading, 0.8);
-        headingVectorRef.current = L.polyline([position, [end.lat, end.lon]], { pane: "navmap-main-ownship-v2", color: "#f1d56b", weight: 2, opacity: 0.9 }).addTo(layer);
+        headingVectorRef.current = L.polyline([position, [end.lat, longitudeNearReference(end.lon, displayLon)]], { pane: "navmap-main-ownship-v2", color: "#f1d56b", weight: 2, opacity: 0.9 }).addTo(layer);
       }
       if (Number.isFinite(ownShip.sog) && ownShip.sog > 0.1 && Number.isFinite(ownShip.cog)) {
         const distanceNm = ownShip.sog * (6 / 60);
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.cog, distanceNm);
-        cogVectorRef.current = L.polyline([position, [end.lat, end.lon]], { pane: "navmap-main-ownship-v2", color: "#22d3ee", weight: 2.5, opacity: 0.95, dashArray: "8 6" }).addTo(layer);
+        cogVectorRef.current = L.polyline([position, [end.lat, longitudeNearReference(end.lon, displayLon)]], { pane: "navmap-main-ownship-v2", color: "#22d3ee", weight: 2.5, opacity: 0.95, dashArray: "8 6" }).addTo(layer);
       }
     }
     updateOwnShip();
