@@ -1,0 +1,34 @@
+name: Patch celestial markers into route layer
+on:
+  push:
+    branches:
+      - feature/celestial-track-events-v2
+    paths:
+      - scripts/patch-celestial-in-route-layer.py
+      - .github/workflows/patch-celestial-in-route-layer.yml
+permissions:
+  contents: write
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/celestial-track-events-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply route-layer patch
+        run: python3 scripts/patch-celestial-in-route-layer.py
+      - run: npm ci
+      - run: npm run build
+      - name: Commit feature
+        run: |
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "Render celestial markers with route layer"
+          git pull --rebase origin feature/celestial-track-events-v2
+          git push origin HEAD:feature/celestial-track-events-v2
