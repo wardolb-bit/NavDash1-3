@@ -1,0 +1,67 @@
+name: NavDash overlay Date Line fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/navdash-overlay-dateline-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch actual overlay map
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('components/NavMapMainOverlayV2.tsx')
+          s = p.read_text()
+
+          old_helper = '''function unwrapRoute(route: Waypoint[]) {\n  if (!route.length) return [] as Array<[number, number]>;\n  const points: Array<[number, number]> = [];\n  let previousLon = route[0].lon;\n  points.push([route[0].lat, previousLon]);\n  for (let index = 1; index < route.length; index += 1) {\n    let lon = route[index].lon;\n    while (lon - previousLon > 180) lon -= 360;\n    while (lon - previousLon < -180) lon += 360;\n    points.push([route[index].lat, lon]);\n    previousLon = lon;\n  }\n  return points;\n}\n'''
+          new_helper = '''function routeSegmentsForChart(route: Waypoint[]) {\n  if (!route.length) return [] as Array<Array<[number, number]>>;\n  const segments: Array<Array<[number, number]>> = [[[route[0].lat, route[0].lon]]];\n  for (let index = 1; index < route.length; index += 1) {\n    const start = route[index - 1];\n    const end = route[index];\n    const delta = end.lon - start.lon;\n    const current = segments[segments.length - 1];\n    if (Math.abs(delta) <= 180) {\n      current.push([end.lat, end.lon]);\n      continue;\n    }\n    const adjustedEndLon = delta > 180 ? end.lon - 360 : end.lon + 360;\n    const seamLon = delta > 180 ? -180 : 180;\n    const oppositeSeamLon = -seamLon;\n    const ratio = (seamLon - start.lon) / (adjustedEndLon - start.lon);\n    const seamLat = start.lat + (end.lat - start.lat) * ratio;\n    current.push([seamLat, seamLon]);\n    segments.push([[seamLat, oppositeSeamLon], [end.lat, end.lon]]);\n  }\n  return segments;\n}\n'''
+          assert old_helper in s
+          s = s.replace(old_helper, new_helper, 1)
+
+          old_map = '      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false });\n'
+          new_map = '      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false, maxBounds: [[-85.05112878, -180], [85.05112878, 180]], maxBoundsViscosity: 1 });\n'
+          assert old_map in s
+          s = s.replace(old_map, new_map, 1)
+
+          old_osm = '      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);\n'
+          new_osm = '      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, noWrap: true }).addTo(map);\n'
+          assert old_osm in s
+          s = s.replace(old_osm, new_osm, 1)
+
+          old_sea = '      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);\n'
+          new_sea = '      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18, noWrap: true }).addTo(map);\n'
+          assert old_sea in s
+          s = s.replace(old_sea, new_sea, 1)
+
+          old_wms = '          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85,\n'
+          new_wms = '          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85, noWrap: true,\n'
+          assert old_wms in s
+          s = s.replace(old_wms, new_wms, 1)
+
+          old_route = '''      const points = unwrapRoute(route);\n      routeLayerRef.current = L.polyline(points as any, { color: "#c9a227", weight: 4, opacity: 0.95 }).addTo(map);\n      routeMarkersRef.current = route.map((wp, index) => L.circleMarker(points[index] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));\n      if (!didInitialRouteFitRef.current) { didInitialRouteFitRef.current = true; try { map.fitBounds(L.latLngBounds(points as any), { padding: [35, 35], maxZoom: 10 }); } catch {} }\n'''
+          new_route = '''      const segments = routeSegmentsForChart(route);\n      routeLayerRef.current = L.layerGroup(segments.map((segment) => L.polyline(segment as any, { color: "#c9a227", weight: 4, opacity: 0.95 }))).addTo(map);\n      routeMarkersRef.current = route.map((wp, index) => L.circleMarker([wp.lat, wp.lon] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));\n      didInitialRouteFitRef.current = true;\n'''
+          assert old_route in s
+          s = s.replace(old_route, new_route, 1)
+
+          p.write_text(s)
+          PY
+          rm .github/workflows/navdash-overlay-dateline-fix.yml
+          git diff --check
+          npm ci
+          npm run build
+          git diff -- components/NavMapMainOverlayV2.tsx
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@live.com"
+          git add components/NavMapMainOverlayV2.tsx .github/workflows/navdash-overlay-dateline-fix.yml
+          git commit -m "Fix Date Line in active map overlay"
+          git push
