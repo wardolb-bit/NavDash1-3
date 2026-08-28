@@ -1793,76 +1793,64 @@ export default function NavDashHomePage() {
         return marker;
       });
 
-      setTimeout(() => map.invalidateSize(), 100);
-    }
-
-    updateRouteLayer();
-  }, [route, routeAlerts, routeName]);
-
-  useEffect(() => {
-    async function updateCelestialTrackMarkers() {
-      const map = mapRef.current;
-      if (!map) return;
-      const L = await import("leaflet");
+      // Celestial rise/set markers deliberately share the exact same Leaflet
+      // route-layer lifecycle that draws the gold route and waypoint markers.
       celestialTrackMarkersRef.current.forEach((marker) => {
         try { map.removeLayer(marker); } catch {}
       });
       celestialTrackMarkersRef.current = [];
 
-      const events = predictedTrackCelestialEvents(route, activeLeg, ownShip);
-      if (!events.length) {
-        if (ownShip && route.length >= 2) {
-          const diagnostic = L.circleMarker([ownShip.lat, ownShip.lon], {
-            radius: 5,
-            color: "#fb7185",
-            weight: 2,
-            fillColor: "#fb7185",
-            fillOpacity: 1,
-          })
-            .bindTooltip("CELESTIAL EVENTS: 0", { permanent: true, direction: "right", offset: [8, 0] })
-            .addTo(map);
-          celestialTrackMarkersRef.current = [diagnostic];
-        }
-        return;
-      }
-
-      const styleFor = (kind: TrackCelestialKind) => {
-        if (kind === "sunrise") return { dot: "#fbbf24", text: "#fde68a", label: "SUNRISE", glyph: "☀" };
-        if (kind === "sunset") return { dot: "#f59e0b", text: "#fdba74", label: "SUNSET", glyph: "☀" };
-        if (kind === "moonrise") return { dot: "#a5b4fc", text: "#c7d2fe", label: "MOONRISE", glyph: "☾" };
-        return { dot: "#818cf8", text: "#c7d2fe", label: "MOONSET", glyph: "☾" };
-      };
-
-      celestialTrackMarkersRef.current = events.map((event) => {
-        const style = styleFor(event.kind);
-        const label = `${style.label} ${formatTrackCelestialLocalTime(event)}`;
-        return L.circleMarker([event.lat, event.lon], {
+      const celestialEvents = predictedTrackCelestialEvents(route, activeLeg, ownShip);
+      if (ownShip && route.length >= 2 && celestialEvents.length === 0) {
+        const diagnostic = L.circleMarker([ownShip.lat, ownShip.lon], {
           radius: 7,
-          color: "#071019",
+          color: "#ffffff",
           weight: 2,
-          fillColor: style.dot,
+          fillColor: "#fb7185",
           fillOpacity: 1,
-          interactive: true,
         })
-          .bindTooltip(label, {
+          .bindTooltip("CELESTIAL EVENTS: 0", {
             permanent: true,
             direction: "right",
-            offset: [8, 0],
-            opacity: 0.96,
+            offset: [10, 0],
+            opacity: 1,
           })
           .addTo(map);
-      });
+        celestialTrackMarkersRef.current = [diagnostic];
+      } else if (celestialEvents.length) {
+        const styleForCelestial = (kind: TrackCelestialKind) => {
+          if (kind === "sunrise") return { dot: "#fbbf24", label: "SUNRISE" };
+          if (kind === "sunset") return { dot: "#f59e0b", label: "SUNSET" };
+          if (kind === "moonrise") return { dot: "#a5b4fc", label: "MOONRISE" };
+          return { dot: "#818cf8", label: "MOONSET" };
+        };
+
+        celestialTrackMarkersRef.current = celestialEvents.map((event) => {
+          const style = styleForCelestial(event.kind);
+          const label = `${style.label} ${formatTrackCelestialLocalTime(event)}`;
+          return L.circleMarker([event.lat, event.lon], {
+            radius: 7,
+            color: "#ffffff",
+            weight: 2,
+            fillColor: style.dot,
+            fillOpacity: 1,
+          })
+            .bindTooltip(label, {
+              permanent: true,
+              direction: "right",
+              offset: [10, 0],
+              opacity: 1,
+            })
+            .addTo(map);
+        });
+      }
+
+      setTimeout(() => map.invalidateSize(), 100);
     }
 
-    updateCelestialTrackMarkers();
-    return () => {
-      const map = mapRef.current;
-      celestialTrackMarkersRef.current.forEach((marker) => {
-        try { map?.removeLayer(marker); } catch {}
-      });
-      celestialTrackMarkersRef.current = [];
-    };
-  }, [route, ownShip?.lat, ownShip?.lon, ownShip?.sog, activeLeg?.index, activeLeg?.alongTrack]);
+    updateRouteLayer();
+  }, [route, routeAlerts, routeName, ownShip?.lat, ownShip?.lon, ownShip?.sog]);
+
 
   useEffect(() => {
     async function updateOwnShipMarker() {
