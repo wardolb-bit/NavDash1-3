@@ -160,6 +160,8 @@ function normalizeWeatherSnapshot(data: any): WeatherSnapshot {
 }
 
 
+
+
 type LandAnchor = {
   name: string;
   lat: number;
@@ -1047,19 +1049,27 @@ function saveRouteState(routeName: string, waypoints: Waypoint[], activeWaypoint
 
   try {
     window.localStorage.setItem(ROUTE_STORAGE_KEY, payload);
-  } catch {}
+  } catch {
+    // Some locked-down browsers can block localStorage.
+  }
 
   try {
     window.sessionStorage.setItem(ROUTE_STORAGE_KEY, payload);
-  } catch {}
+  } catch {
+    // sessionStorage is a backup only.
+  }
 
   try {
     fetch("/api/route-state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: payload,
-    }).catch(() => {});
-  } catch {}
+    }).catch(() => {
+      // Shared USB route state is helpful, but the page should keep running without it.
+    });
+  } catch {
+    // Fetch can be unavailable during shutdown/navigation.
+  }
 }
 
 function loadSavedRoute(): { routeName?: string; waypoints?: Waypoint[]; activeWaypointIndex?: number } | null {
@@ -1070,28 +1080,38 @@ function loadSavedRoute(): { routeName?: string; waypoints?: Waypoint[]; activeW
   try {
     const saved = window.localStorage.getItem(ROUTE_STORAGE_KEY);
     if (saved) candidates.push(saved);
-  } catch {}
+  } catch {
+    // localStorage can be blocked on locked-down machines.
+  }
 
   try {
     const saved = window.sessionStorage.getItem(ROUTE_STORAGE_KEY);
     if (saved) candidates.push(saved);
-  } catch {}
+  } catch {
+    // sessionStorage is backup only.
+  }
 
   try {
     const saved = window.localStorage.getItem("navdash-v12-loaded-route");
     if (saved) candidates.push(saved);
-  } catch {}
+  } catch {
+    // Legacy key unavailable.
+  }
 
   try {
     const saved = window.sessionStorage.getItem("navdash-v12-loaded-route");
     if (saved) candidates.push(saved);
-  } catch {}
+  } catch {
+    // Legacy key unavailable.
+  }
 
   for (const candidate of candidates) {
     try {
       const normalized = normalizeSharedRouteState(JSON.parse(candidate));
       if (normalized) return normalized;
-    } catch {}
+    } catch {
+      // Try the next saved candidate.
+    }
   }
 
   return null;
@@ -1111,8 +1131,12 @@ async function loadSharedRouteState(): Promise<{ routeName?: string; waypoints?:
 
 function clearSharedRouteState() {
   try {
-    fetch("/api/route-state", { method: "DELETE" }).catch(() => {});
-  } catch {}
+    fetch("/api/route-state", { method: "DELETE" }).catch(() => {
+      // Keep the local page working even if the shared route file cannot be cleared.
+    });
+  } catch {
+    // Fetch can be unavailable during shutdown/navigation.
+  }
 }
 
 function sendRouteStateOverWebSocket(
@@ -1224,13 +1248,17 @@ export default function NavDashHomePage() {
       if (!stored) return;
       const parsed = JSON.parse(stored);
       if (Array.isArray(parsed)) setRouteAlerts(parsed);
-    } catch {}
+    } catch {
+      // Locked-down browsers can block localStorage.
+    }
   }, []);
 
   useEffect(() => {
     try {
       window.localStorage.setItem(ROUTE_ALERT_STORAGE_KEY, JSON.stringify(routeAlerts));
-    } catch {}
+    } catch {
+      // Keep route monitoring usable if localStorage is unavailable.
+    }
   }, [routeAlerts]);
 
   useEffect(() => {
@@ -1275,7 +1303,9 @@ export default function NavDashHomePage() {
         setLegMode("auto");
         setRouteLoadStatus(`Restored ${savedRoute.waypoints.length} waypoints from saved route: ${restoredRouteName}`);
       }
-    } catch {}
+    } catch {
+      // Keep the page usable even if saved route data is corrupt.
+    }
 
     let sharedRouteCancelled = false;
     loadSharedRouteState().then((sharedRoute) => {
@@ -1316,7 +1346,9 @@ export default function NavDashHomePage() {
 
         try {
           msg = JSON.parse(event.data);
-        } catch {}
+        } catch {
+          // Some feeds may send plain NMEA text instead of JSON.
+        }
 
         if (msg?.type === "route-state") {
           const sharedRoute = normalizeSharedRouteState(msg);
@@ -1351,7 +1383,9 @@ export default function NavDashHomePage() {
 
         setOwnShip(decoded);
         setAisStatus("Live AIS position active");
-      } catch {}
+      } catch {
+        // Ignore malformed WebSocket messages.
+      }
     };
 
     return () => {
@@ -1496,14 +1530,18 @@ export default function NavDashHomePage() {
       if (routeLayerRef.current) {
         try {
           map.removeLayer(routeLayerRef.current);
-        } catch {}
+        } catch {
+          // Ignore stale route layer cleanup errors.
+        }
         routeLayerRef.current = null;
       }
 
       routeMarkersRef.current.forEach((marker) => {
         try {
           map.removeLayer(marker);
-        } catch {}
+        } catch {
+          // Ignore stale route marker cleanup errors.
+        }
       });
       routeMarkersRef.current = [];
 
@@ -1548,7 +1586,9 @@ export default function NavDashHomePage() {
       try {
         const bounds = L.latLngBounds(routeLatLngs as any);
         map.fitBounds(bounds, { padding: [35, 35], maxZoom: 10 });
-      } catch {}
+      } catch {
+        // Keep current view if bounds cannot be calculated.
+      }
 
       setTimeout(() => map.invalidateSize(), 100);
     }
@@ -1562,9 +1602,7 @@ export default function NavDashHomePage() {
       if (!map || !ownShip) return;
 
       const L = await import("leaflet");
-      const routeBounds = routeLayerRef.current?.getBounds?.();
-      const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;
-      const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);
+      const displayLon = unwrapLongitudeNear(ownShip.lon, map.getCenter().lng);
       const position: [number, number] = [ownShip.lat, displayLon];
 
       if (!ownLayerRef.current) {
@@ -1593,7 +1631,9 @@ export default function NavDashHomePage() {
       if (ownVectorRef.current) {
         try {
           ownLayerRef.current?.removeLayer(ownVectorRef.current);
-        } catch {}
+        } catch {
+          // Ignore stale vector cleanup errors.
+        }
         ownVectorRef.current = null;
       }
 
@@ -1618,6 +1658,9 @@ export default function NavDashHomePage() {
 
         ownVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(ownLayerRef.current);
       }
+
+      // Do not auto-pan here. The watch should be able to freely inspect the chart.
+      // Use the Center Own Ship button when recentering is desired.
     }
 
     updateOwnShipMarker();
@@ -1682,6 +1725,7 @@ export default function NavDashHomePage() {
         await document.exitFullscreen?.();
       }
     } catch {
+      // Browser may block fullscreen unless triggered by a user gesture.
     } finally {
       setTimeout(() => mapRef.current?.invalidateSize(), 400);
     }
@@ -1690,9 +1734,7 @@ export default function NavDashHomePage() {
   function centerOwnShip() {
     if (!ownShip || !mapRef.current) return;
     const map = mapRef.current;
-    const routeBounds = routeLayerRef.current?.getBounds?.();
-    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;
-    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);
+    const displayLon = unwrapLongitudeNear(ownShip.lon, map.getCenter().lng);
     map.panTo([ownShip.lat, displayLon], { animate: true, duration: 0.5 });
   }
 
@@ -1739,12 +1781,16 @@ export default function NavDashHomePage() {
     try {
       window.localStorage.removeItem(ROUTE_STORAGE_KEY);
       window.localStorage.removeItem("navdash-v12-loaded-route");
-    } catch {}
+    } catch {
+      // Some locked-down browsers can block localStorage.
+    }
 
     try {
       window.sessionStorage.removeItem(ROUTE_STORAGE_KEY);
       window.sessionStorage.removeItem("navdash-v12-loaded-route");
-    } catch {}
+    } catch {
+      // sessionStorage is a backup only.
+    }
 
     setRoute([]);
     setRouteName("No route loaded");
@@ -1755,6 +1801,100 @@ export default function NavDashHomePage() {
     setRouteLoadStatus("Route cleared. Import an RTZ/XML route when ready.");
     sendRouteClearOverWebSocket(routeWsRef.current);
   }
+
+  /*
+    if (!ownShip) {
+      setAisStatus("Waiting for live AIS before logging position");
+      setLastAutoLogText(reason === "manual" ? "Manual log not added: waiting for live AIS position." : "Automatic log skipped: waiting for live AIS position.");
+      return false;
+    }
+
+    const now = new Date();
+    const activeLegText =
+      route.length >= 2 && activeLegStart.id !== "--" && activeLegEnd.id !== "--"
+        ? `${activeLegStart.id} → ${activeLegEnd.id}`
+        : "No route loaded";
+
+    const row: WatchLogRow = {
+      id: makeWatchLogId(),
+      timeUtc: now.toISOString().slice(0, 19).replace("T", " ") + " UTC",
+      lat: ownShip.lat,
+      lon: ownShip.lon,
+      cog: ownShip.cog,
+      sog: ownShip.sog,
+      heading: ownShip.heading ?? 0,
+      activeLeg: activeLegText,
+      dtg: dtg ?? 0,
+      xte: absXte ?? 0,
+      weather: weather?.status || "UNKNOWN",
+    };
+
+    setWatchLog((rows) => [row, ...rows].slice(0, 36));
+
+    if (reason === "auto") {
+      lastAutoLogHourRef.current = watchLogHourKey(now);
+      setLastAutoLogText(`Last automatic entry: ${row.timeUtc}`);
+    } else {
+      setLastAutoLogText(`Last manual entry: ${row.timeUtc}`);
+    }
+
+    return true;
+  }
+
+  function addWatchLogEntry() {
+    createWatchLogEntry("manual");
+  }
+
+  function clearWatchLog() {
+    setWatchLog([]);
+    lastAutoLogHourRef.current = "";
+    setLastAutoLogText("Watch log cleared. No automatic log entry yet.");
+
+    try {
+      window.localStorage.removeItem(WATCH_LOG_KEY);
+    } catch {
+      // Some locked-down browsers can block localStorage.
+    }
+  }
+
+  useEffect(() => {
+    if (!autoLogEnabled || !ownShip) return;
+
+    const now = new Date();
+    if (!isTopOfUtcHour(now)) return;
+
+    const currentHour = watchLogHourKey(now);
+    if (lastAutoLogHourRef.current === currentHour) return;
+
+    createWatchLogEntry("auto");
+  }, [autoLogEnabled, ownShip?.lat, ownShip?.lon, absXte, activeLegStart.id, activeLegEnd.id, route.length, weather?.status]);
+
+  function exportWatchLogCsv() {
+    const header = ["Time UTC", "Lat", "Lon", "COG", "SOG", "Heading", "Active Leg", "DTG NM", "XTE NM", "Weather"];
+    const rows = watchLog.map((row) => [
+      row.timeUtc,
+      formatDdm(row.lat, true),
+      formatDdm(row.lon, false),
+      row.cog.toFixed(1),
+      row.sog.toFixed(1),
+      row.heading.toFixed(1),
+      row.activeLeg,
+      row.dtg.toFixed(2),
+      row.xte.toFixed(2),
+      row.weather,
+    ]);
+
+    const csv = [header, ...rows].map((row) => row.map(csvEscape).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `navdash-watch-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  */
 
   const pageClass = dayMode
     ? "min-h-screen bg-white text-slate-950"
@@ -1811,32 +1951,78 @@ export default function NavDashHomePage() {
 
   return (
     <main className={`${pageClass} ${readableFontClass}`}>
-      <div className={dayMode ? "absolute inset-0 bg-white" : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)]"} />
+      <div
+        className={
+          dayMode
+            ? "absolute inset-0 bg-white"
+            : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)]"
+        }
+      />
 
       <style jsx global>{`
-        .navdash-v12-day .leaflet-container { background: #e2e8f0; }
-        .navdash-v12-night .leaflet-container { background: #071019; filter: saturate(0.88) brightness(0.82); }
-        .navdash-readable-font .text-xs { font-size: 0.9rem; line-height: 1.25rem; }
-        .navdash-readable-font .text-sm { font-size: 1.05rem; line-height: 1.55rem; }
-        .navdash-readable-font .text-base { font-size: 1.18rem; line-height: 1.88rem; }
-        .navdash-readable-font .text-lg { font-size: 1.32rem; line-height: 1.88rem; }
-        .navdash-readable-font .text-xl { font-size: 1.5rem; line-height: 2.25rem; }
-        .navdash-readable-font .text-2xl { font-size: 1.82rem; line-height: 2.25rem; }
-        .navdash-readable-font .text-3xl { font-size: 2.25rem; line-height: 2.7rem; }
-        .navdash-readable-font .text-4xl { font-size: 2.7rem; line-height: 3.1rem; }
-        .navdash-readable-font .text-5xl { font-size: 3.5rem; line-height: 3.9rem; }
+        .navdash-v12-day .leaflet-container {
+          background: #e2e8f0;
+        }
+        .navdash-v12-night .leaflet-container {
+          background: #071019;
+          filter: saturate(0.88) brightness(0.82);
+        }
+        .navdash-readable-font .text-xs {
+          font-size: 0.9rem;
+          line-height: 1.25rem;
+        }
+        .navdash-readable-font .text-sm {
+          font-size: 1.05rem;
+          line-height: 1.55rem;
+        }
+        .navdash-readable-font .text-base {
+          font-size: 1.18rem;
+          line-height: 1.88rem;
+        }
+        .navdash-readable-font .text-lg {
+          font-size: 1.32rem;
+          line-height: 1.88rem;
+        }
+        .navdash-readable-font .text-xl {
+          font-size: 1.5rem;
+          line-height: 2.25rem;
+        }
+        .navdash-readable-font .text-2xl {
+          font-size: 1.82rem;
+          line-height: 2.25rem;
+        }
+        .navdash-readable-font .text-3xl {
+          font-size: 2.25rem;
+          line-height: 2.7rem;
+        }
+        .navdash-readable-font .text-4xl {
+          font-size: 2.7rem;
+          line-height: 3.1rem;
+        }
+        .navdash-readable-font .text-5xl {
+          font-size: 3.5rem;
+          line-height: 3.9rem;
+        }
       `}</style>
 
       <div className={`relative z-10 min-h-screen ${shellPaddingClass} ${dayMode ? "navdash-v12-day" : "navdash-v12-night"}`}>
         <header className={`mb-5 rounded-[2rem] border border-white/10 bg-white/[0.055] ${headerPaddingClass} backdrop-blur-xl shadow-2xl shadow-black/35`}>
           <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex items-center gap-4">
-              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-wardGold/45 bg-wardGold/15 text-3xl font-black text-wardGold">N</div>
+              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-wardGold/45 bg-wardGold/15 text-3xl font-black text-wardGold">
+                N
+              </div>
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.42em] text-wardGold">M/V MB480</div>
-                <h1 className={dayMode ? "text-4xl font-black tracking-tight text-slate-950 2xl:text-5xl" : "text-4xl font-black tracking-tight text-white 2xl:text-5xl"}>NavDash 1.3</h1>
-                <div className={dayMode ? "mt-1 text-sm text-slate-700" : "mt-1 text-sm text-slate-300"}>Navigation dashboard and route monitoring</div>
-                <div className={dayMode ? "mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" : "mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400"}>{routeLoadStatus}</div>
+                <h1 className={dayMode ? "text-4xl font-black tracking-tight text-slate-950 2xl:text-5xl" : "text-4xl font-black tracking-tight text-white 2xl:text-5xl"}>
+                  NavDash 1.3
+                </h1>
+                <div className={dayMode ? "mt-1 text-sm text-slate-700" : "mt-1 text-sm text-slate-300"}>
+                  Navigation dashboard and route monitoring
+                </div>
+                <div className={dayMode ? "mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-500" : "mt-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400"}>
+                  {routeLoadStatus}
+                </div>
               </div>
             </div>
 
@@ -1845,16 +2031,53 @@ export default function NavDashHomePage() {
                 Load RTZ
                 <input type="file" accept=".rtz,.xml" onChange={handleRtzLoad} className="hidden" />
               </label>
-              <button onClick={clearLoadedRoute} disabled={route.length < 2} className={route.length < 2 ? dayMode ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none cursor-not-allowed items-center justify-center whitespace-nowrap rounded-2xl border border-slate-300 bg-slate-100 px-4 text-sm font-black text-slate-400" : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none cursor-not-allowed items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-black text-slate-500" : dayMode ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-red-300 bg-red-50 px-4 text-sm font-black text-red-700 shadow-sm hover:bg-red-100" : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-red-400/40 bg-red-500/15 px-4 text-sm font-black text-red-100 hover:bg-red-500/25"}>Clear Route</button>
-              <button onClick={toggleFullscreen} className={dayMode ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-400 bg-slate-100 px-4 text-sm font-black text-slate-950 shadow-sm hover:bg-white" : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15"}>{isFullscreen ? "Exit Fullscreen" : "Fullscreen"}</button>
-              <button onClick={toggleTheme} className={dayMode ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-400 bg-slate-100 px-4 text-sm font-black text-slate-950 shadow-sm hover:bg-white" : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15"}>{dayMode ? "Bridge Night" : "Day Mode"}</button>
+
+              <button
+                onClick={clearLoadedRoute}
+                disabled={route.length < 2}
+                className={
+                  route.length < 2
+                    ? dayMode
+                      ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none cursor-not-allowed items-center justify-center whitespace-nowrap rounded-2xl border border-slate-300 bg-slate-100 px-4 text-sm font-black text-slate-400"
+                      : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none cursor-not-allowed items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-black text-slate-500"
+                    : dayMode
+                      ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-red-300 bg-red-50 px-4 text-sm font-black text-red-700 shadow-sm hover:bg-red-100"
+                      : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-red-400/40 bg-red-500/15 px-4 text-sm font-black text-red-100 hover:bg-red-500/25"
+                }
+              >
+                Clear Route
+              </button>
+
+              <button onClick={toggleFullscreen} className={dayMode ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-400 bg-slate-100 px-4 text-sm font-black text-slate-950 shadow-sm hover:bg-white" : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15"}>
+                {isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
+              </button>
+              <button onClick={toggleTheme} className={dayMode ? "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-slate-400 bg-slate-100 px-4 text-sm font-black text-slate-950 shadow-sm hover:bg-white" : "inline-flex h-11 w-[138px] xl:h-12 xl:w-[156px] flex-none items-center justify-center whitespace-nowrap rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-black text-slate-100 hover:bg-white/15"}>
+                {dayMode ? "Bridge Night" : "Day Mode"}
+              </button>
             </div>
           </div>
         </header>
 
         <div className={navGridClass}>
-          {[["chart", "Chart Awareness"], ["route", "Route Monitor"], ["weather", "Weather"], ["status", "Status Board"]].map(([key, label]) => (
-            <button key={key} onClick={() => goToPanel(key)} className={activePanel === key ? "rounded-2xl border border-wardGold/50 bg-wardGold px-3 py-3 text-sm font-black text-[#111827]" : dayMode ? "rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm font-black text-slate-800 hover:bg-slate-50" : "rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100 hover:bg-white/15"}>{label}</button>
+          {[
+            ["chart", "Chart Awareness"],
+            ["route", "Route Monitor"],
+            ["weather", "Weather"],
+            ["status", "Status Board"],
+          ].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => goToPanel(key)}
+              className={
+                activePanel === key
+                  ? "rounded-2xl border border-wardGold/50 bg-wardGold px-3 py-3 text-sm font-black text-[#111827]"
+                  : dayMode
+                    ? "rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm font-black text-slate-800 hover:bg-slate-50"
+                    : "rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100 hover:bg-white/15"
+              }
+            >
+              {label}
+            </button>
           ))}
         </div>
 
@@ -1863,13 +2086,33 @@ export default function NavDashHomePage() {
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className={labelClass}>ENC Awareness Layer</div>
-                <h2 className={dayMode ? "mt-1 text-3xl font-black text-slate-950" : "mt-1 text-3xl font-black text-white"}>Chart display</h2>
-                <p className={`mt-1 text-sm ${mutedClass}`}>Awareness-only basemap with OSM, seamarks, and NOAA ENC WMS where NOAA coverage exists, including U.S. waters such as Guam.</p>
+                <h2 className={dayMode ? "mt-1 text-3xl font-black text-slate-950" : "mt-1 text-3xl font-black text-white"}>
+                  Chart display
+                </h2>
+                <p className={`mt-1 text-sm ${mutedClass}`}>
+                  Awareness-only basemap with OSM, seamarks, and NOAA ENC WMS where NOAA coverage exists, including U.S. waters such as Guam.
+                </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <button onClick={() => setEncLayerOn((v) => !v)} className={encLayerOn ? "rounded-2xl border border-emerald-600 bg-emerald-400 px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm font-black text-slate-900"}>ENC Layer {encLayerOn ? "ON" : "OFF"}</button>
-                <button onClick={() => setSeamarksOn((v) => !v)} className={seamarksOn ? "rounded-2xl border border-cyan-600 bg-cyan-300 px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm font-black text-slate-900"}>Seamarks {seamarksOn ? "ON" : "OFF"}</button>
-                <button onClick={centerOwnShip} disabled={!ownShip} className={ownShip ? "rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm font-black text-slate-500"}>Center Own Ship</button>
+                <button
+                  onClick={() => setEncLayerOn((v) => !v)}
+                  className={encLayerOn ? "rounded-2xl border border-emerald-600 bg-emerald-400 px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm font-black text-slate-900"}
+                >
+                  ENC Layer {encLayerOn ? "ON" : "OFF"}
+                </button>
+                <button
+                  onClick={() => setSeamarksOn((v) => !v)}
+                  className={seamarksOn ? "rounded-2xl border border-cyan-600 bg-cyan-300 px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm font-black text-slate-900"}
+                >
+                  Seamarks {seamarksOn ? "ON" : "OFF"}
+                </button>
+                <button
+                  onClick={centerOwnShip}
+                  disabled={!ownShip}
+                  className={ownShip ? "rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-slate-400 bg-slate-200 px-4 py-3 text-sm font-black text-slate-500"}
+                >
+                  Center Own Ship
+                </button>
               </div>
             </div>
 
@@ -1891,14 +2134,36 @@ export default function NavDashHomePage() {
                 </div>
                 <div className={softPanelClass}>
                   <div className={labelClass}>Own Ship Position</div>
-                  <div className={ownShip ? "mt-2 whitespace-pre-line text-lg font-black text-emerald-400" : "mt-2 text-xl font-black text-amber-400"}>{ownShip ? formatOwnShipPositionDdm(ownShip.lat, ownShip.lon) : "Waiting for AIS"}</div>
-                  <div className={`mt-1 text-xs ${mutedClass}`}>{ownShip ? `${ownShip.sog.toFixed(1)} kt / ${ownShip.cog.toFixed(1)}° COG / HDG ${ownShip.heading === null ? "--" : `${ownShip.heading.toFixed(0)}°`}` : aisStatus}</div>
+                  <div className={ownShip ? "mt-2 whitespace-pre-line text-lg font-black text-emerald-400" : "mt-2 text-xl font-black text-amber-400"}>
+                    {ownShip ? formatOwnShipPositionDdm(ownShip.lat, ownShip.lon) : "Waiting for AIS"}
+                  </div>
+                  <div className={`mt-1 text-xs ${mutedClass}`}>
+                    {ownShip
+                      ? `${ownShip.sog.toFixed(1)} kt / ${ownShip.cog.toFixed(1)}° COG / HDG ${ownShip.heading === null ? "--" : `${ownShip.heading.toFixed(0)}°`}`
+                      : aisStatus}
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className={softPanelClass}><div className={labelClass}>DTG</div><div className="mt-2 text-2xl font-black text-wardGold">{formatNm(dtg)}</div><div className={`text-xs ${mutedClass}`}>NM</div></div>
-                  <div className={softPanelClass}><div className={labelClass}>ETA</div><div className={dayMode ? "mt-2 text-lg font-black leading-tight text-slate-950" : "mt-2 text-lg font-black leading-tight text-white"}>{destinationEta.time}</div><div className={`mt-1 text-xs font-bold leading-snug ${mutedClass}`}>{destinationEta.zone}</div></div>
-                  <div className={softPanelClass}><div className={labelClass}>XTE</div><div className={absXte === null ? "mt-2 text-2xl font-black text-amber-400" : absXte > corridorNm ? "mt-2 text-2xl font-black text-red-500" : "mt-2 text-2xl font-black text-emerald-400"}>{absXte === null ? "Waiting" : `${formatNm(absXte)} ${side}`}</div></div>
-                  <div className={softPanelClass}><div className={labelClass}>Leg BRG</div><div className={dayMode ? "mt-2 text-2xl font-black text-slate-950" : "mt-2 text-2xl font-black text-white"}>{legBearing === null ? "--" : `${legBearing.toFixed(1)}°T`}</div></div>
+                  <div className={softPanelClass}>
+                    <div className={labelClass}>DTG</div>
+                    <div className="mt-2 text-2xl font-black text-wardGold">{formatNm(dtg)}</div>
+                    <div className={`text-xs ${mutedClass}`}>NM</div>
+                  </div>
+                  <div className={softPanelClass}>
+                    <div className={labelClass}>ETA</div>
+                    <div className={dayMode ? "mt-2 text-lg font-black leading-tight text-slate-950" : "mt-2 text-lg font-black leading-tight text-white"}>{destinationEta.time}</div>
+                    <div className={`mt-1 text-xs font-bold leading-snug ${mutedClass}`}>{destinationEta.zone}</div>
+                  </div>
+                  <div className={softPanelClass}>
+                    <div className={labelClass}>XTE</div>
+                    <div className={absXte === null ? "mt-2 text-2xl font-black text-amber-400" : absXte > corridorNm ? "mt-2 text-2xl font-black text-red-500" : "mt-2 text-2xl font-black text-emerald-400"}>
+                      {absXte === null ? "Waiting" : `${formatNm(absXte)} ${side}`}
+                    </div>
+                  </div>
+                  <div className={softPanelClass}>
+                    <div className={labelClass}>Leg BRG</div>
+                    <div className={dayMode ? "mt-2 text-2xl font-black text-slate-950" : "mt-2 text-2xl font-black text-white"}>{legBearing === null ? "--" : `${legBearing.toFixed(1)}°T`}</div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -1906,49 +2171,193 @@ export default function NavDashHomePage() {
             <section className={panelClass}>
               <div className={labelClass}>Active Leg Control</div>
               <div className="mt-3 rounded-3xl border border-wardGold/30 bg-wardGold/10 p-4">
-                <div className="text-sm font-black uppercase tracking-[0.18em] text-wardGold">{activeLegStart.id} → {activeLegEnd.id}</div>
-                <div className={dayMode ? "mt-2 text-sm font-bold text-slate-800" : "mt-2 text-sm font-bold text-slate-200"}>{activeLegStart.name} → {activeLegEnd.name}</div>
-                <div className={`mt-1 text-xs ${mutedClass}`}>Mode: {legMode === "auto" ? "Auto logical leg" : "Manual selected leg"}</div>
+                <div className="text-sm font-black uppercase tracking-[0.18em] text-wardGold">
+                  {activeLegStart.id} → {activeLegEnd.id}
+                </div>
+                <div className={dayMode ? "mt-2 text-sm font-bold text-slate-800" : "mt-2 text-sm font-bold text-slate-200"}>
+                  {activeLegStart.name} → {activeLegEnd.name}
+                </div>
+                <div className={`mt-1 text-xs ${mutedClass}`}>
+                  Mode: {legMode === "auto" ? "Auto logical leg" : "Manual selected leg"}
+                </div>
               </div>
 
               <div className="mt-3 grid grid-cols-3 gap-3">
-                <button onClick={() => { setLegMode("manual"); setActiveWaypointIndex((idx) => Math.max(1, idx - 1)); }} className={dayMode ? "rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}>Prev Leg</button>
-                <button onClick={() => setLegMode((mode) => (mode === "auto" ? "manual" : "auto"))} className="rounded-2xl border border-wardGold/40 bg-wardGold px-3 py-3 text-sm font-black text-black">{legMode === "auto" ? "Auto" : "Manual"}</button>
-                <button onClick={() => { setLegMode("manual"); setActiveWaypointIndex((idx) => Math.max(1, Math.min(Math.max(route.length - 1, 1), idx + 1))); }} className={dayMode ? "rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}>Next Leg</button>
+                <button
+                  onClick={() => {
+                    setLegMode("manual");
+                    setActiveWaypointIndex((idx) => Math.max(1, idx - 1));
+                  }}
+                  className={dayMode ? "rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}
+                >
+                  Prev Leg
+                </button>
+                <button
+                  onClick={() => setLegMode((mode) => (mode === "auto" ? "manual" : "auto"))}
+                  className="rounded-2xl border border-wardGold/40 bg-wardGold px-3 py-3 text-sm font-black text-black"
+                >
+                  {legMode === "auto" ? "Auto" : "Manual"}
+                </button>
+                <button
+                  onClick={() => {
+                    setLegMode("manual");
+                    setActiveWaypointIndex((idx) => Math.max(1, Math.min(Math.max(route.length - 1, 1), idx + 1)));
+                  }}
+                  className={dayMode ? "rounded-2xl border border-slate-300 bg-white px-3 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}
+                >
+                  Next Leg
+                </button>
               </div>
 
               <div className="mt-4 flex items-center justify-between gap-4">
-                <input type="range" min="0.5" max="5" step="0.5" value={corridorNm} onChange={(e) => setCorridorNm(Number(e.target.value))} className="w-full" />
-                <div className="w-20 rounded-2xl border border-wardGold/40 bg-wardGold px-3 py-2 text-center text-sm font-black text-black">{corridorNm.toFixed(1)} NM</div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="5"
+                  step="0.5"
+                  value={corridorNm}
+                  onChange={(e) => setCorridorNm(Number(e.target.value))}
+                  className="w-full"
+                />
+                <div className="w-20 rounded-2xl border border-wardGold/40 bg-wardGold px-3 py-2 text-center text-sm font-black text-black">
+                  {corridorNm.toFixed(1)} NM
+                </div>
               </div>
-              <p className={`mt-3 text-sm leading-6 ${mutedClass}`}>Auto mode picks the most logical route leg from live AIS position. Manual mode lets the watch advance or back up the active leg.</p>
+              <p className={`mt-3 text-sm leading-6 ${mutedClass}`}>
+                Auto mode picks the most logical route leg from live AIS position. Manual mode lets the watch advance or back up the active leg.
+              </p>
             </section>
           </aside>
         </div>
 
         <section className={lowerGridClass}>
+          {/*
+          <div id="v12-section-watch" className={panelClass}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className={labelClass}>Watch Log</div>
+                <h3 className={dayMode ? "mt-1 text-2xl font-black text-slate-950" : "mt-1 text-2xl font-black text-white"}>Hourly auto position log</h3>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button type="button" onClick={addWatchLogEntry} className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black">Add Entry</button>
+                <button
+                  type="button"
+                  onClick={clearWatchLog}
+                  disabled={watchLog.length === 0}
+                  className={
+                    watchLog.length === 0
+                      ? dayMode
+                        ? "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-black text-slate-400"
+                        : "rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-black text-slate-500"
+                      : dayMode
+                        ? "rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-black text-red-700 hover:bg-red-100"
+                        : "rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-black text-red-100 hover:bg-red-500/25"
+                  }
+                >
+                  Clear Log
+                </button>
+                <button
+                  onClick={() => setAutoLogEnabled((value) => !value)}
+                  className={autoLogEnabled ? "rounded-2xl border border-emerald-700 bg-emerald-400 px-4 py-3 text-sm font-black text-black" : "rounded-2xl border border-amber-700 bg-amber-400 px-4 py-3 text-sm font-black text-black"}
+                >
+                  Auto Log {autoLogEnabled ? "ON" : "OFF"}
+                </button>
+                <button type="button" onClick={exportWatchLogCsv} className={dayMode ? "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-slate-100"}>Export CSV</button>
+              </div>
+            </div>
+            <div className={dayMode ? "mt-4 rounded-2xl border border-slate-300 bg-slate-50 p-3 text-xs font-bold text-slate-700" : "mt-4 rounded-2xl border border-white/10 bg-white/[0.055] p-3 text-xs font-bold text-slate-300"}>
+              Automatic logbook: one entry per UTC hour when live AIS is available. Route/leg data is included when loaded. {lastAutoLogText}
+            </div>
+
+            <div className="mt-4 max-h-72 overflow-auto rounded-3xl border border-white/10">
+              <table className="w-full text-left text-xs">
+                <thead className={dayMode ? "bg-slate-100 text-slate-600" : "bg-black/35 text-slate-300"}>
+                  <tr>
+                    <th className="p-3">Time</th>
+                    <th className="p-3">Position</th>
+                    <th className="p-3">SOG/COG</th>
+                    <th className="p-3">Leg</th>
+                    <th className="p-3">DTG</th>
+                    <th className="p-3">XTE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {watchLog.length === 0 ? (
+                    <tr><td colSpan={6} className={`p-4 text-center ${mutedClass}`}>No entries yet.</td></tr>
+                  ) : (
+                    watchLog.map((row) => (
+                      <tr key={row.id} className={dayMode ? "border-t border-slate-200" : "border-t border-white/10"}>
+                        <td className="p-3">{row.timeUtc}</td>
+                        <td className="p-3">{formatPositionDdm(asFiniteNumber(row.lat), asFiniteNumber(row.lon))}</td>
+                        <td className="p-3">{asFiniteNumber(row.sog).toFixed(1)} kt / {asFiniteNumber(row.cog).toFixed(1)}°</td>
+                        <td className="p-3">{row.activeLeg}</td>
+                        <td className="p-3">{asFiniteNumber(row.dtg).toFixed(2)} NM</td>
+                        <td className="p-3">{asFiniteNumber(row.xte).toFixed(2)} NM</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          */}
+
           <div id="v12-section-weather" className={panelClass}>
             <div className="flex items-center justify-between gap-3">
-              <div><div className={labelClass}>Weather</div><h3 className={dayMode ? "mt-1 text-2xl font-black text-slate-950" : "mt-1 text-2xl font-black text-white"}>Live weather feed</h3></div>
-              <button onClick={refreshWeather} disabled={weatherLoading} className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:opacity-60">{weatherLoading ? "Refreshing" : "Refresh WX"}</button>
+              <div>
+                <div className={labelClass}>Weather</div>
+                <h3 className={dayMode ? "mt-1 text-2xl font-black text-slate-950" : "mt-1 text-2xl font-black text-white"}>Live weather feed</h3>
+              </div>
+              <button
+                onClick={refreshWeather}
+                disabled={weatherLoading}
+                className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:opacity-60"
+              >
+                {weatherLoading ? "Refreshing" : "Refresh WX"}
+              </button>
             </div>
 
             <div className="mt-4 grid gap-3">
               <div className={softPanelClass}>
                 <div className={labelClass}>Weather Status</div>
-                <div className={weather?.status === "RED" ? "mt-2 text-3xl font-black text-red-500" : weather?.status === "AMBER" ? "mt-2 text-3xl font-black text-amber-400" : weather?.status === "NORMAL" ? "mt-2 text-3xl font-black text-emerald-400" : "mt-2 text-3xl font-black text-slate-400"}>{weather?.status || "WAITING"}</div>
+                <div className={
+                  weather?.status === "RED"
+                    ? "mt-2 text-3xl font-black text-red-500"
+                    : weather?.status === "AMBER"
+                      ? "mt-2 text-3xl font-black text-amber-400"
+                      : weather?.status === "NORMAL"
+                        ? "mt-2 text-3xl font-black text-emerald-400"
+                        : "mt-2 text-3xl font-black text-slate-400"
+                }>
+                  {weather?.status || "WAITING"}
+                </div>
                 <div className={`mt-1 text-xs ${mutedClass}`}>{weatherStatusText}</div>
                 <div className={`mt-1 text-xs ${mutedClass}`}>Stable WX thresholds: Amber 25 kt / 10 ft, Red 35 kt / 15 ft</div>
                 <div className={`mt-1 text-xs ${mutedClass}`}>Refresh cadence: page load, first live AIS fix, manual refresh, then every 15 minutes</div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div className={softPanelClass}><div className={labelClass}>Wind</div><div className="mt-2 text-xl font-black text-wardGold">{weather?.wind || "--"}</div></div>
-                <div className={softPanelClass}><div className={labelClass}>Seas</div><div className="mt-2 text-xl font-black text-wardGold">{weather?.seas || "--"}</div></div>
+                <div className={softPanelClass}>
+                  <div className={labelClass}>Wind</div>
+                  <div className="mt-2 text-xl font-black text-wardGold">{weather?.wind || "--"}</div>
+                </div>
+                <div className={softPanelClass}>
+                  <div className={labelClass}>Seas</div>
+                  <div className="mt-2 text-xl font-black text-wardGold">{weather?.seas || "--"}</div>
+                </div>
               </div>
 
-              <div className={softPanelClass}><div className={labelClass}>Bridge Summary</div><p className={`mt-2 text-sm leading-6 ${mutedClass}`}>{weather?.summary || "Waiting for weather API…"}</p></div>
-              <div className={softPanelClass}><div className={labelClass}>Source</div><div className="mt-2 text-sm font-bold">{weather?.source || "NavDash /api/wx"}</div>{weather?.error && <div className="mt-2 text-xs font-bold text-amber-400">{weather.error}</div>}</div>
+              <div className={softPanelClass}>
+                <div className={labelClass}>Bridge Summary</div>
+                <p className={`mt-2 text-sm leading-6 ${mutedClass}`}>{weather?.summary || "Waiting for weather API…"}</p>
+              </div>
+
+              <div className={softPanelClass}>
+                <div className={labelClass}>Source</div>
+                <div className="mt-2 text-sm font-bold">{weather?.source || "NavDash /api/wx"}</div>
+                {weather?.error && <div className="mt-2 text-xs font-bold text-amber-400">{weather.error}</div>}
+              </div>
             </div>
           </div>
 
@@ -1959,14 +2368,20 @@ export default function NavDashHomePage() {
               {statusItems.map((item) => (
                 <div key={item.label} className={softPanelClass}>
                   <div className="flex items-center justify-between gap-3">
-                    <div><div className={labelClass}>{item.label}</div><div className="mt-1 text-xl font-black">{item.value}</div></div>
-                    <div className={`rounded-2xl border px-3 py-2 text-xs font-black ${statusClass(item.status)}`}>{item.status}</div>
+                    <div>
+                      <div className={labelClass}>{item.label}</div>
+                      <div className="mt-1 text-xl font-black">{item.value}</div>
+                    </div>
+                    <div className={`rounded-2xl border px-3 py-2 text-xs font-black ${statusClass(item.status)}`}>
+                      {item.status}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         </section>
+
       </div>
 
       {selectedWaypoint && (
@@ -1975,19 +2390,42 @@ export default function NavDashHomePage() {
             <div className="text-xs font-black uppercase tracking-[0.22em] text-cyan-400">Waypoint Route Alert</div>
             <div className="mt-2 text-2xl font-black">{selectedWaypoint.id} · {selectedWaypoint.name}</div>
             <div className={`mt-1 text-sm ${mutedClass}`}>{formatPositionDdm(selectedWaypoint.lat, selectedWaypoint.lon)}</div>
-            <label className="mt-5 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">Alert note
-              <textarea autoFocus value={routeAlertMessage} onChange={(event) => setRouteAlertMessage(event.target.value)} placeholder="Call Harbor Control Ch. 69" className={dayMode ? "mt-2 min-h-28 w-full rounded-2xl border border-slate-300 bg-white p-3 text-base text-slate-950 outline-none focus:border-cyan-500" : "mt-2 min-h-28 w-full rounded-2xl border border-white/15 bg-black/30 p-3 text-base text-white outline-none focus:border-cyan-400"} />
+            <label className="mt-5 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+              Alert note
+              <textarea
+                autoFocus
+                value={routeAlertMessage}
+                onChange={(event) => setRouteAlertMessage(event.target.value)}
+                placeholder="Call Harbor Control Ch. 69"
+                className={dayMode ? "mt-2 min-h-28 w-full rounded-2xl border border-slate-300 bg-white p-3 text-base text-slate-950 outline-none focus:border-cyan-500" : "mt-2 min-h-28 w-full rounded-2xl border border-white/15 bg-black/30 p-3 text-base text-white outline-none focus:border-cyan-400"}
+              />
             </label>
-            <label className="mt-4 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">Trigger distance
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+              Trigger distance
               <div className="mt-2 flex items-center gap-3">
-                <input type="number" min="0.1" step="0.1" value={routeAlertTriggerNm} onChange={(event) => setRouteAlertTriggerNm(event.target.value)} className={dayMode ? "h-12 w-32 rounded-2xl border border-slate-300 bg-white px-3 text-base font-black text-slate-950 outline-none focus:border-cyan-500" : "h-12 w-32 rounded-2xl border border-white/15 bg-black/30 px-3 text-base font-black text-white outline-none focus:border-cyan-400"} />
+                <input
+                  type="number"
+                  min="0.1"
+                  step="0.1"
+                  value={routeAlertTriggerNm}
+                  onChange={(event) => setRouteAlertTriggerNm(event.target.value)}
+                  className={dayMode ? "h-12 w-32 rounded-2xl border border-slate-300 bg-white px-3 text-base font-black text-slate-950 outline-none focus:border-cyan-500" : "h-12 w-32 rounded-2xl border border-white/15 bg-black/30 px-3 text-base font-black text-white outline-none focus:border-cyan-400"}
+                />
                 <span className="text-sm font-black">NM before waypoint</span>
               </div>
             </label>
             <div className="mt-5 flex flex-wrap justify-end gap-3">
-              {selectedWaypointExistingAlert && <button type="button" onClick={deleteWaypointAlert} className="rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-black text-red-100">Delete Alert</button>}
-              <button type="button" onClick={() => setSelectedWaypoint(null)} className={dayMode ? "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white"}>Cancel</button>
-              <button type="button" onClick={saveWaypointAlert} disabled={!routeAlertMessage.trim()} className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:opacity-40">Arm Alert</button>
+              {selectedWaypointExistingAlert && (
+                <button type="button" onClick={deleteWaypointAlert} className="rounded-2xl border border-red-400/40 bg-red-500/15 px-4 py-3 text-sm font-black text-red-100">
+                  Delete Alert
+                </button>
+              )}
+              <button type="button" onClick={() => setSelectedWaypoint(null)} className={dayMode ? "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-black text-slate-900" : "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-black text-white"}>
+                Cancel
+              </button>
+              <button type="button" onClick={saveWaypointAlert} disabled={!routeAlertMessage.trim()} className="rounded-2xl border border-wardGold/40 bg-wardGold px-4 py-3 text-sm font-black text-black disabled:opacity-40">
+                Arm Alert
+              </button>
             </div>
           </div>
         </div>
@@ -2000,7 +2438,9 @@ export default function NavDashHomePage() {
             <div className="mt-2 text-xl font-black text-wardGold">{activeRouteAlert.waypointId} · {activeRouteAlert.waypointName}</div>
             <div className="mt-4 text-3xl font-black leading-tight">{activeRouteAlert.message}</div>
             <div className={`mt-3 text-sm font-bold ${mutedClass}`}>Triggered within {activeRouteAlert.triggerNm.toFixed(1)} NM of the waypoint.</div>
-            <button type="button" onClick={acknowledgeRouteAlert} className="mt-6 w-full rounded-2xl border border-red-400 bg-red-500 px-5 py-4 text-base font-black text-white">Acknowledge</button>
+            <button type="button" onClick={acknowledgeRouteAlert} className="mt-6 w-full rounded-2xl border border-red-400 bg-red-500 px-5 py-4 text-base font-black text-white">
+              Acknowledge
+            </button>
           </div>
         </div>
       )}
