@@ -325,6 +325,7 @@ function IsolatedMainMap() {
   const [measureMode, setMeasureMode] = useState<MeasureMode>("ship");
   const [userMarks, setUserMarks] = useState<UserMark[]>([]);
   const [measurement, setMeasurement] = useState<{ distanceNm: number; bearing: number; source: MeasureMode } | null>(null);
+  const [sunEventsVisible, setSunEventsVisible] = useState(true);
 
   useEffect(() => { toolModeRef.current = toolMode; }, [toolMode]);
   useEffect(() => { measureModeRef.current = measureMode; }, [measureMode]);
@@ -546,7 +547,7 @@ function IsolatedMainMap() {
       if (!map || !layer) return;
       const L = await import("leaflet");
       layer.clearLayers();
-      if (!ownShip || route.length < 2) return;
+      if (!sunEventsVisible || !ownShip || route.length < 2) return;
       const events = cPredictEvents(route, ownShip);
       const centerLon = map.getCenter().lng;
       for (const event of events) {
@@ -567,7 +568,7 @@ function IsolatedMainMap() {
       }
     }
     updateCelestial();
-  }, [route, ownShip?.lat, ownShip?.lon, ownShip?.sog]);
+  }, [route, ownShip?.lat, ownShip?.lon, ownShip?.sog, sunEventsVisible]);
 
   useEffect(() => {
     async function updateUserChart() {
@@ -641,6 +642,10 @@ function IsolatedMainMap() {
           <button type="button" style={buttonStyle(toolMode === "measure" && measureMode === "points")} onClick={() => setRangeBearingMode("points")}>TWO POINTS</button>
           <button type="button" style={buttonStyle(false)} onClick={clearMeasurement}>CLEAR MEASURE</button>
           <button type="button" style={buttonStyle(false)} onClick={clearUserChart} disabled={userMarks.length === 0}>CLEAR MARKS</button>
+          <label style={{ ...buttonStyle(sunEventsVisible), display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
+            <input type="checkbox" checked={sunEventsVisible} onChange={(event) => setSunEventsVisible(event.target.checked)} style={{ width: 14, height: 14, accentColor: "#fbbf24", cursor: "pointer" }} />
+            SUN EVENTS
+          </label>
         </div>
         <div style={{ padding: "8px 10px", minHeight: 36, display: "flex", alignItems: "center", border: "1px solid rgba(34,211,238,.28)", borderRadius: 6, background: "rgba(5,12,18,.88)", color: "#d7e7ee", fontSize: 12, fontWeight: 650, pointerEvents: "auto" }}>
           {toolMode === "measure" && measureMode === "ship" && !measurement ? (ownShip ? "Tap map for range / bearing from ship" : "Waiting for AIS position") : null}
