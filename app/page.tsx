@@ -497,15 +497,33 @@ function unwrapLongitudeNear(lon: number, referenceLon: number) {
   return adjustedLon;
 }
 
-function routeLatLngsForChart(route: Waypoint[]) {
-  const points: [number, number][] = [];
+function latLngSegmentsForChart(points: Array<{ lat: number; lon: number }>) {
+  if (!points.length) return [] as [number, number][][];
 
-  for (const wp of route) {
-    const referenceLon = points.length ? points[points.length - 1][1] : wp.lon;
-    points.push([wp.lat, unwrapLongitudeNear(wp.lon, referenceLon)]);
+  const segments: [number, number][][] = [[[points[0].lat, points[0].lon]]];
+
+  for (let i = 1; i < points.length; i += 1) {
+    const start = points[i - 1];
+    const end = points[i];
+    const delta = end.lon - start.lon;
+    const current = segments[segments.length - 1];
+
+    if (Math.abs(delta) <= 180) {
+      current.push([end.lat, end.lon]);
+      continue;
+    }
+
+    const adjustedEndLon = delta > 180 ? end.lon - 360 : end.lon + 360;
+    const seamLon = delta > 180 ? -180 : 180;
+    const oppositeSeamLon = -seamLon;
+    const ratio = (seamLon - start.lon) / (adjustedEndLon - start.lon);
+    const seamLat = start.lat + (end.lat - start.lat) * ratio;
+
+    current.push([seamLat, seamLon]);
+    segments.push([[seamLat, oppositeSeamLon], [end.lat, end.lon]]);
   }
 
-  return points;
+  return segments;
 }
 
 function routePointToXY(lat: number, lon: number, refLat: number, refLon: number) {
@@ -1474,14 +1492,18 @@ export default function NavDashHomePage() {
         zoomControl: false,
         attributionControl: false,
         preferCanvas: true,
+        maxBounds: [[-85.05112878, -180], [85.05112878, 180]],
+        maxBoundsViscosity: 1,
       }).setView([13.4443, 144.7937], 8);
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
+        noWrap: true,
       }).addTo(map);
 
       seamarkLayerRef.current = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
         maxZoom: 18,
+        noWrap: true,
       }).addTo(map);
 
       encLayerRef.current = L.tileLayer.wms(
@@ -1492,6 +1514,7 @@ export default function NavDashHomePage() {
           transparent: true,
           version: "1.1.1",
           opacity: 0.9,
+          noWrap: true,
           attribution: "NOAA ENC Display Service",
         } as any,
       ).addTo(map);
@@ -1548,18 +1571,22 @@ export default function NavDashHomePage() {
 
       if (route.length < 2) return;
 
-      const routeLatLngs = routeLatLngsForChart(route);
-      routeLayerRef.current = L.polyline(routeLatLngs as any, {
-        color: "#c9a227",
-        weight: 4,
-        opacity: 0.95,
-      }).addTo(map);
+      const routeSegments = latLngSegmentsForChart(route);
+      routeLayerRef.current = L.layerGroup(
+        routeSegments.map((segment) =>
+          L.polyline(segment as any, {
+            color: "#c9a227",
+            weight: 4,
+            opacity: 0.95,
+          }),
+        ),
+      ).addTo(map);
 
-      routeMarkersRef.current = route.map((wp, index) => {
+      routeMarkersRef.current = route.map((wp) => {
         const armedAlert = routeAlerts.find(
           (alert) => alert.routeName === routeName && alert.waypointId === wp.id && !alert.acknowledged,
         );
-        const marker = L.circleMarker(routeLatLngs[index], {
+        const marker = L.circleMarker([wp.lat, wp.lon], {
           radius: armedAlert ? 8 : 5,
           color: armedAlert ? "#fb7185" : "#c9a227",
           fillColor: armedAlert ? "#fb7185" : "#c9a227",
@@ -1596,10 +1623,7 @@ export default function NavDashHomePage() {
       if (!map || !ownShip) return;
 
       const L = await import("leaflet");
-      const routeBounds = routeLayerRef.current?.getBounds?.();
-    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;
-    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);
-      const position: [number, number] = [ownShip.lat, displayLon];
+      const position: [number, number] = [ownShip.lat, ownShip.lon];
 
       if (!ownLayerRef.current) {
         ownLayerRef.current = L.layerGroup().addTo(map);
@@ -1642,13 +1666,16 @@ export default function NavDashHomePage() {
         const vectorMinutes = 6;
         const vectorDistanceNm = ownShip.sog * (vectorMinutes / 60);
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.cog, vectorDistanceNm);
-        const vectorEnd: [number, number] = [end.lat, unwrapLongitudeNear(end.lon, displayLon)];
-        const vectorLine = L.polyline([position, vectorEnd] as any, {
-          color: "#22d3ee",
-          weight: 3,
-          opacity: 0.95,
-          dashArray: "8 6",
-        }).bindTooltip(`${vectorMinutes} min COG vector`, { permanent: false });
+        const vectorSegments = latLngSegmentsForChart([ownShip, end]);
+        const vectorLines = vectorSegments.map((segment) =>
+          L.polyline(segment as any, {
+            color: "#22d3ee",
+            weight: 3,
+            opacity: 0.95,
+            dashArray: "8 6",
+          }).bindTooltip(`${vectorMinutes} min COG vector`, { permanent: false }),
+        );
+        const vectorEnd: [number, number] = [end.lat, end.lon];
         const vectorEndMarker = L.circleMarker(vectorEnd, {
           radius: 4,
           color: "#22d3ee",
@@ -1657,7 +1684,7 @@ export default function NavDashHomePage() {
           weight: 2,
         });
 
-        ownVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(ownLayerRef.current);
+        ownVectorRef.current = L.layerGroup([...vectorLines, vectorEndMarker]).addTo(ownLayerRef.current);
       }
 
       // Do not auto-pan here. The watch should be able to freely inspect the chart.
@@ -1734,11 +1761,7 @@ export default function NavDashHomePage() {
 
   function centerOwnShip() {
     if (!ownShip || !mapRef.current) return;
-    const map = mapRef.current;
-    const routeBounds = routeLayerRef.current?.getBounds?.();
-    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;
-    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);
-    map.panTo([ownShip.lat, displayLon], { animate: true, duration: 0.5 });
+    mapRef.current.panTo([ownShip.lat, ownShip.lon], { animate: true, duration: 0.5 });
   }
 
   function saveWaypointAlert() {
