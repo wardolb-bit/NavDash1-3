@@ -1602,7 +1602,8 @@ export default function NavDashHomePage() {
       if (!map || !ownShip) return;
 
       const L = await import("leaflet");
-      const position: [number, number] = [ownShip.lat, ownShip.lon];
+      const displayLon = unwrapLongitudeNear(ownShip.lon, map.getCenter().lng);
+      const position: [number, number] = [ownShip.lat, displayLon];
 
       if (!ownLayerRef.current) {
         ownLayerRef.current = L.layerGroup().addTo(map);
@@ -1640,7 +1641,7 @@ export default function NavDashHomePage() {
         const vectorMinutes = 6;
         const vectorDistanceNm = ownShip.sog * (vectorMinutes / 60);
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.cog, vectorDistanceNm);
-        const vectorEnd: [number, number] = [end.lat, unwrapLongitudeNear(end.lon, ownShip.lon)];
+        const vectorEnd: [number, number] = [end.lat, unwrapLongitudeNear(end.lon, displayLon)];
         const vectorLine = L.polyline([position, vectorEnd] as any, {
           color: "#22d3ee",
           weight: 3,
@@ -1732,7 +1733,9 @@ export default function NavDashHomePage() {
 
   function centerOwnShip() {
     if (!ownShip || !mapRef.current) return;
-    mapRef.current.panTo([ownShip.lat, ownShip.lon], { animate: true, duration: 0.5 });
+    const map = mapRef.current;
+    const displayLon = unwrapLongitudeNear(ownShip.lon, map.getCenter().lng);
+    map.panTo([ownShip.lat, displayLon], { animate: true, duration: 0.5 });
   }
 
   function saveWaypointAlert() {
