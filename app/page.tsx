@@ -1180,193 +1180,12 @@ function sendRouteClearOverWebSocket(socket: WebSocket | null) {
   socket.send(JSON.stringify({ type: "route-clear" }));
 }
 
-
-type TrackCelestialKind = "sunrise" | "sunset" | "moonrise" | "moonset";
-
-type TrackCelestialEvent = {
-  kind: TrackCelestialKind;
-  date: Date;
-  lat: number;
-  lon: number;
-};
-
-function trackGmst(date: Date) {
-  const jd = date.getTime() / 86400000 + 2440587.5;
-  const t = (jd - 2451545) / 36525;
-  return normalize360(280.46061837 + 360.98564736629 * (jd - 2451545) + 0.000387933 * t * t - (t * t * t) / 38710000);
-}
-
-function trackSunRaDec(date: Date) {
-  const jd = date.getTime() / 86400000 + 2440587.5;
-  const t = (jd - 2451545) / 36525;
-  const l0 = normalize360(280.46646 + t * (36000.76983 + t * 0.0003032));
-  const m = normalize360(357.52911 + t * (35999.05029 - 0.0001537 * t));
-  const c = Math.sin(toRad(m)) * (1.914602 - t * (0.004817 + 0.000014 * t)) + Math.sin(toRad(2 * m)) * (0.019993 - 0.000101 * t) + Math.sin(toRad(3 * m)) * 0.000289;
-  const trueLong = l0 + c;
-  const omega = 125.04 - 1934.136 * t;
-  const lambda = toRad(trueLong - 0.00569 - 0.00478 * Math.sin(toRad(omega)));
-  const eps0 = 23 + (26 + (21.448 - t * (46.815 + t * (0.00059 - t * 0.001813))) / 60) / 60;
-  const eps = toRad(eps0 + 0.00256 * Math.cos(toRad(omega)));
-  return {
-    ra: normalize360(toDeg(Math.atan2(Math.cos(eps) * Math.sin(lambda), Math.cos(lambda)))),
-    dec: toDeg(Math.asin(Math.sin(eps) * Math.sin(lambda))),
-  };
-}
-
-function trackMoonRaDec(date: Date) {
-  const d = date.getTime() / 86400000 + 2440587.5 - 2451543.5;
-  const n = normalize360(125.1228 - 0.0529538083 * d);
-  const i = 5.1454;
-  const w = normalize360(318.0634 + 0.1643573223 * d);
-  const a = 60.2666;
-  const e = 0.0549;
-  const m = normalize360(115.3654 + 13.0649929509 * d);
-  let eccentric = toRad(m) + e * Math.sin(toRad(m)) * (1 + e * Math.cos(toRad(m)));
-  for (let k = 0; k < 3; k += 1) eccentric -= (eccentric - e * Math.sin(eccentric) - toRad(m)) / (1 - e * Math.cos(eccentric));
-  const xv = a * (Math.cos(eccentric) - e);
-  const yv = a * Math.sqrt(1 - e * e) * Math.sin(eccentric);
-  const v = toDeg(Math.atan2(yv, xv));
-  const r = Math.sqrt(xv * xv + yv * yv);
-  const xh = r * (Math.cos(toRad(n)) * Math.cos(toRad(v + w)) - Math.sin(toRad(n)) * Math.sin(toRad(v + w)) * Math.cos(toRad(i)));
-  const yh = r * (Math.sin(toRad(n)) * Math.cos(toRad(v + w)) + Math.cos(toRad(n)) * Math.sin(toRad(v + w)) * Math.cos(toRad(i)));
-  const zh = r * Math.sin(toRad(v + w)) * Math.sin(toRad(i));
-  const lon = toDeg(Math.atan2(yh, xh));
-  const lat = toDeg(Math.atan2(zh, Math.sqrt(xh * xh + yh * yh)));
-  const ecl = toRad(23.4393 - 3.563e-7 * d);
-  const xe = r * Math.cos(toRad(lon)) * Math.cos(toRad(lat));
-  const ye = r * Math.sin(toRad(lon)) * Math.cos(toRad(lat));
-  const ze = r * Math.sin(toRad(lat));
-  const xeq = xe;
-  const yeq = ye * Math.cos(ecl) - ze * Math.sin(ecl);
-  const zeq = ye * Math.sin(ecl) + ze * Math.cos(ecl);
-  return {
-    ra: normalize360(toDeg(Math.atan2(yeq, xeq))),
-    dec: toDeg(Math.atan2(zeq, Math.sqrt(xeq * xeq + yeq * yeq))),
-  };
-}
-
-function trackBodyAltitude(lat: number, lon: number, date: Date, body: { ra: number; dec: number }) {
-  const hourAngle = toRad(normalize360(trackGmst(date) + lon - body.ra));
-  return toDeg(Math.asin(Math.sin(toRad(lat)) * Math.sin(toRad(body.dec)) + Math.cos(toRad(lat)) * Math.cos(toRad(body.dec)) * Math.cos(hourAngle)));
-}
-
-function trackCumulativeDistances(route: Waypoint[]) {
-  const cumulative = [0];
-  for (let i = 1; i < route.length; i += 1) cumulative.push(cumulative[i - 1] + distanceNm(route[i - 1].lat, route[i - 1].lon, route[i].lat, route[i].lon));
-  return cumulative;
-}
-
-function trackPositionAtDistance(route: Waypoint[], cumulative: number[], distanceAlongNm: number) {
-  if (route.length < 2) return null;
-  const total = cumulative[cumulative.length - 1];
-  const target = Math.max(0, Math.min(total, distanceAlongNm));
-  let index = 0;
-  while (index < route.length - 2 && cumulative[index + 1] < target) index += 1;
-  const start = route[index];
-  const end = route[index + 1];
-  const legDistance = cumulative[index + 1] - cumulative[index];
-  if (legDistance <= 0) return { lat: start.lat, lon: start.lon };
-  return destinationPoint(start.lat, start.lon, bearingDeg(start.lat, start.lon, end.lat, end.lon), target - cumulative[index]);
-}
-
-function predictedTrackCelestialEvents(route: Waypoint[], activeLeg: ReturnType<typeof selectedRouteLeg>, ownShip: AisOwnShip | null): TrackCelestialEvent[] {
-  if (!ownShip || route.length < 2) return [];
-
-  const cumulative = trackCumulativeDistances(route);
-  const total = cumulative[cumulative.length - 1];
-  if (!Number.isFinite(total) || total <= 0) return [];
-
-  // Do not depend on the selected/auto leg for celestial placement. Find the
-  // geometrically nearest route leg directly so Date Line / leg-selection state
-  // cannot suppress the event markers.
-  let nearestIndex = 1;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  let nearestAlong = 0;
-  for (let i = 1; i < route.length; i += 1) {
-    const result = routeXteToSegmentNm(
-      ownShip.lat,
-      ownShip.lon,
-      route[i - 1].lat,
-      route[i - 1].lon,
-      route[i].lat,
-      route[i].lon,
-    );
-    if (result.distance < nearestDistance) {
-      nearestDistance = result.distance;
-      nearestIndex = i;
-      nearestAlong = result.alongTrack;
-    }
-  }
-
-  const currentAlong = Math.max(0, Math.min(total, cumulative[nearestIndex - 1] + nearestAlong));
-  const remaining = Math.max(0, total - currentAlong);
-  if (remaining < 0.1) return [];
-
-  const predictionSog = Number.isFinite(ownShip.sog) && ownShip.sog > 0.1 ? ownShip.sog : 10;
-  const now = new Date();
-  const routeMinutes = (remaining / predictionSog) * 60;
-  const maxMinutes = Math.min(7 * 24 * 60, routeMinutes);
-  const stepMinutes = 5;
-  const found = new Map<TrackCelestialKind, TrackCelestialEvent>();
-
-  const sample = (minutesAhead: number) => {
-    const traveledNm = predictionSog * (minutesAhead / 60);
-    const pos = trackPositionAtDistance(route, cumulative, currentAlong + traveledNm);
-    if (!pos) return null;
-    const date = new Date(now.getTime() + minutesAhead * 60000);
-    return {
-      date,
-      pos,
-      sun: trackBodyAltitude(pos.lat, pos.lon, date, trackSunRaDec(date)) + 0.833,
-      moon: trackBodyAltitude(pos.lat, pos.lon, date, trackMoonRaDec(date)) + 0.3,
-    };
-  };
-
-  let previous = sample(0);
-  for (let minutes = stepMinutes; previous && minutes <= maxMinutes; minutes += stepMinutes) {
-    const current = sample(minutes);
-    if (!current) break;
-    const crossings: Array<[TrackCelestialKind, number, number]> = [
-      ["sunrise", previous.sun, current.sun],
-      ["sunset", previous.sun, current.sun],
-      ["moonrise", previous.moon, current.moon],
-      ["moonset", previous.moon, current.moon],
-    ];
-    for (const [kind, before, after] of crossings) {
-      if (found.has(kind)) continue;
-      const rising = kind === "sunrise" || kind === "moonrise";
-      const crossed = rising ? before < 0 && after >= 0 : before >= 0 && after < 0;
-      if (!crossed) continue;
-      const denominator = after - before;
-      const fraction = Math.abs(denominator) > 1e-9 ? Math.max(0, Math.min(1, -before / denominator)) : 0.5;
-      const refined = sample(minutes - stepMinutes + stepMinutes * fraction);
-      if (refined) found.set(kind, { kind, date: refined.date, lat: refined.pos.lat, lon: refined.pos.lon });
-    }
-    if (found.size === 4) break;
-    previous = current;
-  }
-
-  return (["sunrise", "sunset", "moonrise", "moonset"] as TrackCelestialKind[])
-    .map((kind) => found.get(kind))
-    .filter((event): event is TrackCelestialEvent => Boolean(event));
-}
-
-function formatTrackCelestialLocalTime(event: TrackCelestialEvent) {
-  const zone = destinationTimeZoneForPosition({ lat: event.lat, lon: event.lon });
-  if (zone.timeZone) {
-    return new Intl.DateTimeFormat("en-US", { timeZone: zone.timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(event.date);
-  }
-  const adjusted = new Date(event.date.getTime() + zone.offsetHours * 3600000);
-  return adjusted.toLocaleTimeString("en-US", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false });
-}
-
 export default function NavDashHomePage() {
   const { nightMode, toggleTheme } = useBridgeTheme();
   const dayMode = !nightMode;
   const mapRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const routeMarkersRef = useRef<any[]>([]);
-  const celestialTrackMarkersRef = useRef<any[]>([]);
   const ownMarkerRef = useRef<any>(null);
   const ownVectorRef = useRef<any>(null);
   const ownLayerRef = useRef<any>(null);
@@ -1721,7 +1540,6 @@ export default function NavDashHomePage() {
         ownLayerRef.current = null;
         routeLayerRef.current = null;
         routeMarkersRef.current = [];
-        celestialTrackMarkersRef.current = [];
       }
     };
   }, []);
@@ -1793,64 +1611,11 @@ export default function NavDashHomePage() {
         return marker;
       });
 
-      // Celestial rise/set markers deliberately share the exact same Leaflet
-      // route-layer lifecycle that draws the gold route and waypoint markers.
-      celestialTrackMarkersRef.current.forEach((marker) => {
-        try { map.removeLayer(marker); } catch {}
-      });
-      celestialTrackMarkersRef.current = [];
-
-      const celestialEvents = predictedTrackCelestialEvents(route, activeLeg, ownShip);
-      if (ownShip && route.length >= 2 && celestialEvents.length === 0) {
-        const diagnostic = L.circleMarker([ownShip.lat, ownShip.lon], {
-          radius: 7,
-          color: "#ffffff",
-          weight: 2,
-          fillColor: "#fb7185",
-          fillOpacity: 1,
-        })
-          .bindTooltip("CELESTIAL EVENTS: 0", {
-            permanent: true,
-            direction: "right",
-            offset: [10, 0],
-            opacity: 1,
-          })
-          .addTo(map);
-        celestialTrackMarkersRef.current = [diagnostic];
-      } else if (celestialEvents.length) {
-        const styleForCelestial = (kind: TrackCelestialKind) => {
-          if (kind === "sunrise") return { dot: "#fbbf24", label: "SUNRISE" };
-          if (kind === "sunset") return { dot: "#f59e0b", label: "SUNSET" };
-          if (kind === "moonrise") return { dot: "#a5b4fc", label: "MOONRISE" };
-          return { dot: "#818cf8", label: "MOONSET" };
-        };
-
-        celestialTrackMarkersRef.current = celestialEvents.map((event) => {
-          const style = styleForCelestial(event.kind);
-          const label = `${style.label} ${formatTrackCelestialLocalTime(event)}`;
-          return L.circleMarker([event.lat, event.lon], {
-            radius: 7,
-            color: "#ffffff",
-            weight: 2,
-            fillColor: style.dot,
-            fillOpacity: 1,
-          })
-            .bindTooltip(label, {
-              permanent: true,
-              direction: "right",
-              offset: [10, 0],
-              opacity: 1,
-            })
-            .addTo(map);
-        });
-      }
-
       setTimeout(() => map.invalidateSize(), 100);
     }
 
     updateRouteLayer();
-  }, [route, routeAlerts, routeName, ownShip?.lat, ownShip?.lon, ownShip?.sog]);
-
+  }, [route, routeAlerts, routeName]);
 
   useEffect(() => {
     async function updateOwnShipMarker() {
