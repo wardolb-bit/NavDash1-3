@@ -73,19 +73,27 @@ function distanceAndBearing(from: MeasurePoint, to: MeasurePoint) {
   return { distanceNm, bearing: (bearing + 360) % 360 };
 }
 
-function unwrapRoute(route: Waypoint[]) {
-  if (!route.length) return [] as Array<[number, number]>;
-  const points: Array<[number, number]> = [];
-  let previousLon = route[0].lon;
-  points.push([route[0].lat, previousLon]);
+function routeSegmentsForChart(route: Waypoint[]) {
+  if (!route.length) return [] as Array<Array<[number, number]>>;
+  const segments: Array<Array<[number, number]>> = [[[route[0].lat, route[0].lon]]];
   for (let index = 1; index < route.length; index += 1) {
-    let lon = route[index].lon;
-    while (lon - previousLon > 180) lon -= 360;
-    while (lon - previousLon < -180) lon += 360;
-    points.push([route[index].lat, lon]);
-    previousLon = lon;
+    const start = route[index - 1];
+    const end = route[index];
+    const delta = end.lon - start.lon;
+    const current = segments[segments.length - 1];
+    if (Math.abs(delta) <= 180) {
+      current.push([end.lat, end.lon]);
+      continue;
+    }
+    const adjustedEndLon = delta > 180 ? end.lon - 360 : end.lon + 360;
+    const seamLon = delta > 180 ? -180 : 180;
+    const oppositeSeamLon = -seamLon;
+    const ratio = (seamLon - start.lon) / (adjustedEndLon - start.lon);
+    const seamLat = start.lat + (end.lat - start.lat) * ratio;
+    current.push([seamLat, seamLon]);
+    segments.push([[seamLat, oppositeSeamLon], [end.lat, end.lon]]);
   }
-  return points;
+  return segments;
 }
 
 function normalizeRoutePayload(payload: any): Waypoint[] {
@@ -228,7 +236,7 @@ function IsolatedMainMap() {
       }
 
       const savedView = readSavedMapView();
-      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false });
+      const map = L.map(element, { zoomControl: true, attributionControl: false, preferCanvas: false, maxBounds: [[-85.05112878, -180], [85.05112878, 180]], maxBoundsViscosity: 1 });
       if (savedView) {
         map.setView([savedView.lat, savedView.lon], savedView.zoom, { animate: false });
         didInitialRouteFitRef.current = true;
@@ -236,11 +244,11 @@ function IsolatedMainMap() {
         map.setView([13.4443, 144.7937], 7, { animate: false });
       }
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, noWrap: true }).addTo(map);
+      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18, noWrap: true }).addTo(map);
       try {
         L.tileLayer.wms("https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer", {
-          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85,
+          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85, noWrap: true,
         } as any).addTo(map);
       } catch {}
 
@@ -386,10 +394,10 @@ function IsolatedMainMap() {
       for (const marker of routeMarkersRef.current) { try { map.removeLayer(marker); } catch {} }
       routeMarkersRef.current = [];
       if (route.length < 2) return;
-      const points = unwrapRoute(route);
-      routeLayerRef.current = L.polyline(points as any, { color: "#c9a227", weight: 4, opacity: 0.95 }).addTo(map);
-      routeMarkersRef.current = route.map((wp, index) => L.circleMarker(points[index] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));
-      if (!didInitialRouteFitRef.current) { didInitialRouteFitRef.current = true; try { map.fitBounds(L.latLngBounds(points as any), { padding: [35, 35], maxZoom: 10 }); } catch {} }
+      const segments = routeSegmentsForChart(route);
+      routeLayerRef.current = L.layerGroup(segments.map((segment) => L.polyline(segment as any, { color: "#c9a227", weight: 4, opacity: 0.95 }))).addTo(map);
+      routeMarkersRef.current = route.map((wp, index) => L.circleMarker([wp.lat, wp.lon] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));
+      didInitialRouteFitRef.current = true;
     }
     updateRoute();
   }, [route]);
