@@ -1,0 +1,80 @@
+name: NavDash single-world Date Line fix
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/navdash-single-world-dateline-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Apply exact Date Line map patch
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/page.tsx')
+          s = p.read_text()
+
+          old_helper = '''function routeLatLngsForChart(route: Waypoint[]) {\n  const points: [number, number][] = [];\n\n  for (const wp of route) {\n    const referenceLon = points.length ? points[points.length - 1][1] : wp.lon;\n    points.push([wp.lat, unwrapLongitudeNear(wp.lon, referenceLon)]);\n  }\n\n  return points;\n}\n'''
+          new_helper = '''function latLngSegmentsForChart(points: Array<{ lat: number; lon: number }>) {\n  if (!points.length) return [] as [number, number][][];\n\n  const segments: [number, number][][] = [[[points[0].lat, points[0].lon]]];\n\n  for (let i = 1; i < points.length; i += 1) {\n    const start = points[i - 1];\n    const end = points[i];\n    const delta = end.lon - start.lon;\n    const current = segments[segments.length - 1];\n\n    if (Math.abs(delta) <= 180) {\n      current.push([end.lat, end.lon]);\n      continue;\n    }\n\n    const adjustedEndLon = delta > 180 ? end.lon - 360 : end.lon + 360;\n    const seamLon = delta > 180 ? -180 : 180;\n    const oppositeSeamLon = -seamLon;\n    const ratio = (seamLon - start.lon) / (adjustedEndLon - start.lon);\n    const seamLat = start.lat + (end.lat - start.lat) * ratio;\n\n    current.push([seamLat, seamLon]);\n    segments.push([[seamLat, oppositeSeamLon], [end.lat, end.lon]]);\n  }\n\n  return segments;\n}\n'''
+          assert old_helper in s
+          s = s.replace(old_helper, new_helper, 1)
+
+          old_map = '''      const map = L.map(mapElement, {\n        zoomControl: false,\n        attributionControl: false,\n        preferCanvas: true,\n      }).setView([13.4443, 144.7937], 8);\n\n      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {\n        maxZoom: 19,\n      }).addTo(map);\n\n      seamarkLayerRef.current = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {\n        maxZoom: 18,\n      }).addTo(map);\n'''
+          new_map = '''      const map = L.map(mapElement, {\n        zoomControl: false,\n        attributionControl: false,\n        preferCanvas: true,\n        maxBounds: [[-85.05112878, -180], [85.05112878, 180]],\n        maxBoundsViscosity: 1,\n      }).setView([13.4443, 144.7937], 8);\n\n      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {\n        maxZoom: 19,\n        noWrap: true,\n      }).addTo(map);\n\n      seamarkLayerRef.current = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {\n        maxZoom: 18,\n        noWrap: true,\n      }).addTo(map);\n'''
+          assert old_map in s
+          s = s.replace(old_map, new_map, 1)
+
+          old_wms = '''          opacity: 0.9,\n          attribution: "NOAA ENC Display Service",\n'''
+          new_wms = '''          opacity: 0.9,\n          noWrap: true,\n          attribution: "NOAA ENC Display Service",\n'''
+          assert old_wms in s
+          s = s.replace(old_wms, new_wms, 1)
+
+          old_route = '''      const routeLatLngs = routeLatLngsForChart(route);\n      routeLayerRef.current = L.polyline(routeLatLngs as any, {\n        color: "#c9a227",\n        weight: 4,\n        opacity: 0.95,\n      }).addTo(map);\n\n      routeMarkersRef.current = route.map((wp, index) => {\n'''
+          new_route = '''      const routeSegments = latLngSegmentsForChart(route);\n      routeLayerRef.current = L.layerGroup(\n        routeSegments.map((segment) =>\n          L.polyline(segment as any, {\n            color: "#c9a227",\n            weight: 4,\n            opacity: 0.95,\n          }),\n        ),\n      ).addTo(map);\n\n      routeMarkersRef.current = route.map((wp) => {\n'''
+          assert old_route in s
+          s = s.replace(old_route, new_route, 1)
+
+          old_marker_pos = '''        const marker = L.circleMarker(routeLatLngs[index], {\n'''
+          new_marker_pos = '''        const marker = L.circleMarker([wp.lat, wp.lon], {\n'''
+          assert old_marker_pos in s
+          s = s.replace(old_marker_pos, new_marker_pos, 1)
+
+          old_own = '''      const L = await import("leaflet");\n      const routeBounds = routeLayerRef.current?.getBounds?.();\n    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;\n    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);\n      const position: [number, number] = [ownShip.lat, displayLon];\n'''
+          new_own = '''      const L = await import("leaflet");\n      const position: [number, number] = [ownShip.lat, ownShip.lon];\n'''
+          assert old_own in s
+          s = s.replace(old_own, new_own, 1)
+
+          old_vector = '''        const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.cog, vectorDistanceNm);\n        const vectorEnd: [number, number] = [end.lat, unwrapLongitudeNear(end.lon, displayLon)];\n        const vectorLine = L.polyline([position, vectorEnd] as any, {\n          color: "#22d3ee",\n          weight: 3,\n          opacity: 0.95,\n          dashArray: "8 6",\n        }).bindTooltip(`${vectorMinutes} min COG vector`, { permanent: false });\n        const vectorEndMarker = L.circleMarker(vectorEnd, {\n'''
+          new_vector = '''        const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.cog, vectorDistanceNm);\n        const vectorSegments = latLngSegmentsForChart([ownShip, end]);\n        const vectorLines = vectorSegments.map((segment) =>\n          L.polyline(segment as any, {\n            color: "#22d3ee",\n            weight: 3,\n            opacity: 0.95,\n            dashArray: "8 6",\n          }).bindTooltip(`${vectorMinutes} min COG vector`, { permanent: false }),\n        );\n        const vectorEnd: [number, number] = [end.lat, end.lon];\n        const vectorEndMarker = L.circleMarker(vectorEnd, {\n'''
+          assert old_vector in s
+          s = s.replace(old_vector, new_vector, 1)
+
+          old_group = '''        ownVectorRef.current = L.layerGroup([vectorLine, vectorEndMarker]).addTo(ownLayerRef.current);\n'''
+          new_group = '''        ownVectorRef.current = L.layerGroup([...vectorLines, vectorEndMarker]).addTo(ownLayerRef.current);\n'''
+          assert old_group in s
+          s = s.replace(old_group, new_group, 1)
+
+          old_center = '''  function centerOwnShip() {\n    if (!ownShip || !mapRef.current) return;\n    const map = mapRef.current;\n    const routeBounds = routeLayerRef.current?.getBounds?.();\n    const referenceLon = routeBounds?.isValid?.() ? routeBounds.getCenter().lng : map.getCenter().lng;\n    const displayLon = unwrapLongitudeNear(ownShip.lon, referenceLon);\n    map.panTo([ownShip.lat, displayLon], { animate: true, duration: 0.5 });\n  }\n'''
+          new_center = '''  function centerOwnShip() {\n    if (!ownShip || !mapRef.current) return;\n    mapRef.current.panTo([ownShip.lat, ownShip.lon], { animate: true, duration: 0.5 });\n  }\n'''
+          assert old_center in s
+          s = s.replace(old_center, new_center, 1)
+
+          p.write_text(s)
+          PY
+          rm .github/workflows/navdash-single-world-dateline-fix.yml
+          git diff --check
+          git diff -- app/page.tsx
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@live.com"
+          git add app/page.tsx .github/workflows/navdash-single-world-dateline-fix.yml
+          git commit -m "Fix Date Line with single-world chart rendering"
+          git push
