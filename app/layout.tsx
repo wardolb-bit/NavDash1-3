@@ -9,7 +9,6 @@ import { BridgeConsoleRouteGate } from '../components/BridgeConsoleRouteGate';
 import { WxRoutingBridgeSkin } from '../components/WxRoutingBridgeSkin';
 import { CelestialConsoleSkin } from '../components/CelestialConsoleSkin';
 import { CelestialSunMoon } from '../components/CelestialSunMoon';
-import { BridgeSunRouteMarkers } from '../components/BridgeSunRouteMarkers';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -153,7 +152,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <WxRoutingBridgeSkin />
         <CelestialConsoleSkin />
         <CelestialSunMoon />
-        <BridgeSunRouteMarkers />
       </body>
     </html>
   );
