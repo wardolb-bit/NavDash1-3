@@ -1,0 +1,34 @@
+name: Patch celestial route progress v3
+on:
+  push:
+    branches:
+      - feature/celestial-track-events-v2
+    paths:
+      - scripts/patch-celestial-route-progress-v3.py
+      - .github/workflows/patch-celestial-route-progress-v3.yml
+permissions:
+  contents: write
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/celestial-track-events-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply route progress patch
+        run: python3 scripts/patch-celestial-route-progress-v3.py
+      - run: npm ci
+      - run: npm run build
+      - name: Commit feature
+        run: |
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "Fix celestial marker route progress"
+          git pull --rebase origin feature/celestial-track-events-v2
+          git push origin HEAD:feature/celestial-track-events-v2
