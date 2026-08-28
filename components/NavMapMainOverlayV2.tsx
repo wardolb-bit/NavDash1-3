@@ -394,8 +394,10 @@ function IsolatedMainMap() {
       if (route.length < 2) return;
       const referenceLon = ownShip?.lon ?? map.getCenter().lng;
       const points = unwrapRouteNear(route, referenceLon);
-      routeLayerRef.current = L.polyline(points as any, { color: "#c9a227", weight: 4, opacity: 0.95 }).addTo(map);
-      routeMarkersRef.current = route.map((wp, index) => L.circleMarker(points[index] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map));
+      const worldOffsets = [-360, 0, 360];
+      const routeCopies = worldOffsets.map((offset) => L.polyline(points.map(([lat, lon]) => [lat, lon + offset]) as any, { color: "#c9a227", weight: 4, opacity: 0.95 }));
+      routeLayerRef.current = L.layerGroup(routeCopies).addTo(map);
+      routeMarkersRef.current = worldOffsets.flatMap((offset) => route.map((wp, index) => L.circleMarker([points[index][0], points[index][1] + offset] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map)));
       didInitialRouteFitRef.current = true;
     }
     updateRoute();
