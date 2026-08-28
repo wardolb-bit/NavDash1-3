@@ -1237,7 +1237,7 @@ function predictedRouteSunEvents(route: Waypoint[], activeLeg: ReturnType<typeof
   if (!activeLeg || !ownShip || route.length < 2 || !Number.isFinite(ownShip.sog) || ownShip.sog < 0.5) return [];
   const cumulative = routeCumulativeDistances(route);
   const total = cumulative[cumulative.length - 1];
-  const currentAlong = Math.max(0, Math.min(total, cumulative[activeLeg.index] + activeLeg.alongTrack));
+  const currentAlong = Math.max(0, Math.min(total, cumulative[Math.max(0, activeLeg.index - 1)] + activeLeg.alongTrack));
   const remaining = Math.max(0, total - currentAlong);
   if (remaining < 0.1) return [];
   const now = new Date();
