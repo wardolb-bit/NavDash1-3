@@ -1,0 +1,34 @@
+name: Patch sun events toggle
+on:
+  push:
+    branches:
+      - feature/celestial-track-events-v2
+    paths:
+      - scripts/patch-sun-events-toggle.py
+      - .github/workflows/patch-sun-events-toggle.yml
+permissions:
+  contents: write
+jobs:
+  patch-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/celestial-track-events-v2
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply sun-events toggle patch
+        run: python3 scripts/patch-sun-events-toggle.py
+      - run: npm ci
+      - run: npm run build
+      - name: Commit feature
+        run: |
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@users.noreply.github.com"
+          git add components/NavMapMainOverlayV2.tsx
+          git commit -m "Add sun events map toggle"
+          git pull --rebase origin feature/celestial-track-events-v2
+          git push origin HEAD:feature/celestial-track-events-v2
