@@ -10,6 +10,7 @@ const navGroups: NavGroup[] = [
   { label: "Console", items: [{ label: "Main Console", href: "/" }, { label: "ECR", href: "/ecr" }] },
   { label: "AIS", items: [{ label: "AIS Targets", href: "/ais-test" }] },
   { label: "Weather", items: [{ label: "Weather", href: "/wx" }, { label: "WX Routing", href: "/wx-routing" }, { label: "Official Weather", href: "/official-weather" }] },
+  { label: "MSI", items: [{ label: "EGC / MSI", href: "/msi" }] },
   { label: "Reports", items: [{ label: "Position Report", href: "/position-report" }, { label: "Nav Brief", href: "/nav-brief" }] },
   { label: "Tools", items: [{ label: "Watch Tools", href: "/tools" }] },
   { label: "Mobile", items: [{ label: "Phone View", href: "/phone" }] },
