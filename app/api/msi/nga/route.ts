@@ -2,17 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-const SOURCE_URL = "https://msi.nga.mil/api/publications/broadcast-warn?output=json&status=A";
+const SOURCE_BASE = "https://msi.nga.mil/api/publications/broadcast-warn";
 
 function normalizeYear(value: unknown) {
   const text = String(value ?? "").trim();
   return text.length === 4 ? text.slice(-2) : text;
 }
 
+function normalizeArea(area: string) {
+  if (area === "XII" || area === "IV") return `NAVAREA ${area}`;
+  return area;
+}
+
+function extractWarnings(data: unknown): Record<string, unknown>[] {
+  if (Array.isArray(data)) return data as Record<string, unknown>[];
+  if (!data || typeof data !== "object") return [];
+
+  const record = data as Record<string, unknown>;
+  const known = [record.broadcast_warn, record.broadcastWarn, record.broadcastWarnings, record.warnings, record.results, record.data];
+  for (const value of known) {
+    if (Array.isArray(value)) return value as Record<string, unknown>[];
+  }
+
+  for (const value of Object.values(record)) {
+    if (Array.isArray(value)) return value as Record<string, unknown>[];
+  }
+
+  return [];
+}
+
 export async function GET(request: NextRequest) {
   try {
     const area = (request.nextUrl.searchParams.get("area") || "XII").trim().toUpperCase();
-    const response = await fetch(SOURCE_URL, {
+    const ngaArea = normalizeArea(area);
+    const sourceUrl = `${SOURCE_BASE}?output=json&status=active&navArea=${encodeURIComponent(ngaArea)}`;
+
+    const response = await fetch(sourceUrl, {
       cache: "no-store",
       headers: {
         Accept: "application/json",
@@ -22,39 +47,35 @@ export async function GET(request: NextRequest) {
 
     if (!response.ok) {
       return NextResponse.json(
-        { ok: false, source: SOURCE_URL, area, error: `NGA returned HTTP ${response.status}` },
+        { ok: false, source: sourceUrl, area, error: `NGA returned HTTP ${response.status}` },
         { status: 502 }
       );
     }
 
     const data = await response.json();
-    const rawWarnings = Array.isArray(data) ? data : Array.isArray(data?.broadcast_warn) ? data.broadcast_warn : [];
+    const rawWarnings = extractWarnings(data);
 
     const warnings = rawWarnings
-      .filter((warning: Record<string, unknown>) => {
-        const navArea = String(warning.navArea ?? "").toUpperCase();
-        const text = String(warning.text ?? "").toUpperCase();
-        return !area || navArea.includes(area) || text.includes(`NAVAREA ${area}`) || text.includes(area);
-      })
-      .map((warning: Record<string, unknown>) => {
-        const navArea = String(warning.navArea ?? area).trim() || area;
-        const number = String(warning.msgNumber ?? "").trim();
-        const year = normalizeYear(warning.msgYear);
+      .map((warning) => {
+        const navArea = String(warning.navArea ?? warning.navarea ?? ngaArea).trim() || ngaArea;
+        const number = String(warning.msgNumber ?? warning.messageNumber ?? warning.number ?? "").trim();
+        const year = normalizeYear(warning.msgYear ?? warning.messageYear ?? warning.year);
+        const body = String(warning.text ?? warning.message ?? warning.warningText ?? warning.body ?? "").trim();
         return {
-          id: `${navArea}-${year}-${number}`,
+          id: `${navArea}-${year}-${number || body.slice(0, 24)}`,
           area: navArea,
           number: number && year ? `${number}/${year}` : number || "UNNUMBERED",
-          body: String(warning.text ?? "").trim(),
-          issueDate: String(warning.issueDate ?? "").trim(),
+          body,
+          issueDate: String(warning.issueDate ?? warning.issue_date ?? warning.date ?? "").trim(),
           authority: String(warning.authority ?? "NGA").trim() || "NGA",
-          subregion: String(warning.subregion ?? "").trim(),
+          subregion: String(warning.subregion ?? warning.subRegion ?? "").trim(),
         };
       })
-      .filter((warning: { body: string }) => warning.body.length > 0);
+      .filter((warning) => warning.body.length > 0);
 
     return NextResponse.json({
       ok: true,
-      source: SOURCE_URL,
+      source: sourceUrl,
       area,
       fetchedAt: new Date().toISOString(),
       warnings,
@@ -63,7 +84,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         ok: false,
-        source: SOURCE_URL,
+        source: SOURCE_BASE,
         error: error instanceof Error ? error.message : "Unable to retrieve NGA warnings",
       },
       { status: 502 }
