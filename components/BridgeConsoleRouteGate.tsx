@@ -12,12 +12,12 @@ import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
 import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
+import { MsiConsoleSkin } from "./MsiConsoleSkin";
 
 /**
  * Keep the main bridge-console DOM enhancers scoped to the main Nav Console route.
- * Celestial gets its own presentation-only skin so every workstation mode uses
- * the same current compact bridge-console visual language without touching the
- * celestial calculations or AIS logic.
+ * Secondary workstation pages use presentation-only skins so they retain their
+ * existing logic while matching the current compact bridge-console visual language.
  */
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
@@ -58,6 +58,10 @@ export function BridgeConsoleRouteGate() {
 
   if (pathname.startsWith("/celestial")) {
     return <CelestialConsoleSkin />;
+  }
+
+  if (pathname === "/msi") {
+    return <MsiConsoleSkin />;
   }
 
   if (pathname !== "/" || !mapReady) return null;
