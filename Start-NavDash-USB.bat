@@ -23,7 +23,8 @@ if not defined NODE_DIR (
 
 set "PATH=%NODE_DIR%;%APP_DIR%node_modules\.bin;%PATH%"
 if not defined PORT set "PORT=3000"
-if not defined AIS_WS_PORT set "AIS_WS_PORT=8081"
+if not defined AIS_BACKEND_PORT set "AIS_BACKEND_PORT=8080"
+if not defined AIS_WSS_PORT set "AIS_WSS_PORT=8081"
 if not defined AIS_PORT set "AIS_PORT=COM4"
 if not defined AIS_BAUD set "AIS_BAUD=38400"
 if not defined FELCOM_EGC_DIR set "FELCOM_EGC_DIR=C:\Users\havennav\Documents\felcom19\egc"
@@ -61,16 +62,28 @@ if not exist "%APP_DIR%node_modules\next\dist\bin\next" (
   exit /b 1
 )
 
+if not exist "%APP_DIR%server\ais-wss-bridge.js" (
+  echo.
+  echo Secure AIS bridge is missing:
+  echo   %APP_DIR%server\ais-wss-bridge.js
+  echo.
+  pause
+  exit /b 1
+)
+
 echo.
 echo Starting NavDash from USB...
-echo Main site:   http://localhost:3000
-echo Ship access: http://THIS-COMPUTER-IP:3000
-echo AIS socket:  ws://THIS-COMPUTER-IP:8081
-echo AIS serial:  %AIS_PORT% at %AIS_BAUD% baud
-echo EGC folder:  %FELCOM_EGC_DIR%
+echo Main site:      http://localhost:3000
+echo Ship access:    http://THIS-COMPUTER-IP:3000
+echo AIS iPad WSS:   wss://THIS-COMPUTER-IP:%AIS_WSS_PORT%
+echo AIS backend:    ws://127.0.0.1:%AIS_BACKEND_PORT%
+echo AIS serial:     %AIS_PORT% at %AIS_BAUD% baud
+echo EGC folder:     %FELCOM_EGC_DIR%
 echo.
 echo Close this window to stop NavDash.
 echo.
 
+set "AIS_WS_PORT=%AIS_BACKEND_PORT%"
 start "NavDash AIS Server" /b "%NODE_DIR%\node.exe" "%APP_DIR%server\ais-server.js"
+start "NavDash AIS Secure Bridge" /b "%NODE_DIR%\node.exe" "%APP_DIR%server\ais-wss-bridge.js"
 "%NODE_DIR%\node.exe" "%APP_DIR%node_modules\next\dist\bin\next" start -H 0.0.0.0 -p %PORT%
