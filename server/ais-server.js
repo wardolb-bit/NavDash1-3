@@ -261,7 +261,7 @@ function parseEgcFile(filePath) {
   const cancellationMatch = body.match(/\bCANCEL(?:S|LED)?\s+NAVAREA\s+([IVXLC]+)\s+(\d+\/\d+)\b/i);
 
   return {
-    id: `${path.basename(filePath)}:${sequence || stat.mtimeMs}`,
+    id: `${filePath}:${sequence || stat.mtimeMs}`,
     filename: path.basename(filePath),
     type,
     sequence,
@@ -280,6 +280,21 @@ function parseEgcFile(filePath) {
   };
 }
 
+function listEgcFilesRecursive(directory) {
+  const files = [];
+
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const fullPath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listEgcFilesRecursive(fullPath));
+    } else if (entry.isFile()) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
 function getEgcSnapshot() {
   return {
     type: 'egc-snapshot',
@@ -295,15 +310,12 @@ function scanEgcDirectory(forceBroadcast = false) {
   try {
     if (!fs.existsSync(EGC_DIR)) throw new Error(`FELCOM EGC folder not found: ${EGC_DIR}`);
 
-    const parsed = fs
-      .readdirSync(EGC_DIR, { withFileTypes: true })
-      .filter(entry => entry.isFile())
-      .map(entry => path.join(EGC_DIR, entry.name))
+    const parsed = listEgcFilesRecursive(EGC_DIR)
       .map(filePath => {
         try {
           return parseEgcFile(filePath);
         } catch (error) {
-          console.log(`[EGC] Skipping ${path.basename(filePath)}: ${error.message}`);
+          console.log(`[EGC] Skipping ${filePath}: ${error.message}`);
           return null;
         }
       })
@@ -319,7 +331,7 @@ function scanEgcDirectory(forceBroadcast = false) {
     egcLastScanAt = new Date().toISOString();
     egcLastError = null;
 
-    const signature = JSON.stringify(egcMessages.map(item => [item.filename, item.modifiedAt, item.sequence]));
+    const signature = JSON.stringify(egcMessages.map(item => [item.id, item.modifiedAt, item.sequence]));
     if (forceBroadcast || signature !== egcLastSignature) {
       egcLastSignature = signature;
       broadcast(getEgcSnapshot());
@@ -452,7 +464,7 @@ async function openSerial() {
 }
 
 console.log(`[AIS] WebSocket server started on ${WS_PORT}`);
-console.log(`[EGC] Watching ${EGC_DIR} through AIS WebSocket ${WS_PORT}`);
+console.log(`[EGC] Watching ${EGC_DIR} recursively through AIS WebSocket ${WS_PORT}`);
 scanEgcDirectory(true);
 setInterval(() => scanEgcDirectory(false), EGC_SCAN_INTERVAL_MS);
 openSerial();
