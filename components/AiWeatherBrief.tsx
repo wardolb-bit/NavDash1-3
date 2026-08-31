@@ -64,6 +64,15 @@ function decodeAisPosition(sentence: string): OwnShip | null {
   }
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 export default function AiWeatherBrief() {
   const { nightMode } = useBridgeTheme();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -178,6 +187,68 @@ export default function AiWeatherBrief() {
     }
   }
 
+  function printBrief() {
+    if (!summary) return;
+
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      setError("Print window was blocked. Allow pop-ups for NavDash and try again.");
+      return;
+    }
+
+    const sourceName = meta.sourceName || file?.name || "AMI route weather report";
+    const generatedAt = meta.generatedAt ? new Date(meta.generatedAt).toLocaleString() : new Date().toLocaleString();
+    const latitude = ownShip.lat !== undefined ? ownShip.lat.toFixed(5) : "--";
+    const longitude = ownShip.lon !== undefined ? ownShip.lon.toFixed(5) : "--";
+    const sog = ownShip.sog !== undefined ? `${ownShip.sog.toFixed(1)} kt` : "--";
+    const cog = ownShip.cog !== undefined ? `${Math.round(ownShip.cog).toString().padStart(3, "0")}°T` : "--";
+
+    printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NavDash AI Weather Brief</title>
+  <style>
+    @page { size: auto; margin: 0.55in; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #111827; background: #fff; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.35; }
+    header { border-bottom: 3px solid #111827; padding-bottom: 10px; margin-bottom: 12px; }
+    .eyebrow { margin: 0 0 4px; font-size: 9pt; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #4b5563; }
+    h1 { margin: 0; font-size: 20pt; line-height: 1.1; }
+    .source { margin: 6px 0 0; font-size: 10pt; color: #374151; }
+    .meta { width: 100%; border-collapse: collapse; margin: 0 0 14px; }
+    .meta td { width: 25%; border: 1px solid #9ca3af; padding: 7px 8px; vertical-align: top; }
+    .meta strong { display: block; margin-bottom: 2px; font-size: 8pt; letter-spacing: 0.08em; text-transform: uppercase; color: #4b5563; }
+    .summary { white-space: pre-wrap; font-family: "Courier New", Courier, monospace; font-size: 10.5pt; line-height: 1.42; }
+    .advisory { margin-top: 16px; border: 1.5px solid #111827; padding: 9px 10px; font-size: 9pt; font-weight: 700; }
+    footer { margin-top: 12px; border-top: 1px solid #9ca3af; padding-top: 7px; font-size: 8pt; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <header>
+    <p class="eyebrow">NavDash • AI Weather Brief</p>
+    <h1>AMI Route Forecast Summary</h1>
+    <p class="source"><strong>Source:</strong> ${escapeHtml(sourceName)} &nbsp; • &nbsp; <strong>Generated:</strong> ${escapeHtml(generatedAt)}</p>
+  </header>
+  <table class="meta">
+    <tr>
+      <td><strong>Latitude</strong>${escapeHtml(latitude)}</td>
+      <td><strong>Longitude</strong>${escapeHtml(longitude)}</td>
+      <td><strong>SOG</strong>${escapeHtml(sog)}</td>
+      <td><strong>COG</strong>${escapeHtml(cog)}</td>
+    </tr>
+  </table>
+  <div class="summary">${escapeHtml(summary)}</div>
+  <div class="advisory">AI interpretation is advisory only. Verify routing decisions, warnings, wind, seas, and timing directly in the AMI report and official bridge sources before acting.</div>
+  <footer>Prepared from the selected AMI source report using NavDash AI Weather Brief.</footer>
+</body>
+</html>`);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 250);
+  }
+
   return (
     <>
       <button type="button" className={launcherClass} onClick={() => setOpen(true)}>
@@ -240,11 +311,14 @@ export default function AiWeatherBrief() {
 
             {summary ? (
               <div className="mt-5">
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className={`text-2xl font-bold uppercase tracking-[0.2em] ${label}`}>AI Interpretation</p>
-                  <p className={`text-xl ${muted}`}>
-                    {meta.sourceName || file?.name}{meta.model ? ` | ${meta.model}` : ""}{meta.generatedAt ? ` | ${new Date(meta.generatedAt).toLocaleString()}` : ""}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <p className={`text-xl ${muted}`}>
+                      {meta.sourceName || file?.name}{meta.model ? ` | ${meta.model}` : ""}{meta.generatedAt ? ` | ${new Date(meta.generatedAt).toLocaleString()}` : ""}
+                    </p>
+                    <button type="button" className={secondaryButton} onClick={printBrief}>Print Brief</button>
+                  </div>
                 </div>
                 <pre className={outputClass}>{summary}</pre>
               </div>
