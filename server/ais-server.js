@@ -13,6 +13,8 @@ const POSITION_HISTORY_PATH = process.env.NAV_POSITION_HISTORY_PATH || path.join
 const POSITION_HISTORY_MAX_AGE_MS = 36 * 60 * 60 * 1000;
 const POSITION_HISTORY_MIN_INTERVAL_MS = 60 * 1000;
 const POSITION_HISTORY_MIN_DISTANCE_NM = 0.01;
+const EGC_DIR = process.env.FELCOM_EGC_DIR || 'C:\\Users\\havennav\\Documents\\felcom19\\egc';
+const EGC_SCAN_INTERVAL_MS = Number(process.env.EGC_SCAN_INTERVAL_MS || 5000);
 
 const wss = new WebSocket.Server({ port: WS_PORT, host: '0.0.0.0' });
 let serialPort = null;
@@ -20,6 +22,10 @@ let lastLineAt = null;
 let lastError = null;
 let lastRouteState = loadRouteState();
 let positionHistory = loadPositionHistory();
+let egcMessages = [];
+let egcLastScanAt = null;
+let egcLastError = null;
+let egcLastSignature = '';
 
 function normalizeRouteState(payload) {
   const rawWaypoints = Array.isArray(payload?.waypoints) ? payload.waypoints : [];
@@ -223,6 +229,110 @@ function recordOwnShipPosition(position) {
   savePositionHistory();
 }
 
+function parseEgcReceivedAt(raw) {
+  const match = String(raw || '').match(/(\d{2})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})/);
+  if (!match) return null;
+
+  const [, yy, mm, dd, hh, minute] = match;
+  const date = new Date(Date.UTC(2000 + Number(yy), Number(mm) - 1, Number(dd), Number(hh), Number(minute)));
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function egcHeaderField(text, label) {
+  const pattern = new RegExp(`^${label}\\s*:\\s*(.+)$`, 'mi');
+  return text.match(pattern)?.[1]?.trim() || '';
+}
+
+function parseEgcFile(filePath) {
+  const stat = fs.statSync(filePath);
+  const raw = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
+  const lines = raw.split('\n');
+  const firstLine = lines[0]?.trim() || '';
+  const type = firstLine.match(/^EGC Message\s+---\s+(.+?)\s+---\s*$/i)?.[1]?.trim() || 'EGC Message';
+  const separatorIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '');
+  const body = (separatorIndex >= 0 ? lines.slice(separatorIndex + 1) : lines).join('\n').trim();
+  const sequence = egcHeaderField(raw, 'Message Sequence No\\.');
+  const les = egcHeaderField(raw, 'LES');
+  const priority = egcHeaderField(raw, 'Priority');
+  const size = egcHeaderField(raw, 'Size');
+  const receiveText = egcHeaderField(raw, 'Receive Date & Time');
+  const receivedAt = parseEgcReceivedAt(receiveText);
+  const navMatch = body.match(/\bNAVAREA\s+([IVXLC]+)\s+(\d+\/\d+)\b/i);
+  const cancellationMatch = body.match(/\bCANCEL(?:S|LED)?\s+NAVAREA\s+([IVXLC]+)\s+(\d+\/\d+)\b/i);
+
+  return {
+    id: `${path.basename(filePath)}:${sequence || stat.mtimeMs}`,
+    filename: path.basename(filePath),
+    type,
+    sequence,
+    les,
+    priority,
+    size,
+    receiveText,
+    receivedAt,
+    navarea: navMatch?.[1]?.toUpperCase() || '',
+    warningNumber: navMatch?.[2] || '',
+    cancelledNavarea: cancellationMatch?.[1]?.toUpperCase() || '',
+    cancelledWarningNumber: cancellationMatch?.[2] || '',
+    isCancellation: Boolean(cancellationMatch),
+    body,
+    modifiedAt: stat.mtime.toISOString()
+  };
+}
+
+function getEgcSnapshot() {
+  return {
+    type: 'egc-snapshot',
+    connected: true,
+    directory: EGC_DIR,
+    scannedAt: egcLastScanAt,
+    lastError: egcLastError,
+    messages: egcMessages
+  };
+}
+
+function scanEgcDirectory(forceBroadcast = false) {
+  try {
+    if (!fs.existsSync(EGC_DIR)) throw new Error(`FELCOM EGC folder not found: ${EGC_DIR}`);
+
+    const parsed = fs
+      .readdirSync(EGC_DIR, { withFileTypes: true })
+      .filter(entry => entry.isFile())
+      .map(entry => path.join(EGC_DIR, entry.name))
+      .map(filePath => {
+        try {
+          return parseEgcFile(filePath);
+        } catch (error) {
+          console.log(`[EGC] Skipping ${path.basename(filePath)}: ${error.message}`);
+          return null;
+        }
+      })
+      .filter(item => item && (item.body || item.sequence));
+
+    parsed.sort((a, b) => {
+      const aTime = Date.parse(a.receivedAt || a.modifiedAt || '') || 0;
+      const bTime = Date.parse(b.receivedAt || b.modifiedAt || '') || 0;
+      return bTime - aTime;
+    });
+
+    egcMessages = parsed;
+    egcLastScanAt = new Date().toISOString();
+    egcLastError = null;
+
+    const signature = JSON.stringify(egcMessages.map(item => [item.filename, item.modifiedAt, item.sequence]));
+    if (forceBroadcast || signature !== egcLastSignature) {
+      egcLastSignature = signature;
+      broadcast(getEgcSnapshot());
+    }
+  } catch (error) {
+    const nextError = error.message;
+    const changed = nextError !== egcLastError;
+    egcLastScanAt = new Date().toISOString();
+    egcLastError = nextError;
+    if (forceBroadcast || changed) broadcast(getEgcSnapshot());
+  }
+}
+
 function broadcast(payload) {
   const message = JSON.stringify(payload);
   wss.clients.forEach(client => {
@@ -244,6 +354,8 @@ wss.on('connection', ws => {
     ws.send(JSON.stringify(lastRouteState));
   }
 
+  ws.send(JSON.stringify(getEgcSnapshot()));
+
   ws.on('message', raw => {
     try {
       const msg = JSON.parse(String(raw));
@@ -261,6 +373,8 @@ wss.on('connection', ws => {
         };
         clearRouteState();
         broadcast(lastRouteState);
+      } else if (msg.type === 'egc-refresh') {
+        scanEgcDirectory(true);
       }
     } catch (error) {
       // Ignore malformed client messages so the AIS feed keeps running.
@@ -338,4 +452,7 @@ async function openSerial() {
 }
 
 console.log(`[AIS] WebSocket server started on ${WS_PORT}`);
+console.log(`[EGC] Watching ${EGC_DIR} through AIS WebSocket ${WS_PORT}`);
+scanEgcDirectory(true);
+setInterval(() => scanEgcDirectory(false), EGC_SCAN_INTERVAL_MS);
 openSerial();
