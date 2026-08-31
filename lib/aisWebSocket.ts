@@ -1,6 +1,5 @@
 const AIS_WS_HOST_KEY = "navdash-ais-ws-host";
 const AIS_WS_PORT = 8081;
-const EGC_WS_PORT = 8082;
 const WHEELHOUSE_AIS_WS_HOST = "10.129.4.102";
 const WHEELHOUSE_AIS_WS_URL = `ws://${WHEELHOUSE_AIS_WS_HOST}:${AIS_WS_PORT}`;
 
@@ -42,9 +41,7 @@ export function getEgcWebSocketUrl() {
   const explicit = params.get("egcWs")?.trim();
   if (explicit) return explicit;
 
-  const aisUrl = new URL(getAisWebSocketUrl());
-  aisUrl.port = String(EGC_WS_PORT);
-  return aisUrl.toString().replace(/\/$/, "");
+  return getAisWebSocketUrl();
 }
 
 export function clearAisWebSocketOverride() {
