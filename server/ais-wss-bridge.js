@@ -77,16 +77,28 @@ function findTlsPair() {
   }
 
   const appRoot = path.resolve(__dirname, '..');
+  const documentsRoot = path.join(os.homedir(), 'Documents');
   const roots = [
     process.env.AIS_TLS_DIR,
     path.join(appRoot, 'certs'),
     path.join(__dirname, 'certs'),
-    path.join(os.homedir(), 'Documents', 'NavDash-iPad-client'),
-    path.join(os.homedir(), 'Documents', 'NavDash'),
-    path.join(os.homedir(), 'Documents', 'navdash-certs')
+    appRoot,
+    __dirname,
+    path.join(documentsRoot, 'NavDash-iPad-client'),
+    path.join(documentsRoot, 'NavDash'),
+    path.join(documentsRoot, 'navdash-certs'),
+    documentsRoot
   ].filter(Boolean);
 
-  const candidates = roots.flatMap(root => walkForPem(root, 4));
+  const seen = new Set();
+  const candidates = roots
+    .flatMap(root => walkForPem(root, root === documentsRoot ? 3 : 4))
+    .filter(item => {
+      const key = item.path.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   const keys = candidates.filter(item => item.type === 'key');
   const certs = candidates.filter(item => item.type === 'cert');
 
