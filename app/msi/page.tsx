@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getEgcWebSocketUrl } from "../../lib/aisWebSocket";
 
@@ -191,6 +192,9 @@ export default function MsiPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              <Link href="/" className="rounded-xl border border-white/10 bg-white/[0.06] px-4 py-2.5 text-sm font-black text-slate-200 transition hover:bg-white/10">
+                MAIN PAGE
+              </Link>
               <button
                 type="button"
                 onClick={() => (isFelcom ? refreshEgc() : void refreshNga())}
