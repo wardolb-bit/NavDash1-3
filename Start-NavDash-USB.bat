@@ -24,8 +24,10 @@ if not defined NODE_DIR (
 set "PATH=%NODE_DIR%;%APP_DIR%node_modules\.bin;%PATH%"
 if not defined PORT set "PORT=3000"
 if not defined AIS_WS_PORT set "AIS_WS_PORT=8081"
+if not defined EGC_WS_PORT set "EGC_WS_PORT=8082"
 if not defined AIS_PORT set "AIS_PORT=COM4"
 if not defined AIS_BAUD set "AIS_BAUD=38400"
+if not defined FELCOM_EGC_DIR set "FELCOM_EGC_DIR=C:\Users\havennav\Documents\felcom19\egc"
 set "NAVDASH_DATA_DIR=%APP_DIR%data"
 set "NAV_ROUTE_STATE_PATH=%APP_DIR%data\loaded-route.json"
 
@@ -65,10 +67,13 @@ echo Starting NavDash from USB...
 echo Main site:   http://localhost:3000
 echo Ship access: http://THIS-COMPUTER-IP:3000
 echo AIS socket:  ws://THIS-COMPUTER-IP:8081
+echo EGC socket:  ws://THIS-COMPUTER-IP:8082
 echo AIS serial:  %AIS_PORT% at %AIS_BAUD% baud
+echo EGC folder:  %FELCOM_EGC_DIR%
 echo.
 echo Close this window to stop NavDash.
 echo.
 
 start "NavDash AIS Server" /b "%NODE_DIR%\node.exe" "%APP_DIR%server\ais-server.js"
+start "NavDash EGC Server" /b "%NODE_DIR%\node.exe" "%APP_DIR%server\egc-server.js"
 "%NODE_DIR%\node.exe" "%APP_DIR%node_modules\next\dist\bin\next" start -H 0.0.0.0 -p %PORT%
