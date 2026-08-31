@@ -1,19 +1,10 @@
 const AIS_WS_HOST_KEY = "navdash-ais-ws-host";
 const AIS_WS_PORT = 8081;
 const WHEELHOUSE_AIS_WS_HOST = "10.129.4.102";
-const WHEELHOUSE_AIS_WS_URL = `wss://${WHEELHOUSE_AIS_WS_HOST}:${AIS_WS_PORT}`;
+const WHEELHOUSE_AIS_WS_URL = `ws://${WHEELHOUSE_AIS_WS_HOST}:${AIS_WS_PORT}`;
 
 function isLocalAisUrl(url: string) {
   return /^wss?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(url.trim());
-}
-
-function normalizeAisHost(host: string) {
-  const trimmed = host.trim();
-  if (trimmed.includes("://")) return trimmed;
-
-  const hasPort = /:\d+$/.test(trimmed);
-  const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${trimmed}${hasPort ? "" : `:${AIS_WS_PORT}`}`;
 }
 
 export function getAisWebSocketUrl(defaultUrl = WHEELHOUSE_AIS_WS_URL) {
@@ -27,20 +18,16 @@ export function getAisWebSocketUrl(defaultUrl = WHEELHOUSE_AIS_WS_URL) {
   }
 
   if (queryHost) {
-    const url = normalizeAisHost(queryHost);
+    const hasPort = /:\d+$/.test(queryHost);
+    const url = queryHost.includes("://")
+      ? queryHost
+      : `ws://${queryHost}${hasPort ? "" : `:${AIS_WS_PORT}`}`;
     window.localStorage.setItem(AIS_WS_HOST_KEY, url);
     return url;
   }
 
   const storedUrl = window.localStorage.getItem(AIS_WS_HOST_KEY)?.trim();
-  if (storedUrl && !isLocalAisUrl(storedUrl)) {
-    if (window.location.protocol === "https:" && storedUrl.startsWith("ws://")) {
-      const secureUrl = storedUrl.replace(/^ws:\/\//i, "wss://");
-      window.localStorage.setItem(AIS_WS_HOST_KEY, secureUrl);
-      return secureUrl;
-    }
-    return storedUrl;
-  }
+  if (storedUrl && !isLocalAisUrl(storedUrl)) return storedUrl;
 
   if (storedUrl && isLocalAisUrl(storedUrl)) {
     window.localStorage.setItem(AIS_WS_HOST_KEY, WHEELHOUSE_AIS_WS_URL);
