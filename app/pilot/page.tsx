@@ -420,62 +420,114 @@ export default function PilotPage() {
     map.setZoom(map.getZoom() + delta, { animate: false });
   }
 
-  const shell = nightMode ? "bg-[#03070a] text-slate-100" : "bg-[#eef2f4] text-[#0c1720]";
-  const panel = nightMode ? "border-[#263846] bg-[#071019]/95" : "border-[#aab8c1] bg-white/95";
-  const muted = nightMode ? "text-slate-500" : "text-slate-500";
-  const value = nightMode ? "text-cyan-300" : "text-[#006b82]";
+  const dayMode = !nightMode;
+  const pageClass = dayMode ? "bg-white text-slate-950" : "bg-[#071019] text-slate-100";
+  const glassPanel = dayMode
+    ? "rounded-[2rem] border border-slate-300 bg-white/95 shadow-xl shadow-slate-900/10"
+    : "rounded-[2rem] border border-white/10 bg-white/[0.055] shadow-2xl shadow-black/35 backdrop-blur-xl";
+  const softPanel = dayMode
+    ? "rounded-3xl border border-slate-300 bg-slate-50/95"
+    : "rounded-3xl border border-white/10 bg-white/[0.065] backdrop-blur-xl";
+  const controlClass = dayMode
+    ? "rounded-2xl border border-slate-300 bg-white text-slate-900 shadow-lg shadow-slate-900/10 hover:bg-slate-50"
+    : "rounded-2xl border border-white/10 bg-white/10 text-slate-100 shadow-xl shadow-black/30 hover:bg-white/15";
+  const muted = dayMode ? "text-slate-500" : "text-slate-400";
+  const primaryText = dayMode ? "text-slate-950" : "text-white";
+  const navValue = "text-wardGold";
 
   return (
-    <main className={`h-[100dvh] w-screen overflow-hidden ${shell}`}>
-      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)]">
-        <header className={`grid grid-cols-[minmax(190px,1.4fr)_repeat(3,minmax(88px,.55fr))_auto] items-stretch border-b ${panel}`}>
-          <div className="min-w-0 px-4 py-2">
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-[#c9a227]">NAVDASH PILOT</div>
-            <div className={`truncate font-mono text-[13px] font-bold ${value}`}>{positionText.lat} &nbsp; {positionText.lon}</div>
+    <main className={`h-[100dvh] w-screen overflow-hidden ${pageClass}`}>
+      <div className="grid h-full grid-rows-[auto_minmax(0,1fr)] gap-3 p-3 md:p-4">
+        <header className={`${glassPanel} px-4 py-3 md:px-5`}>
+          <div className="flex items-center gap-3 md:gap-4">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border border-wardGold/45 bg-wardGold/15 text-xl font-black text-wardGold md:h-14 md:w-14 md:rounded-3xl md:text-2xl">
+              P
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="text-[9px] font-bold uppercase tracking-[0.32em] text-wardGold md:text-[10px]">M/V MB480</div>
+              <div className="flex min-w-0 items-baseline gap-3">
+                <h1 className={`truncate text-xl font-black tracking-tight md:text-2xl ${primaryText}`}>Pilot</h1>
+                <div className={`hidden truncate font-mono text-xs font-bold sm:block ${muted}`}>
+                  {positionText.lat} &nbsp; {positionText.lon}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid shrink-0 grid-cols-3 gap-2">
+              <div className={`${softPanel} min-w-[74px] px-3 py-2 text-center md:min-w-[88px]`}>
+                <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>HDG</div>
+                <div className={`font-mono text-xl font-black md:text-2xl ${navValue}`}>{ownShip?.heading == null ? "---" : `${ownShip.heading.toFixed(0)}°`}</div>
+              </div>
+              <div className={`${softPanel} min-w-[74px] px-3 py-2 text-center md:min-w-[88px]`}>
+                <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>COG</div>
+                <div className={`font-mono text-xl font-black md:text-2xl ${navValue}`}>{ownShip?.cog == null ? "---" : `${ownShip.cog.toFixed(1)}°`}</div>
+              </div>
+              <div className={`${softPanel} min-w-[74px] px-3 py-2 text-center md:min-w-[88px]`}>
+                <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>SOG</div>
+                <div className={`font-mono text-xl font-black md:text-2xl ${navValue}`}>{ownShip?.sog == null ? "---" : ownShip.sog.toFixed(1)}</div>
+                <div className={`-mt-1 text-[7px] font-black ${muted}`}>KT</div>
+              </div>
+            </div>
+
+            <div className="ml-1 flex shrink-0 items-center gap-2">
+              <div className={`hidden rounded-2xl border px-3 py-2 text-[9px] font-black md:block ${aisStatus === "AIS LIVE" ? "border-emerald-400/35 bg-emerald-400/10 text-emerald-400" : "border-amber-400/35 bg-amber-400/10 text-amber-400"}`}>
+                {aisStatus}
+              </div>
+              <button type="button" onClick={toggleTheme} className={`${controlClass} h-11 px-4 text-[10px] font-black`}>
+                {dayMode ? "Bridge Night" : "Day Mode"}
+              </button>
+            </div>
           </div>
-          <div className="border-l border-current/10 px-3 py-2 text-center">
-            <div className={`text-[9px] font-black uppercase tracking-[0.12em] ${muted}`}>HDG</div>
-            <div className={`font-mono text-2xl font-black ${value}`}>{ownShip?.heading == null ? "---" : `${ownShip.heading.toFixed(0)}°`}</div>
-          </div>
-          <div className="border-l border-current/10 px-3 py-2 text-center">
-            <div className={`text-[9px] font-black uppercase tracking-[0.12em] ${muted}`}>COG</div>
-            <div className={`font-mono text-2xl font-black ${value}`}>{ownShip?.cog == null ? "---" : `${ownShip.cog.toFixed(1)}°`}</div>
-          </div>
-          <div className="border-l border-current/10 px-3 py-2 text-center">
-            <div className={`text-[9px] font-black uppercase tracking-[0.12em] ${muted}`}>SOG</div>
-            <div className={`font-mono text-2xl font-black ${value}`}>{ownShip?.sog == null ? "---" : `${ownShip.sog.toFixed(1)}`}</div>
-            <div className={`-mt-1 text-[8px] font-black ${muted}`}>KT</div>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2">
-            <div className={`border px-2 py-1 text-[9px] font-black ${aisStatus === "AIS LIVE" ? "border-emerald-500/40 text-emerald-400" : "border-amber-500/40 text-amber-400"}`}>{aisStatus}</div>
-            <button type="button" onClick={toggleTheme} className={`border px-2 py-1 text-[9px] font-black ${panel}`}>{nightMode ? "DAY" : "NIGHT"}</button>
+
+          <div className={`mt-2 truncate font-mono text-[11px] font-bold sm:hidden ${muted}`}>
+            {positionText.lat} &nbsp; {positionText.lon}
           </div>
         </header>
 
-        <section className="relative min-h-0">
-          <div ref={mapElementRef} className="absolute inset-0" style={{ background: nightMode ? "#071019" : "#dce7eb" }} />
+        <section className={`${glassPanel} relative min-h-0 overflow-hidden p-1.5 md:p-2`}>
+          <div
+            ref={mapElementRef}
+            className="absolute inset-1.5 overflow-hidden rounded-[1.65rem] md:inset-2"
+            style={{ background: dayMode ? "#dce7eb" : "#0a141d" }}
+          />
 
-          <div className="pointer-events-none absolute left-3 top-3 z-[800] flex flex-col gap-2">
-            <div className={`pointer-events-auto border px-3 py-2 shadow-xl ${panel}`}>
-              <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>CHART</div>
-              <div className="text-[11px] font-black text-[#c9a227]">{chartStatus}</div>
+          <div className="pointer-events-none absolute left-4 top-4 z-[800] flex gap-2 md:left-5 md:top-5">
+            <div className={`${softPanel} pointer-events-auto px-3 py-2 shadow-xl`}>
+              <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>Chart</div>
+              <div className="text-[10px] font-black text-wardGold md:text-[11px]">{chartStatus}</div>
             </div>
-            <div className={`pointer-events-auto border px-3 py-2 shadow-xl ${panel}`}>
-              <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>AIS TARGETS</div>
-              <div className={`font-mono text-xl font-black ${value}`}>{targetCount}</div>
+            <div className={`${softPanel} pointer-events-auto px-3 py-2 shadow-xl`}>
+              <div className={`text-[8px] font-black uppercase tracking-[0.14em] ${muted}`}>AIS Targets</div>
+              <div className={`font-mono text-lg font-black ${primaryText}`}>{targetCount}</div>
             </div>
           </div>
 
-          <div className="pointer-events-none absolute bottom-4 right-4 z-[800] flex flex-col gap-2">
-            <button type="button" onClick={() => zoom(1)} className={`pointer-events-auto h-11 w-12 border text-xl font-black shadow-xl ${panel}`}>+</button>
-            <button type="button" onClick={() => zoom(-1)} className={`pointer-events-auto h-11 w-12 border text-xl font-black shadow-xl ${panel}`}>−</button>
-            <button type="button" onClick={centerOwnShip} disabled={!ownShip} className={`pointer-events-auto min-w-[118px] border px-3 py-3 text-[10px] font-black shadow-xl ${following ? "border-cyan-400/50 text-cyan-300" : panel}`}>{following ? "FOLLOWING" : "CENTER SHIP"}</button>
+          <div className="pointer-events-none absolute bottom-5 right-5 z-[800] flex items-end gap-2">
+            <button type="button" onClick={() => zoom(-1)} className={`${controlClass} pointer-events-auto grid h-11 w-11 place-items-center text-lg font-black`}>−</button>
+            <button type="button" onClick={() => zoom(1)} className={`${controlClass} pointer-events-auto grid h-11 w-11 place-items-center text-lg font-black`}>+</button>
+            <button
+              type="button"
+              onClick={centerOwnShip}
+              disabled={!ownShip}
+              className={`pointer-events-auto h-11 min-w-[126px] rounded-2xl border px-4 text-[10px] font-black shadow-xl ${
+                !ownShip
+                  ? dayMode
+                    ? "cursor-not-allowed border-slate-300 bg-slate-100 text-slate-400"
+                    : "cursor-not-allowed border-white/10 bg-white/5 text-slate-500"
+                  : following
+                    ? "border-wardGold/50 bg-wardGold text-[#111827] shadow-wardGold/20"
+                    : controlClass
+              }`}
+            >
+              {following ? "Following" : "Center Own Ship"}
+            </button>
           </div>
 
-          <div className={`pointer-events-none absolute bottom-4 left-4 z-[800] border px-3 py-2 text-[9px] font-bold shadow-xl ${panel}`}>
-            <span className={muted}>AIS ONLY</span>
-            <span className="mx-2 text-[#c9a227]">•</span>
-            <span className={muted}>6 MIN COG VECTOR</span>
+          <div className={`${softPanel} pointer-events-none absolute bottom-5 left-5 z-[800] px-3 py-2 text-[9px] font-bold shadow-xl`}>
+            <span className={muted}>AIS only</span>
+            <span className="mx-2 text-wardGold">•</span>
+            <span className={muted}>6 min COG vector</span>
           </div>
         </section>
       </div>
