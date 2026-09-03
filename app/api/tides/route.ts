@@ -114,11 +114,11 @@ function withDistances(stations: TideStation[], lat: number, lon: number) {
   }));
 }
 
-async function fetchPredictions(station: string, interval: "h" | "hilo") {
+async function fetchPredictions(station: string, interval: "h" | "hilo", rangeHours: number) {
   const start = new Date();
   start.setUTCDate(start.getUTCDate() - 1);
   const end = new Date();
-  end.setUTCDate(end.getUTCDate() + 6);
+  end.setUTCDate(end.getUTCDate() + Math.max(1, Math.ceil(rangeHours / 24) + 1));
   const params = new URLSearchParams({
     product: "predictions",
     application: "NavDash",
@@ -141,9 +141,12 @@ async function fetchPredictions(station: string, interval: "h" | "hilo") {
   })).filter((row: any) => row.time && Number.isFinite(row.valueFt));
 }
 
-async function predictionBundle(station: string) {
-  const [hourly, highLow] = await Promise.all([fetchPredictions(station, "h"), fetchPredictions(station, "hilo")]);
-  if (!hourly.length || !highLow.length) throw new Error("NOAA returned no tide predictions for this station.");
+async function predictionBundle(station: string, rangeHours: number) {
+  const [hourly, highLow] = await Promise.all([
+    fetchPredictions(station, "h", rangeHours),
+    fetchPredictions(station, "hilo", rangeHours),
+  ]);
+  if (!hourly.length) throw new Error("NOAA returned no tide predictions for this station.");
   return { hourly, highLow };
 }
 
@@ -153,6 +156,8 @@ export async function GET(req: NextRequest) {
   const lon = toNumber(search.get("lon"));
   const requestedStation = search.get("station")?.trim();
   const query = search.get("q")?.trim().toLowerCase();
+  const requestedHours = Number(search.get("hours") || 24);
+  const rangeHours = Number.isFinite(requestedHours) ? Math.min(168, Math.max(12, Math.round(requestedHours))) : 24;
 
   if (lat === null || lon === null || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
     return NextResponse.json({ ok: false, error: "A valid latitude and longitude are required for tide lookup." }, { status: 400 });
@@ -182,7 +187,7 @@ export async function GET(req: NextRequest) {
     for (const candidate of candidates) {
       if (!candidate) continue;
       try {
-        bundle = await predictionBundle(candidate.id);
+        bundle = await predictionBundle(candidate.id, rangeHours);
         selectedStation = candidate;
         break;
       } catch (error) {
@@ -204,6 +209,7 @@ export async function GET(req: NextRequest) {
       datum: "MLLW",
       units: "feet",
       timeZone: "LST/LDT",
+      rangeHours,
       source: "NOAA CO-OPS Tide Predictions",
       hourly: bundle.hourly,
       highLow: bundle.highLow,
