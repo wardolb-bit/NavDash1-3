@@ -23,6 +23,8 @@ function itemIsActive(pathname: string, href: string) {
 
 export function NavDashNav() {
   const pathname = usePathname();
+  if (pathname.startsWith("/tides")) return null;
+
   const celestialActive = pathname.startsWith("/celestial");
   const activeGroup = celestialActive
     ? { label: "Celestial", items: [] }
