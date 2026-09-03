@@ -114,12 +114,8 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
       const L = await import("leaflet");
       if (cancelled) return;
 
-      let targetPane = map.getPane("pilot-targets");
-      if (!targetPane) targetPane = map.createPane("pilot-targets");
-      targetPane.style.zIndex = "710";
-
       if (!targetLayerRef.current) {
-        targetLayerRef.current = L.layerGroup([], { pane: "pilot-targets" } as any).addTo(map);
+        targetLayerRef.current = L.layerGroup().addTo(map);
       } else if (!map.hasLayer(targetLayerRef.current)) {
         targetLayerRef.current.addTo(map);
       }
@@ -232,7 +228,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
           existing.setIcon(icon);
           existing.setPopupContent(popup);
         } else {
-          const marker = L.marker(pos, { icon, pane: "pilot-targets" }).bindPopup(popup).addTo(layer);
+          const marker = L.marker(pos, { icon }).bindPopup(popup).addTo(layer);
           targetMarkersRef.current.set(mmsi, marker);
         }
       }
