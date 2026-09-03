@@ -11,15 +11,12 @@ function popupHtml(vessel: PilotAisVessel) {
   return `<div style="font-family:ui-monospace,monospace;min-width:150px"><b>MMSI ${vessel.mmsi}</b><br/>COG ${vessel.cog === null ? "---" : vessel.cog.toFixed(1) + "°"}<br/>SOG ${vessel.sog === null ? "---" : vessel.sog.toFixed(1) + " kt"}<br/>HDG ${vessel.heading === null ? "---" : vessel.heading.toFixed(0) + "°"}</div>`;
 }
 
-function geographicScreenPoint(map: any, vessel: PilotAisVessel) {
-  const zoom = map.getZoom();
-  const size = map.getSize();
-  const center = map.getCenter();
-  const vesselWorld = map.project([vessel.lat, vessel.lon], zoom);
-  const centerWorld = map.project(center, zoom);
+function liveContainerPoint(map: any, vessel: PilotAisVessel) {
+  const layerPoint = map.latLngToLayerPoint([vessel.lat, vessel.lon]);
+  const panePoint = typeof map._getMapPanePos === "function" ? map._getMapPanePos() : { x: 0, y: 0 };
   return {
-    x: vesselWorld.x - centerWorld.x + size.x / 2,
-    y: vesselWorld.y - centerWorld.y + size.y / 2,
+    x: Number(layerPoint.x) + Number(panePoint?.x || 0),
+    y: Number(layerPoint.y) + Number(panePoint?.y || 0),
   };
 }
 
@@ -51,22 +48,13 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
 
       for (const [mmsi, vessel] of targetsRef.current) {
         live.add(mmsi);
-        const point = geographicScreenPoint(map, vessel);
+        const point = liveContainerPoint(map, vessel);
         let element = targetElementsRef.current.get(mmsi);
 
         if (!element) {
           element = document.createElement("div");
           element.dataset.mmsi = String(mmsi);
-          element.style.cssText = [
-            "position:absolute",
-            "width:22px",
-            "height:22px",
-            "transform:translate(-50%,-50%)",
-            "transform-origin:center center",
-            "pointer-events:auto",
-            "cursor:pointer",
-            "z-index:2",
-          ].join(";");
+          element.style.cssText = "position:absolute;width:22px;height:22px;transform:translate(-50%,-50%);transform-origin:center center;pointer-events:auto;cursor:pointer;z-index:2";
           element.addEventListener("click", (event) => {
             event.stopPropagation();
             const current = targetsRef.current.get(mmsi);
@@ -77,18 +65,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
             let popup = popupRef.current;
             if (!popup) {
               popup = document.createElement("div");
-              popup.style.cssText = [
-                "position:absolute",
-                "z-index:20",
-                "pointer-events:auto",
-                "padding:10px 12px",
-                "border:1px solid rgba(56,189,248,.8)",
-                "border-radius:8px",
-                "background:rgba(7,16,25,.96)",
-                "color:#e5f4ff",
-                "box-shadow:0 8px 24px rgba(0,0,0,.45)",
-                "white-space:nowrap",
-              ].join(";");
+              popup.style.cssText = "position:absolute;z-index:20;pointer-events:auto;padding:10px 12px;border:1px solid rgba(56,189,248,.8);border-radius:8px;background:rgba(7,16,25,.96);color:#e5f4ff;box-shadow:0 8px 24px rgba(0,0,0,.45);white-space:nowrap";
               popup.addEventListener("click", (popupEvent) => popupEvent.stopPropagation());
               currentOverlay.appendChild(popup);
               popupRef.current = popup;
@@ -96,7 +73,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
 
             popup.innerHTML = popupHtml(current);
             const currentSize = currentMap.getSize();
-            const targetPoint = geographicScreenPoint(currentMap, current);
+            const targetPoint = liveContainerPoint(currentMap, current);
             popup.style.left = `${Math.max(8, Math.min(currentSize.x - 190, targetPoint.x + 16))}px`;
             popup.style.top = `${Math.max(8, Math.min(currentSize.y - 115, targetPoint.y + 16))}px`;
             popup.style.display = "block";
@@ -153,19 +130,13 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
       if (!overlay) {
         overlay = document.createElement("div");
         overlay.id = OVERLAY_ID;
-        overlay.style.cssText = [
-          "position:absolute",
-          "inset:0",
-          "z-index:900",
-          "pointer-events:none",
-          "overflow:hidden",
-        ].join(";");
+        overlay.style.cssText = "position:absolute;inset:0;z-index:900;pointer-events:none;overflow:hidden";
         container.appendChild(overlay);
       }
 
       overlayRef.current = overlay;
       attachedMap = map;
-      map.on("move drag moveend resize viewreset", redraw);
+      map.on("drag move moveend resize viewreset", redraw);
       map.on("zoomstart", hideDuringZoom);
       map.on("zoomend", showAfterZoom);
       map.on("click", closePopup);
@@ -182,7 +153,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
       if (redrawFrame) window.cancelAnimationFrame(redrawFrame);
       window.removeEventListener("resize", redraw);
       if (attachedMap) {
-        attachedMap.off("move drag moveend resize viewreset", redraw);
+        attachedMap.off("drag move moveend resize viewreset", redraw);
         attachedMap.off("zoomstart", hideDuringZoom);
         attachedMap.off("zoomend", showAfterZoom);
         attachedMap.off("click", closePopup);
@@ -269,7 +240,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
 
     for (const [mmsi, vessel] of targets) {
       live.add(mmsi);
-      const point = geographicScreenPoint(map, vessel);
+      const point = liveContainerPoint(map, vessel);
       let element = targetElementsRef.current.get(mmsi);
 
       if (!element) {
