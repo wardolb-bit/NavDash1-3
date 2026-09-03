@@ -29,6 +29,14 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
     let attachedMap: any = null;
     let redrawFrame = 0;
 
+    const positionPopup = (map: any, vessel: PilotAisVessel) => {
+      const popup = popupRef.current;
+      if (!popup) return;
+      const point = map.latLngToLayerPoint([vessel.lat, vessel.lon]);
+      popup.style.left = `${point.x + 16}px`;
+      popup.style.top = `${point.y + 16}px`;
+    };
+
     const redraw = () => {
       if (redrawFrame) window.cancelAnimationFrame(redrawFrame);
       redrawFrame = window.requestAnimationFrame(() => {
@@ -36,12 +44,11 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
         const overlay = overlayRef.current;
         if (!map || !overlay) return;
 
-        const size = map.getSize();
         const live = new Set<number>();
 
         for (const [mmsi, vessel] of targetsRef.current) {
           live.add(mmsi);
-          const point = map.latLngToContainerPoint([vessel.lat, vessel.lon]);
+          const point = map.latLngToLayerPoint([vessel.lat, vessel.lon]);
           let element = targetElementsRef.current.get(mmsi);
 
           if (!element) {
@@ -61,7 +68,8 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
               event.stopPropagation();
               const current = targetsRef.current.get(mmsi);
               const currentOverlay = overlayRef.current;
-              if (!current || !currentOverlay) return;
+              const currentMap = mapRef.current;
+              if (!current || !currentOverlay || !currentMap) return;
 
               let popup = popupRef.current;
               if (!popup) {
@@ -76,6 +84,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
                   "background:rgba(7,16,25,.96)",
                   "color:#e5f4ff",
                   "box-shadow:0 8px 24px rgba(0,0,0,.45)",
+                  "white-space:nowrap",
                 ].join(";");
                 popup.addEventListener("click", (popupEvent) => popupEvent.stopPropagation());
                 currentOverlay.appendChild(popup);
@@ -83,11 +92,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
               }
 
               popup.innerHTML = popupHtml(current);
-              const targetPoint = map.latLngToContainerPoint([current.lat, current.lon]);
-              const left = Math.max(8, Math.min(size.x - 190, targetPoint.x + 16));
-              const top = Math.max(8, Math.min(size.y - 115, targetPoint.y + 16));
-              popup.style.left = `${left}px`;
-              popup.style.top = `${top}px`;
+              positionPopup(currentMap, current);
               popup.style.display = "block";
             });
             overlay.appendChild(element);
@@ -98,7 +103,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
           element.title = `MMSI ${mmsi} · COG ${vessel.cog === null ? "---" : vessel.cog.toFixed(1) + "°"} · SOG ${vessel.sog === null ? "---" : vessel.sog.toFixed(1) + " kt"}`;
           element.style.left = `${point.x}px`;
           element.style.top = `${point.y}px`;
-          element.style.display = point.x >= -30 && point.y >= -30 && point.x <= size.x + 30 && point.y <= size.y + 30 ? "block" : "none";
+          element.style.display = "block";
         }
 
         for (const [mmsi, element] of targetElementsRef.current) {
@@ -114,6 +119,15 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
       if (popupRef.current) popupRef.current.style.display = "none";
     };
 
+    const hideDuringZoom = () => {
+      if (overlayRef.current) overlayRef.current.style.visibility = "hidden";
+    };
+
+    const showAfterZoom = () => {
+      if (overlayRef.current) overlayRef.current.style.visibility = "visible";
+      redraw();
+    };
+
     const attach = () => {
       if (closed) return;
       const map = mapRef.current;
@@ -122,26 +136,34 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
         return;
       }
 
-      const container = map.getContainer() as HTMLElement;
-      container.style.position = container.style.position || "relative";
+      const mapPane = map.getPane("mapPane") as HTMLElement | undefined;
+      if (!mapPane) {
+        timer = window.setTimeout(attach, 100);
+        return;
+      }
 
-      let overlay = container.querySelector(`#${OVERLAY_ID}`) as HTMLDivElement | null;
+      let overlay = mapPane.querySelector(`#${OVERLAY_ID}`) as HTMLDivElement | null;
       if (!overlay) {
         overlay = document.createElement("div");
         overlay.id = OVERLAY_ID;
         overlay.style.cssText = [
           "position:absolute",
-          "inset:0",
+          "left:0",
+          "top:0",
+          "width:0",
+          "height:0",
           "z-index:900",
           "pointer-events:none",
-          "overflow:hidden",
+          "overflow:visible",
         ].join(";");
-        container.appendChild(overlay);
+        mapPane.appendChild(overlay);
       }
 
       overlayRef.current = overlay;
       attachedMap = map;
-      map.on("move zoom moveend zoomend resize viewreset zoomanim", redraw);
+      map.on("viewreset zoomend resize", redraw);
+      map.on("zoomstart", hideDuringZoom);
+      map.on("zoomend", showAfterZoom);
       map.on("click", closePopup);
       window.addEventListener("resize", redraw);
       setMapReadyTick((value) => value + 1);
@@ -156,7 +178,9 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
       if (redrawFrame) window.cancelAnimationFrame(redrawFrame);
       window.removeEventListener("resize", redraw);
       if (attachedMap) {
-        attachedMap.off("move zoom moveend zoomend resize viewreset zoomanim", redraw);
+        attachedMap.off("viewreset zoomend resize", redraw);
+        attachedMap.off("zoomstart", hideDuringZoom);
+        attachedMap.off("zoomend", showAfterZoom);
         attachedMap.off("click", closePopup);
       }
       popupRef.current = null;
@@ -236,12 +260,11 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
     const overlay = overlayRef.current;
     if (!map || !overlay) return;
 
-    const size = map.getSize();
     const live = new Set<number>();
 
     for (const [mmsi, vessel] of targets) {
       live.add(mmsi);
-      const point = map.latLngToContainerPoint([vessel.lat, vessel.lon]);
+      const point = map.latLngToLayerPoint([vessel.lat, vessel.lon]);
       let element = targetElementsRef.current.get(mmsi);
 
       if (!element) {
@@ -252,19 +275,20 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
           event.stopPropagation();
           const current = targetsRef.current.get(mmsi);
           const currentOverlay = overlayRef.current;
-          if (!current || !currentOverlay) return;
+          const currentMap = mapRef.current;
+          if (!current || !currentOverlay || !currentMap) return;
 
           let popup = popupRef.current;
           if (!popup) {
             popup = document.createElement("div");
-            popup.style.cssText = "position:absolute;z-index:20;pointer-events:auto;padding:10px 12px;border:1px solid rgba(56,189,248,.8);border-radius:8px;background:rgba(7,16,25,.96);color:#e5f4ff;box-shadow:0 8px 24px rgba(0,0,0,.45)";
+            popup.style.cssText = "position:absolute;z-index:20;pointer-events:auto;padding:10px 12px;border:1px solid rgba(56,189,248,.8);border-radius:8px;background:rgba(7,16,25,.96);color:#e5f4ff;box-shadow:0 8px 24px rgba(0,0,0,.45);white-space:nowrap";
             currentOverlay.appendChild(popup);
             popupRef.current = popup;
           }
           popup.innerHTML = popupHtml(current);
-          const targetPoint = map.latLngToContainerPoint([current.lat, current.lon]);
-          popup.style.left = `${Math.max(8, Math.min(size.x - 190, targetPoint.x + 16))}px`;
-          popup.style.top = `${Math.max(8, Math.min(size.y - 115, targetPoint.y + 16))}px`;
+          const targetPoint = currentMap.latLngToLayerPoint([current.lat, current.lon]);
+          popup.style.left = `${targetPoint.x + 16}px`;
+          popup.style.top = `${targetPoint.y + 16}px`;
           popup.style.display = "block";
         });
         overlay.appendChild(element);
@@ -275,7 +299,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
       element.title = `MMSI ${mmsi}`;
       element.style.left = `${point.x}px`;
       element.style.top = `${point.y}px`;
-      element.style.display = point.x >= -30 && point.y >= -30 && point.x <= size.x + 30 && point.y <= size.y + 30 ? "block" : "none";
+      element.style.display = "block";
     }
 
     for (const [mmsi, element] of targetElementsRef.current) {
