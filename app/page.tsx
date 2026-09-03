@@ -3,6 +3,7 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 import { useBridgeTheme } from "../lib/useBridgeTheme";
+import { usePilotAisTargets } from "../lib/usePilotAisTargets";
 
 const FULLSCREEN_PREF_KEY = "navconsole-fullscreen";
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
@@ -1184,6 +1185,7 @@ export default function NavDashHomePage() {
   const { nightMode, toggleTheme } = useBridgeTheme();
   const dayMode = !nightMode;
   const mapRef = useRef<any>(null);
+  usePilotAisTargets(mapRef);
   const routeLayerRef = useRef<any>(null);
   const routeMarkersRef = useRef<any[]>([]);
   const ownMarkerRef = useRef<any>(null);
