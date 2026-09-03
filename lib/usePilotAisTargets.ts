@@ -2,166 +2,144 @@
 
 import { MutableRefObject, useEffect, useRef, useState } from "react";
 import { getAisWebSocketUrl } from "./aisWebSocket";
-import { decodePilotAisPosition, pilotVesselIconHtml, type PilotAisVessel } from "./pilotAisTargets";
 
-const TARGET_STALE_MS = 10 * 60 * 1000;
-const OVERLAY_ID = "navdash-main-ais-html-overlay";
+type Vessel = {
+  mmsi: number;
+  lat: number;
+  lon: number;
+  sog: number | null;
+  cog: number | null;
+  heading: number | null;
+  updatedAt: number;
+};
 
-function popupHtml(vessel: PilotAisVessel) {
-  return `<div style="font-family:ui-monospace,monospace;min-width:150px"><b>MMSI ${vessel.mmsi}</b><br/>COG ${vessel.cog === null ? "---" : vessel.cog.toFixed(1) + "°"}<br/>SOG ${vessel.sog === null ? "---" : vessel.sog.toFixed(1) + " kt"}<br/>HDG ${vessel.heading === null ? "---" : vessel.heading.toFixed(0) + "°"}</div>`;
+function sixBitCharToValue(char: string) {
+  let value = char.charCodeAt(0) - 48;
+  if (value > 40) value -= 8;
+  return value;
 }
 
-function liveContainerPoint(map: any, vessel: PilotAisVessel) {
-  const layerPoint = map.latLngToLayerPoint([vessel.lat, vessel.lon]);
-  const panePoint = typeof map._getMapPanePos === "function" ? map._getMapPanePos() : { x: 0, y: 0 };
-  return {
-    x: Number(layerPoint.x) + Number(panePoint?.x || 0),
-    y: Number(layerPoint.y) + Number(panePoint?.y || 0),
-  };
+function payloadToBits(payload: string) {
+  return payload
+    .split("")
+    .map((char) => sixBitCharToValue(char).toString(2).padStart(6, "0"))
+    .join("");
+}
+
+function unsigned(bits: string, start: number, length: number) {
+  return parseInt(bits.slice(start, start + length), 2);
+}
+
+function signed(bits: string, start: number, length: number) {
+  const raw = bits.slice(start, start + length);
+  const value = parseInt(raw, 2);
+  const signBit = 2 ** (length - 1);
+  return value >= signBit ? value - 2 ** length : value;
+}
+
+function decodeAisPosition(line: string): Vessel | null {
+  try {
+    if (!line.startsWith("!AIVDM") && !line.startsWith("!AIVDO")) return null;
+    const parts = line.split(",");
+    if (Number(parts[1]) !== 1 || !parts[5]) return null;
+
+    const bits = payloadToBits(parts[5]);
+    const type = unsigned(bits, 0, 6);
+    const mmsi = unsigned(bits, 8, 30);
+
+    let sog: number | null = null;
+    let cog: number | null = null;
+    let heading: number | null = null;
+    let lon = 0;
+    let lat = 0;
+
+    if ([1, 2, 3].includes(type)) {
+      const sogRaw = unsigned(bits, 50, 10);
+      lon = signed(bits, 61, 28) / 600000;
+      lat = signed(bits, 89, 27) / 600000;
+      const cogRaw = unsigned(bits, 116, 12);
+      const headingRaw = unsigned(bits, 128, 9);
+      sog = sogRaw >= 1023 ? null : sogRaw / 10;
+      cog = cogRaw >= 3600 ? null : cogRaw / 10;
+      heading = headingRaw === 511 ? null : headingRaw;
+    } else if (type === 18) {
+      const sogRaw = unsigned(bits, 46, 10);
+      lon = signed(bits, 57, 28) / 600000;
+      lat = signed(bits, 85, 27) / 600000;
+      const cogRaw = unsigned(bits, 112, 12);
+      const headingRaw = unsigned(bits, 124, 9);
+      sog = sogRaw >= 1023 ? null : sogRaw / 10;
+      cog = cogRaw >= 3600 ? null : cogRaw / 10;
+      heading = headingRaw === 511 ? null : headingRaw;
+    } else {
+      return null;
+    }
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return null;
+
+    return { mmsi, lat, lon, sog, cog, heading, updatedAt: Date.now() };
+  } catch {
+    return null;
+  }
+}
+
+function vesselIconHtml(vessel: Vessel) {
+  const orientation = vessel.heading ?? vessel.cog ?? 0;
+  const stroke = "#38bdf8";
+  const fill = "#08131c";
+  const accent = "#38bdf8";
+  const size = 22;
+  const center = size / 2;
+  return `<div style="width:${size}px;height:${size}px;transform:rotate(${orientation}deg);transform-origin:${center}px ${center}px;filter:drop-shadow(0 0 4px rgba(34,211,238,.35))"><svg width="${size}" height="${size}" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="${accent}" stroke-width="1.4"/><circle cx="15" cy="15" r="2" fill="${stroke}"/></svg></div>`;
 }
 
 export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
-  const overlayRef = useRef<HTMLDivElement | null>(null);
-  const targetElementsRef = useRef<Map<number, HTMLDivElement>>(new Map());
-  const popupRef = useRef<HTMLDivElement | null>(null);
-  const targetsRef = useRef<Map<number, PilotAisVessel>>(new Map());
-  const [targets, setTargets] = useState<Map<number, PilotAisVessel>>(new Map());
+  const targetLayerRef = useRef<any>(null);
+  const targetMarkersRef = useRef<Map<number, any>>(new Map());
+  const [targets, setTargets] = useState<Map<number, Vessel>>(new Map());
   const [mapReadyTick, setMapReadyTick] = useState(0);
 
   useEffect(() => {
-    targetsRef.current = targets;
-  }, [targets]);
-
-  useEffect(() => {
-    let closed = false;
+    let cancelled = false;
     let timer = 0;
-    let attachedMap: any = null;
-    let redrawFrame = 0;
 
-    const redrawNow = () => {
+    async function attachTargetLayer() {
       const map = mapRef.current;
-      const overlay = overlayRef.current;
-      if (!map || !overlay) return;
-
-      const size = map.getSize();
-      const live = new Set<number>();
-
-      for (const [mmsi, vessel] of targetsRef.current) {
-        live.add(mmsi);
-        const point = liveContainerPoint(map, vessel);
-        let element = targetElementsRef.current.get(mmsi);
-
-        if (!element) {
-          element = document.createElement("div");
-          element.dataset.mmsi = String(mmsi);
-          element.style.cssText = "position:absolute;width:22px;height:22px;transform:translate(-50%,-50%);transform-origin:center center;pointer-events:auto;cursor:pointer;z-index:2";
-          element.addEventListener("click", (event) => {
-            event.stopPropagation();
-            const current = targetsRef.current.get(mmsi);
-            const currentOverlay = overlayRef.current;
-            const currentMap = mapRef.current;
-            if (!current || !currentOverlay || !currentMap) return;
-
-            let popup = popupRef.current;
-            if (!popup) {
-              popup = document.createElement("div");
-              popup.style.cssText = "position:absolute;z-index:20;pointer-events:auto;padding:10px 12px;border:1px solid rgba(56,189,248,.8);border-radius:8px;background:rgba(7,16,25,.96);color:#e5f4ff;box-shadow:0 8px 24px rgba(0,0,0,.45);white-space:nowrap";
-              popup.addEventListener("click", (popupEvent) => popupEvent.stopPropagation());
-              currentOverlay.appendChild(popup);
-              popupRef.current = popup;
-            }
-
-            popup.innerHTML = popupHtml(current);
-            const currentSize = currentMap.getSize();
-            const targetPoint = liveContainerPoint(currentMap, current);
-            popup.style.left = `${Math.max(8, Math.min(currentSize.x - 190, targetPoint.x + 16))}px`;
-            popup.style.top = `${Math.max(8, Math.min(currentSize.y - 115, targetPoint.y + 16))}px`;
-            popup.style.display = "block";
-          });
-          overlay.appendChild(element);
-          targetElementsRef.current.set(mmsi, element);
-        }
-
-        element.innerHTML = pilotVesselIconHtml(vessel);
-        element.title = `MMSI ${mmsi} · COG ${vessel.cog === null ? "---" : vessel.cog.toFixed(1) + "°"} · SOG ${vessel.sog === null ? "---" : vessel.sog.toFixed(1) + " kt"}`;
-        element.style.left = `${point.x}px`;
-        element.style.top = `${point.y}px`;
-        element.style.display = point.x >= -30 && point.y >= -30 && point.x <= size.x + 30 && point.y <= size.y + 30 ? "block" : "none";
-      }
-
-      for (const [mmsi, element] of targetElementsRef.current) {
-        if (!live.has(mmsi)) {
-          element.remove();
-          targetElementsRef.current.delete(mmsi);
-        }
-      }
-    };
-
-    const redraw = () => {
-      if (redrawFrame) window.cancelAnimationFrame(redrawFrame);
-      redrawFrame = window.requestAnimationFrame(redrawNow);
-    };
-
-    const closePopup = () => {
-      if (popupRef.current) popupRef.current.style.display = "none";
-    };
-
-    const hideDuringZoom = () => {
-      if (overlayRef.current) overlayRef.current.style.visibility = "hidden";
-    };
-
-    const showAfterZoom = () => {
-      if (overlayRef.current) overlayRef.current.style.visibility = "visible";
-      redraw();
-    };
-
-    const attach = () => {
-      if (closed) return;
-      const map = mapRef.current;
-      if (!map) {
-        timer = window.setTimeout(attach, 100);
+      if (!map || cancelled) {
+        timer = window.setTimeout(attachTargetLayer, 100);
         return;
       }
 
-      const container = map.getContainer() as HTMLElement;
-      container.style.position = container.style.position || "relative";
+      const L = await import("leaflet");
+      if (cancelled) return;
 
-      let overlay = container.querySelector(`#${OVERLAY_ID}`) as HTMLDivElement | null;
-      if (!overlay) {
-        overlay = document.createElement("div");
-        overlay.id = OVERLAY_ID;
-        overlay.style.cssText = "position:absolute;inset:0;z-index:900;pointer-events:none;overflow:hidden";
-        container.appendChild(overlay);
+      let targetPane = map.getPane("pilot-targets");
+      if (!targetPane) targetPane = map.createPane("pilot-targets");
+      targetPane.style.zIndex = "710";
+
+      if (!targetLayerRef.current) {
+        targetLayerRef.current = L.layerGroup([], { pane: "pilot-targets" } as any).addTo(map);
+      } else if (!map.hasLayer(targetLayerRef.current)) {
+        targetLayerRef.current.addTo(map);
       }
 
-      overlayRef.current = overlay;
-      attachedMap = map;
-      map.on("drag move moveend resize viewreset", redraw);
-      map.on("zoomstart", hideDuringZoom);
-      map.on("zoomend", showAfterZoom);
-      map.on("click", closePopup);
-      window.addEventListener("resize", redraw);
       setMapReadyTick((value) => value + 1);
-      redraw();
-    };
+    }
 
-    attach();
+    attachTargetLayer();
 
     return () => {
-      closed = true;
+      cancelled = true;
       window.clearTimeout(timer);
-      if (redrawFrame) window.cancelAnimationFrame(redrawFrame);
-      window.removeEventListener("resize", redraw);
-      if (attachedMap) {
-        attachedMap.off("drag move moveend resize viewreset", redraw);
-        attachedMap.off("zoomstart", hideDuringZoom);
-        attachedMap.off("zoomend", showAfterZoom);
-        attachedMap.off("click", closePopup);
+      const map = mapRef.current;
+      if (map && targetLayerRef.current) {
+        try {
+          map.removeLayer(targetLayerRef.current);
+        } catch {}
       }
-      popupRef.current = null;
-      targetElementsRef.current.clear();
-      overlayRef.current?.remove();
-      overlayRef.current = null;
+      targetLayerRef.current = null;
+      targetMarkersRef.current.clear();
     };
   }, [mapRef]);
 
@@ -183,9 +161,9 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
 
           for (const sourceLine of raw.split(/\r?\n/)) {
             const line = sourceLine.trim();
-            if (!line.startsWith("!AIVDM")) continue;
-            const decoded = decodePilotAisPosition(line);
+            const decoded = decodeAisPosition(line);
             if (!decoded) continue;
+            if (line.startsWith("!AIVDO")) continue;
             setTargets((current) => {
               const next = new Map(current);
               next.set(decoded.mmsi, decoded);
@@ -194,7 +172,8 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
           }
         };
         socket.onclose = () => {
-          if (!closed) retryTimer = window.setTimeout(connect, 2000);
+          if (closed) return;
+          retryTimer = window.setTimeout(connect, 2000);
         };
       } catch {
         retryTimer = window.setTimeout(connect, 2000);
@@ -214,7 +193,7 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      const cutoff = Date.now() - TARGET_STALE_MS;
+      const cutoff = Date.now() - 10 * 60 * 1000;
       setTargets((current) => {
         let changed = false;
         const next = new Map(current);
@@ -231,40 +210,42 @@ export function usePilotAisTargets(mapRef: MutableRefObject<any>) {
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
-    const overlay = overlayRef.current;
-    if (!map || !overlay) return;
+    async function drawTargets() {
+      const layer = targetLayerRef.current;
+      if (!layer) return;
+      const L = await import("leaflet");
+      const live = new Set<number>();
 
-    const size = map.getSize();
-    const live = new Set<number>();
-
-    for (const [mmsi, vessel] of targets) {
-      live.add(mmsi);
-      const point = liveContainerPoint(map, vessel);
-      let element = targetElementsRef.current.get(mmsi);
-
-      if (!element) {
-        element = document.createElement("div");
-        element.dataset.mmsi = String(mmsi);
-        element.style.cssText = "position:absolute;width:22px;height:22px;transform:translate(-50%,-50%);pointer-events:auto;cursor:pointer;z-index:2";
-        overlay.appendChild(element);
-        targetElementsRef.current.set(mmsi, element);
+      for (const [mmsi, vessel] of targets) {
+        live.add(mmsi);
+        const pos: [number, number] = [vessel.lat, vessel.lon];
+        const icon = L.divIcon({
+          className: "pilot-target-icon",
+          html: vesselIconHtml(vessel),
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+        const popup = `<div style="font-family:ui-monospace,monospace;min-width:150px"><b>MMSI ${mmsi}</b><br/>COG ${vessel.cog === null ? "---" : vessel.cog.toFixed(1) + "°"}<br/>SOG ${vessel.sog === null ? "---" : vessel.sog.toFixed(1) + " kt"}<br/>HDG ${vessel.heading === null ? "---" : vessel.heading.toFixed(0) + "°"}</div>`;
+        const existing = targetMarkersRef.current.get(mmsi);
+        if (existing) {
+          existing.setLatLng(pos);
+          existing.setIcon(icon);
+          existing.setPopupContent(popup);
+        } else {
+          const marker = L.marker(pos, { icon, pane: "pilot-targets" }).bindPopup(popup).addTo(layer);
+          targetMarkersRef.current.set(mmsi, marker);
+        }
       }
 
-      element.innerHTML = pilotVesselIconHtml(vessel);
-      element.title = `MMSI ${mmsi}`;
-      element.style.left = `${point.x}px`;
-      element.style.top = `${point.y}px`;
-      element.style.display = point.x >= -30 && point.y >= -30 && point.x <= size.x + 30 && point.y <= size.y + 30 ? "block" : "none";
-    }
-
-    for (const [mmsi, element] of targetElementsRef.current) {
-      if (!live.has(mmsi)) {
-        element.remove();
-        targetElementsRef.current.delete(mmsi);
+      for (const [mmsi, marker] of targetMarkersRef.current) {
+        if (!live.has(mmsi)) {
+          layer.removeLayer(marker);
+          targetMarkersRef.current.delete(mmsi);
+        }
       }
     }
-  }, [targets, mapReadyTick, mapRef]);
+    drawTargets();
+  }, [targets, mapReadyTick]);
 
   return targets.size;
 }
