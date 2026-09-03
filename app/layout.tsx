@@ -9,7 +9,7 @@ import { BridgeConsoleRouteGate } from '../components/BridgeConsoleRouteGate';
 import { WxRoutingBridgeSkin } from '../components/WxRoutingBridgeSkin';
 import { CelestialConsoleSkin } from '../components/CelestialConsoleSkin';
 import { CelestialSunMoon } from '../components/CelestialSunMoon';
-import { AisTargetMapBridgeV2 } from '../components/AisTargetMapBridge.v2';
+import { AisPilotTargetsMain } from '../components/AisPilotTargetsMain';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -147,7 +147,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
 
-        <AisTargetMapBridgeV2 />
+        <AisPilotTargetsMain />
         <NavDashNav />
         {children}
         <BridgeConsoleRouteGate />
