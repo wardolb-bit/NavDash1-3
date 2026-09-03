@@ -1,0 +1,53 @@
+name: Direct main Pilot AIS patch
+
+on:
+  push:
+    branches:
+      - fix/main-direct-pilot-ais
+    paths:
+      - .github/workflows/direct-main-pilot-ais.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/main-direct-pilot-ais
+          fetch-depth: 0
+
+      - name: Wire Pilot AIS hook into main page
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/page.tsx")
+          text = path.read_text(encoding="utf-8")
+
+          import_anchor = 'import { useBridgeTheme } from "../lib/useBridgeTheme";\n'
+          import_line = 'import { usePilotAisTargets } from "../lib/usePilotAisTargets";\n'
+          if import_line not in text:
+              if text.count(import_anchor) != 1:
+                  raise SystemExit("Expected exactly one useBridgeTheme import anchor")
+              text = text.replace(import_anchor, import_anchor + import_line, 1)
+
+          ref_anchor = '  const mapRef = useRef<any>(null);\n'
+          hook_line = '  usePilotAisTargets(mapRef);\n'
+          if hook_line not in text:
+              if text.count(ref_anchor) != 1:
+                  raise SystemExit("Expected exactly one mapRef anchor")
+              text = text.replace(ref_anchor, ref_anchor + hook_line, 1)
+
+          path.write_text(text, encoding="utf-8")
+
+      - name: Commit direct main-page wiring
+        run: |
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@live.com"
+          git add app/page.tsx
+          git diff --cached --check
+          git commit -m "Wire Pilot AIS targets directly to main map"
+          git push origin HEAD:fix/main-direct-pilot-ais
