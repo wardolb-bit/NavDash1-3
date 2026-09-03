@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
 type DecodedTarget = {
@@ -29,7 +29,6 @@ type FragmentBuffer = {
 
 const TARGET_STALE_MS = 10 * 60 * 1000;
 const FRAGMENT_TTL_MS = 15 * 1000;
-const MAP_READY_EVENT = "navdash-main-map-ready";
 
 function aisPayloadToBits(payload: string) {
   let bits = "";
@@ -220,6 +219,30 @@ function formatSpeed(value?: number | null) {
   return value === undefined || value === null || !Number.isFinite(value) ? "--" : `${value.toFixed(1)} kt`;
 }
 
+function findLeafletMapFromContainer(container: any) {
+  if (!container) return null;
+  const events = container._leaflet_events;
+  if (!events || typeof events !== "object") return null;
+
+  for (const entry of Object.values(events) as any[]) {
+    const candidates = [entry?.ctx, entry?.context, entry?._ctx, entry?.handler?.ctx];
+    for (const candidate of candidates) {
+      if (
+        candidate &&
+        typeof candidate.addLayer === "function" &&
+        typeof candidate.removeLayer === "function" &&
+        typeof candidate.latLngToLayerPoint === "function" &&
+        typeof candidate.getContainer === "function" &&
+        candidate.getContainer() === container
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  return null;
+}
+
 export function AisTargetMapBridge() {
   const leafletRef = useRef<any>(null);
   const mapRef = useRef<any>(null);
@@ -242,73 +265,59 @@ export function AisTargetMapBridge() {
       if (target.lat === undefined || target.lon === undefined) continue;
 
       L.circleMarker([target.lat, target.lon], {
-        radius: 6,
+        radius: 7,
         color: "#facc15",
         fillColor: "#facc15",
-        fillOpacity: 0.75,
-        weight: 2,
+        fillOpacity: 0.9,
+        weight: 3,
+        pane: "markerPane",
       })
         .bindTooltip(`${target.vesselName || target.mmsi} ${formatSpeed(target.sog)}`, { permanent: false })
         .addTo(layer);
     }
   }
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     let cancelled = false;
+    let timer = 0;
 
     import("leaflet").then((leafletModule) => {
       if (cancelled) return;
-      const L: any = leafletModule;
-      leafletRef.current = L;
+      leafletRef.current = leafletModule;
 
-      const w = window as any;
-      if (!w.__navdashMainMapCaptureInstalled) {
-        w.__navdashMainMapCaptureInstalled = true;
-        const originalInitialize = L.Map.prototype.initialize;
+      const attach = () => {
+        if (cancelled) return;
+        const container = document.getElementById("v12-map") as any;
+        const nextMap = findLeafletMapFromContainer(container);
 
-        L.Map.prototype.initialize = function (...args: any[]) {
-          const result = originalInitialize.apply(this, args);
-          const container = args[0];
-          const containerId = typeof container === "string" ? container : container?.id;
-          if (containerId === "v12-map") {
-            w.__navdashMainMap = this;
-            window.dispatchEvent(new CustomEvent(MAP_READY_EVENT, { detail: this }));
+        if (nextMap && nextMap !== mapRef.current) {
+          if (targetLayerRef.current && mapRef.current) {
+            try {
+              mapRef.current.removeLayer(targetLayerRef.current);
+            } catch {}
           }
-          return result;
-        };
-      }
+          targetLayerRef.current = null;
+          mapRef.current = nextMap;
+          drawTargets();
+        }
 
-      if (w.__navdashMainMap) {
-        mapRef.current = w.__navdashMainMap;
-        drawTargets();
-      }
+        timer = window.setTimeout(attach, nextMap ? 1000 : 150);
+      };
+
+      attach();
     });
 
     return () => {
       cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleMapReady = (event: Event) => {
-      const nextMap = (event as CustomEvent).detail;
-      if (!nextMap) return;
-
-      if (targetLayerRef.current && mapRef.current && mapRef.current !== nextMap) {
+      window.clearTimeout(timer);
+      if (targetLayerRef.current && mapRef.current) {
         try {
           mapRef.current.removeLayer(targetLayerRef.current);
-        } catch {
-          // Ignore stale map cleanup errors during route changes.
-        }
-        targetLayerRef.current = null;
+        } catch {}
       }
-
-      mapRef.current = nextMap;
-      drawTargets();
+      targetLayerRef.current = null;
+      mapRef.current = null;
     };
-
-    window.addEventListener(MAP_READY_EVENT, handleMapReady);
-    return () => window.removeEventListener(MAP_READY_EVENT, handleMapReady);
   }, []);
 
   useEffect(() => {
@@ -318,9 +327,7 @@ export function AisTargetMapBridge() {
       let message: any = event.data;
       try {
         message = JSON.parse(event.data);
-      } catch {
-        // Plain NMEA is acceptable.
-      }
+      } catch {}
 
       const line = extractNmeaLine(message);
       if (!line || (!line.startsWith("!AIVDM") && !line.startsWith("$AIVDM"))) return;
