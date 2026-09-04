@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type TidePoint = {
+  time: string;
+  valueFt: number;
+  type?: string;
+};
+
 type TideStation = {
   id: string;
   name: string;
@@ -54,6 +60,23 @@ function yyyymmdd(date: Date) {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   const day = String(date.getUTCDate()).padStart(2, "0");
   return `${year}${month}${day}`;
+}
+
+function parsePredictionTime(value: string) {
+  const [datePart, timePart = "00:00"] = value.trim().split(/\s+/);
+  const [year, month, day] = datePart.split("-").map(Number);
+  const [hour, minute] = timePart.split(":").map(Number);
+  return new Date(year, month - 1, day, hour, minute, 0, 0).getTime();
+}
+
+function formatPredictionTime(ms: number) {
+  const date = new Date(ms);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
 async function fetchJson(url: string) {
@@ -138,16 +161,71 @@ async function fetchPredictions(station: string, interval: "h" | "hilo", rangeHo
     time: String(row.t ?? ""),
     valueFt: Number(row.v),
     type: row.type ? String(row.type) : undefined,
-  })).filter((row: any) => row.time && Number.isFinite(row.valueFt));
+  })).filter((row: TidePoint) => row.time && Number.isFinite(row.valueFt));
 }
 
-async function predictionBundle(station: string, rangeHours: number) {
-  const [hourly, highLow] = await Promise.all([
-    fetchPredictions(station, "h", rangeHours),
-    fetchPredictions(station, "hilo", rangeHours),
-  ]);
-  if (!hourly.length) throw new Error("NOAA returned no tide predictions for this station.");
-  return { hourly, highLow };
+function fittedCurveFromHighLow(highLow: TidePoint[]) {
+  const extrema = highLow
+    .slice()
+    .filter((point) => point.time && Number.isFinite(point.valueFt))
+    .sort((a, b) => parsePredictionTime(a.time) - parsePredictionTime(b.time));
+
+  if (extrema.length < 2) return extrema;
+
+  const fitted: TidePoint[] = [];
+  const stepMs = 30 * 60 * 1000;
+
+  for (let i = 0; i < extrema.length - 1; i++) {
+    const a = extrema[i];
+    const b = extrema[i + 1];
+    const startMs = parsePredictionTime(a.time);
+    const endMs = parsePredictionTime(b.time);
+    const spanMs = endMs - startMs;
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || spanMs <= 0) continue;
+
+    if (!fitted.length) fitted.push({ time: a.time, valueFt: a.valueFt });
+
+    for (let ms = startMs + stepMs; ms < endMs; ms += stepMs) {
+      const ratio = (ms - startMs) / spanMs;
+      const eased = (1 - Math.cos(Math.PI * ratio)) / 2;
+      fitted.push({
+        time: formatPredictionTime(ms),
+        valueFt: a.valueFt + (b.valueFt - a.valueFt) * eased,
+      });
+    }
+
+    fitted.push({ time: b.time, valueFt: b.valueFt });
+  }
+
+  return fitted;
+}
+
+async function predictionBundle(station: TideStation, rangeHours: number) {
+  if (station.type === "S") {
+    const highLow = await fetchPredictions(station.id, "hilo", rangeHours);
+    if (highLow.length < 2) throw new Error("NOAA returned no usable high/low tide predictions for this subordinate station.");
+    return { hourly: fittedCurveFromHighLow(highLow), highLow, curveMode: "fitted-high-low" as const };
+  }
+
+  try {
+    const [hourly, highLow] = await Promise.all([
+      fetchPredictions(station.id, "h", rangeHours),
+      fetchPredictions(station.id, "hilo", rangeHours),
+    ]);
+    if (!hourly.length) throw new Error("NOAA returned no tide predictions for this station.");
+    return { hourly, highLow, curveMode: "hourly" as const };
+  } catch (error) {
+    // Some NOAA metadata entries behave as subordinate stations even when the
+    // station type is absent or stale. A successful high/low request is enough
+    // to provide the official extrema and a fitted display curve.
+    try {
+      const highLow = await fetchPredictions(station.id, "hilo", rangeHours);
+      if (highLow.length >= 2) return { hourly: fittedCurveFromHighLow(highLow), highLow, curveMode: "fitted-high-low" as const };
+    } catch {
+      // Preserve the original NOAA error below.
+    }
+    throw error;
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -176,18 +254,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, position: { lat, lon }, stations, source: "NOAA CO-OPS Tide Prediction Stations" });
     }
 
-    const candidates = requestedStation
+    const candidates: TideStation[] = requestedStation
       ? [allWithDistance.find((item) => item.id === requestedStation) || { id: requestedStation, name: requestedStation, lat, lon, distanceNm: 0 }]
       : nearest.slice(0, 6);
 
     let selectedStation: TideStation | null = null;
-    let bundle: { hourly: any[]; highLow: any[] } | null = null;
+    let bundle: { hourly: TidePoint[]; highLow: TidePoint[]; curveMode: "hourly" | "fitted-high-low" } | null = null;
     let lastError: unknown = null;
 
     for (const candidate of candidates) {
-      if (!candidate) continue;
       try {
-        bundle = await predictionBundle(candidate.id, rangeHours);
+        bundle = await predictionBundle(candidate, rangeHours);
         selectedStation = candidate;
         break;
       } catch (error) {
@@ -210,6 +287,7 @@ export async function GET(req: NextRequest) {
       units: "feet",
       timeZone: "LST/LDT",
       rangeHours,
+      curveMode: bundle.curveMode,
       source: "NOAA CO-OPS Tide Predictions",
       hourly: bundle.hourly,
       highLow: bundle.highLow,
