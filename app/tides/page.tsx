@@ -79,7 +79,7 @@ export default function TidesPage() {
   const { nightMode, toggleTheme } = useBridgeTheme(); const dayMode = !nightMode;
   const [position, setPosition] = useState<Position | null>(null); const [manualLat, setManualLat] = useState("21.33"); const [manualLon, setManualLon] = useState("-157.967");
   const [data, setData] = useState<TideResponse | null>(null); const [stationId, setStationId] = useState(""); const [search, setSearch] = useState(""); const [searchResults, setSearchResults] = useState<TideStation[]>([]);
-  const [loading, setLoading] = useState(false); const [error, setError] = useState(""); const [now, setNow] = useState(new Date()); const [rangeHours, setRangeHours] = useState(24); const lastLookupRef = useRef("");
+  const [loading, setLoading] = useState(false); const [searchingStations, setSearchingStations] = useState(false); const [error, setError] = useState(""); const [now, setNow] = useState(new Date()); const [rangeHours, setRangeHours] = useState(24); const lastLookupRef = useRef(""); const searchRequestRef = useRef(0);
 
   useEffect(() => { const timer = window.setInterval(() => setNow(new Date()), 30000); return () => window.clearInterval(timer); }, []);
   useEffect(() => {
@@ -94,11 +94,35 @@ export default function TidesPage() {
     catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setLoading(false); }
   }
   useEffect(() => { if (!position) return; const timer = window.setTimeout(() => loadTides(position, stationId, rangeHours), 350); return () => window.clearTimeout(timer); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [position?.lat, position?.lon, rangeHours]);
-  async function searchStations() { if (!position || search.trim().length < 2) return; try { const params = new URLSearchParams({ lat: String(position.lat), lon: String(position.lon), q: search.trim(), hours: String(rangeHours) }); const res = await fetch(`/api/tides?${params}`, { cache: "no-store" }); const json = await res.json(); setSearchResults(Array.isArray(json?.stations) ? json.stations : []); } catch { setSearchResults([]); } }
+  async function searchStations(queryOverride = search) {
+    const q = queryOverride.trim();
+    if (!position || q.length < 2) { setSearchResults([]); setSearchingStations(false); return; }
+    const requestId = ++searchRequestRef.current;
+    setSearchingStations(true);
+    try {
+      const params = new URLSearchParams({ lat: String(position.lat), lon: String(position.lon), q, hours: String(rangeHours) });
+      const res = await fetch(`/api/tides?${params}`, { cache: "no-store" });
+      const json = await res.json();
+      if (requestId === searchRequestRef.current) setSearchResults(Array.isArray(json?.stations) ? json.stations : []);
+    } catch {
+      if (requestId === searchRequestRef.current) setSearchResults([]);
+    } finally {
+      if (requestId === searchRequestRef.current) setSearchingStations(false);
+    }
+  }
+  useEffect(() => {
+    const q = search.trim();
+    if (!position || q.length < 2) { searchRequestRef.current += 1; setSearchResults([]); setSearchingStations(false); return; }
+    const timer = window.setTimeout(() => { void searchStations(q); }, 250);
+    return () => window.clearTimeout(timer);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [search, position?.lat, position?.lon]);
   function selectStation(station: TideStation) {
+    searchRequestRef.current += 1;
     setSearchResults([]);
     setSearch("");
     setStationId(station.id);
+    setError("");
     lastLookupRef.current = "";
     if (position) void loadTides(position, station.id, rangeHours);
   }
@@ -122,7 +146,7 @@ export default function TidesPage() {
       body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}
       .navdash-tides-console *{border-radius:0!important}
       .navdash-tides-console button,.navdash-tides-console a,.navdash-tides-console input{box-shadow:none!important}
-      .navdash-tides-console .tide-station-result{touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer;position:relative;z-index:1}
+      .navdash-tides-console .tide-station-result{touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer}
       @media print{body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}.navdash-tides-console{background:#fff!important;color:#111!important}.no-print{display:none!important}.print-panel{background:#fff!important;color:#111!important;border-color:#aaa!important}.print-muted{color:#444!important}.print-break{break-inside:avoid}}
     `}</style>
 
@@ -150,9 +174,15 @@ export default function TidesPage() {
             <div className="mt-1 text-base font-black">{station?.name || (loading ? "Finding nearest tide station..." : "Waiting for vessel position")}</div>
             <div className={`mt-1 font-mono text-[10px] ${muted}`}>{station ? `NOAA ${station.id}  |  ${data?.datum || "MLLW"}  |  ${timezoneLabel(station.timezoneCorr)}  |  ${stationDistance !== undefined ? `${stationDistance.toFixed(1)} NM from vessel` : "distance unavailable"}` : "Nearest valid NOAA tide station will be selected automatically."}</div>
           </div>
-          <div className="no-print flex items-end gap-1.5">
-            <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") searchStations(); }} placeholder="Search NOAA station" className={`h-8 min-w-0 flex-1 border px-2 text-[11px] outline-none ${sub}`} />
-            <button onClick={searchStations} disabled={!position || search.trim().length < 2} className={`h-8 border px-3 text-[10px] font-black uppercase ${control}`}>Search</button>
+          <div className="no-print relative flex items-end gap-1.5">
+            <div className="relative min-w-0 flex-1">
+              <input value={search} onChange={(e) => setSearch(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void searchStations(); if (e.key === "Escape") { setSearchResults([]); setSearch(""); } }} placeholder="Search NOAA station" autoComplete="off" role="combobox" aria-autocomplete="list" aria-expanded={searchResults.length > 0} className={`h-8 w-full border px-2 text-[11px] outline-none ${sub}`} />
+              {(searchResults.length > 0 || (searchingStations && search.trim().length >= 2)) && <div className={`absolute left-0 right-0 top-full z-[100] max-h-72 overflow-y-auto border border-t-0 shadow-xl ${sub}`} role="listbox">
+                {searchingStations && searchResults.length === 0 && <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-[.08em] ${muted}`}>Searching NOAA stations…</div>}
+                {searchResults.map((s) => <button key={s.id} type="button" role="option" onPointerDown={(e) => { e.preventDefault(); selectStation(s); }} className={`tide-station-result block min-h-12 w-full border-b p-2 text-left last:border-b-0 ${control}`} aria-label={`Select NOAA tide station ${s.name}`}><div className="pointer-events-none text-[11px] font-black">{s.name}</div><div className={`pointer-events-none mt-0.5 font-mono text-[9px] ${muted}`}>NOAA {s.id} • {s.distanceNm?.toFixed(1) ?? "--"} NM</div></button>)}
+              </div>}
+            </div>
+            <button onClick={() => void searchStations()} disabled={!position || search.trim().length < 2} className={`h-8 border px-3 text-[10px] font-black uppercase ${control}`}>Search</button>
           </div>
         </div>
 
@@ -160,8 +190,6 @@ export default function TidesPage() {
           <span className={`mr-1 text-[9px] font-black uppercase tracking-[.16em] ${muted}`}>Time Range</span>
           {RANGE_OPTIONS.map((option) => <button key={option.hours} onClick={() => setRangeHours(option.hours)} className={`h-7 border px-3 text-[10px] font-black uppercase tracking-[.05em] ${rangeHours === option.hours ? "border-[#c9a227] bg-[#c9a227] text-[#111827]" : control}`}>{option.label}</button>)}
         </div>
-
-        {searchResults.length > 0 && <div className={`no-print mt-2 grid gap-1 border p-1.5 md:grid-cols-2 xl:grid-cols-3 ${sub}`}>{searchResults.map((s) => <button key={s.id} type="button" onClick={() => selectStation(s)} className={`tide-station-result min-h-11 border p-2 text-left ${control}`} aria-label={`Select NOAA tide station ${s.name}`}><div className="pointer-events-none text-[11px] font-black">{s.name}</div><div className={`pointer-events-none mt-0.5 font-mono text-[9px] ${muted}`}>{s.id} • {s.distanceNm?.toFixed(1) ?? "--"} NM</div></button>)}</div>}
       </section>
 
       {!position && <section className={`no-print mb-2 flex flex-wrap items-center gap-2 border p-2 ${panel}`}><span className="text-[10px] font-black uppercase tracking-[.1em] text-amber-400">AIS position not received</span><input value={manualLat} onChange={(e) => setManualLat(e.target.value)} className={`h-7 w-28 border px-2 font-mono text-[10px] ${sub}`} /><input value={manualLon} onChange={(e) => setManualLon(e.target.value)} className={`h-7 w-32 border px-2 font-mono text-[10px] ${sub}`} /><button onClick={() => { const lat = Number(manualLat), lon = Number(manualLon); if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) setPosition({ lat, lon, updatedAt: Date.now() }); }} className={`h-7 border px-3 text-[10px] font-black uppercase ${control}`}>Use Position</button></section>}
