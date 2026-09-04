@@ -95,6 +95,13 @@ export default function TidesPage() {
   }
   useEffect(() => { if (!position) return; const timer = window.setTimeout(() => loadTides(position, stationId, rangeHours), 350); return () => window.clearTimeout(timer); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [position?.lat, position?.lon, rangeHours]);
   async function searchStations() { if (!position || search.trim().length < 2) return; try { const params = new URLSearchParams({ lat: String(position.lat), lon: String(position.lon), q: search.trim(), hours: String(rangeHours) }); const res = await fetch(`/api/tides?${params}`, { cache: "no-store" }); const json = await res.json(); setSearchResults(Array.isArray(json?.stations) ? json.stations : []); } catch { setSearchResults([]); } }
+  function selectStation(station: TideStation) {
+    setSearchResults([]);
+    setSearch("");
+    setStationId(station.id);
+    lastLookupRef.current = "";
+    if (position) void loadTides(position, station.id, rangeHours);
+  }
 
   const highLow = data?.highLow || []; const hourly = data?.hourly || []; const currentHeight = interpolate(hourly, now); const rangeEndMs = now.getTime() + rangeHours * 3600000; const chartStartMs = now.getTime() - 3 * 3600000;
   const visibleHourly = hourly.filter((p) => { const t = parseStationTime(p.time).getTime(); return t >= chartStartMs && t <= rangeEndMs; });
@@ -115,6 +122,7 @@ export default function TidesPage() {
       body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}
       .navdash-tides-console *{border-radius:0!important}
       .navdash-tides-console button,.navdash-tides-console a,.navdash-tides-console input{box-shadow:none!important}
+      .navdash-tides-console .tide-station-result{touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer;position:relative;z-index:1}
       @media print{body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}.navdash-tides-console{background:#fff!important;color:#111!important}.no-print{display:none!important}.print-panel{background:#fff!important;color:#111!important;border-color:#aaa!important}.print-muted{color:#444!important}.print-break{break-inside:avoid}}
     `}</style>
 
@@ -153,7 +161,7 @@ export default function TidesPage() {
           {RANGE_OPTIONS.map((option) => <button key={option.hours} onClick={() => setRangeHours(option.hours)} className={`h-7 border px-3 text-[10px] font-black uppercase tracking-[.05em] ${rangeHours === option.hours ? "border-[#c9a227] bg-[#c9a227] text-[#111827]" : control}`}>{option.label}</button>)}
         </div>
 
-        {searchResults.length > 0 && <div className={`no-print mt-2 grid gap-1 border p-1.5 md:grid-cols-2 xl:grid-cols-3 ${sub}`}>{searchResults.map((s) => <button key={s.id} onClick={() => { setSearchResults([]); setSearch(""); setStationId(s.id); if (position) loadTides(position, s.id, rangeHours); }} className={`border p-2 text-left ${control}`}><div className="text-[11px] font-black">{s.name}</div><div className={`mt-0.5 font-mono text-[9px] ${muted}`}>{s.id} • {s.distanceNm?.toFixed(1) ?? "--"} NM</div></button>)}</div>}
+        {searchResults.length > 0 && <div className={`no-print mt-2 grid gap-1 border p-1.5 md:grid-cols-2 xl:grid-cols-3 ${sub}`}>{searchResults.map((s) => <button key={s.id} type="button" onClick={() => selectStation(s)} className={`tide-station-result min-h-11 border p-2 text-left ${control}`} aria-label={`Select NOAA tide station ${s.name}`}><div className="pointer-events-none text-[11px] font-black">{s.name}</div><div className={`pointer-events-none mt-0.5 font-mono text-[9px] ${muted}`}>{s.id} • {s.distanceNm?.toFixed(1) ?? "--"} NM</div></button>)}</div>}
       </section>
 
       {!position && <section className={`no-print mb-2 flex flex-wrap items-center gap-2 border p-2 ${panel}`}><span className="text-[10px] font-black uppercase tracking-[.1em] text-amber-400">AIS position not received</span><input value={manualLat} onChange={(e) => setManualLat(e.target.value)} className={`h-7 w-28 border px-2 font-mono text-[10px] ${sub}`} /><input value={manualLon} onChange={(e) => setManualLon(e.target.value)} className={`h-7 w-32 border px-2 font-mono text-[10px] ${sub}`} /><button onClick={() => { const lat = Number(manualLat), lon = Number(manualLon); if (Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) setPosition({ lat, lon, updatedAt: Date.now() }); }} className={`h-7 border px-3 text-[10px] font-black uppercase ${control}`}>Use Position</button></section>}
