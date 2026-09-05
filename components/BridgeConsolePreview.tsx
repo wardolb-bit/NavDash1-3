@@ -60,7 +60,7 @@ export function BridgeConsolePreview() {
       let topbar = document.getElementById("bc-v2-topbar");
       if (!topbar) {
         topbar = document.createElement("div"); topbar.id = "bc-v2-topbar";
-        topbar.innerHTML = `<div class="bc2-brand"><span class="bc2-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 15c2.2 0 2.2-1.6 4.4-1.6S9.6 15 11.8 15s2.2-1.6 4.4-1.6S18.4 15 20.6 15"/><path d="M5 10.5c1.7 0 1.7-1.3 3.4-1.3s1.7 1.3 3.4 1.3 1.7-1.3 3.4-1.3 1.7 1.3 3.4 1.3"/></svg></span><span class="bc2-brand-copy"><b>NAV <i>&</i> DASH</b><small>MARINER'S BRIDGE CONSOLE</small></span></div><div class="bc2-clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><strong id="bc2-utc">--:--:--Z</strong><span id="bc2-date">UTC</span></div></div>`;
+        topbar.innerHTML = `<div class="bc2-brand"><span class="bc2-logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 15c2.2 0 2.2-1.6 4.4-1.6S9.6 15 11.8 15s2.2-1.6 4.4-1.6S18.4 15 20.6 15"/><path d="M5 10.5c1.7 0 1.7-1.3 3.4-1.3s1.7 1.3 3.4 1.3 1.7-1.3 3.4-1.3 1.7 1.3 3.4 1.3"/></svg></span><span class="bc2-brand-copy"><b>NAVDASH</b><small>MARINER'S BRIDGE CONSOLE</small></span></div><div class="bc2-clock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><div><strong id="bc2-utc">--:--:--Z</strong><span id="bc2-date">UTC</span></div></div>`;
         shell.insertBefore(topbar, shell.firstChild);
       }
       let positionBar = document.getElementById("bc2-position-bar");

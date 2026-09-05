@@ -143,11 +143,11 @@ export default function TidesPage() {
 
   return <main className={`navdash-tides-console min-h-screen ${shell}`}>
     <style jsx global>{`
-      body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}
-      .navdash-tides-console *{border-radius:0!important}
+      .navdash-tides-console header,.navdash-tides-console section,.navdash-tides-console aside{border-radius:14px!important;box-shadow:0 18px 55px var(--nd-shadow)!important}
+      .navdash-tides-console button,.navdash-tides-console a,.navdash-tides-console input,.navdash-tides-console section section,.navdash-tides-console aside section{border-radius:7px!important}
       .navdash-tides-console button,.navdash-tides-console a,.navdash-tides-console input{box-shadow:none!important}
       .navdash-tides-console .tide-station-result{touch-action:manipulation;-webkit-tap-highlight-color:transparent;cursor:pointer}
-      @media print{body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}.navdash-tides-console{background:#fff!important;color:#111!important}.no-print{display:none!important}.print-panel{background:#fff!important;color:#111!important;border-color:#aaa!important}.print-muted{color:#444!important}.print-break{break-inside:avoid}}
+      @media print{body:has(.navdash-tides-console) .navdash-global-nav{display:none!important}.navdash-tides-console{background:#fff!important;color:#111!important}.no-print{display:none!important}.print-panel{background:#fff!important;color:#111!important;border-color:#aaa!important;box-shadow:none!important}.print-muted{color:#444!important}.print-break{break-inside:avoid}}
     `}</style>
 
     <div className="mx-auto min-h-screen max-w-[1800px] p-2 md:p-3">

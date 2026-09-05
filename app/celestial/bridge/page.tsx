@@ -173,7 +173,7 @@ export default function BridgeCelestial(){
   const active="border-[#f2b84b] bg-[#f2b84b] text-[#06111f]";
 
   return <main className="min-h-screen bg-[#040d18] text-[#dbe5ee]">
-    <style jsx global>{`.navdash-global-nav{display:none!important}`}</style>
+    <style jsx global>{`.navdash-global-nav{display:block}`}</style>
     <div className="p-[6px]">
       <header className="mb-[5px] border border-[#f2b84b]/30 bg-[#06111f]">
         <div className="grid min-h-[46px] grid-cols-1 items-center gap-2 px-3 py-2 xl:grid-cols-[260px_1fr_180px] xl:py-0">

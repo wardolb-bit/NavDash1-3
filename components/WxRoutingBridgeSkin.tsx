@@ -158,12 +158,14 @@ export function WxRoutingBridgeSkin() {
       }
 
       const globalNav = document.querySelector<HTMLElement>("body > nav");
-      if (globalNav) important(globalNav, "display", "none");
+      globalNav?.style.removeProperty("display");
 
-      important(main, "background", "#040d18");
-      important(main, "color", "#dbe5ee");
-      important(shell, "padding", "6px");
-      important(shell, "gap", "5px");
+      important(main, "background", "transparent");
+      important(main, "color", "var(--nd-text)");
+      important(shell, "padding", "0 28px 22px");
+      important(shell, "gap", "18px");
+      important(shell, "max-width", "1520px");
+      important(shell, "margin", "0 auto");
 
       let topbar = document.getElementById("wxr-v2-topbar");
       if (!topbar) {
@@ -177,7 +179,7 @@ export function WxRoutingBridgeSkin() {
         shell.insertBefore(topbar, header);
       }
 
-      topbar.style.cssText = "height:46px;display:grid;grid-template-columns:280px 1fr 180px;align-items:center;padding:0 12px;border:1px solid rgba(242,184,75,.30);background:#06111f;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
+      topbar.style.cssText = "display:none";
       const brand = topbar.querySelector<HTMLElement>(".wxr-brand");
       if (brand) brand.style.cssText = "display:flex;align-items:center;gap:9px";
       const logo = topbar.querySelector<HTMLElement>(".wxr-logo");
@@ -198,26 +200,26 @@ export function WxRoutingBridgeSkin() {
       const actions = topbar.querySelector<HTMLElement>(".wxr-actions");
       if (actions) actions.style.cssText = "display:flex;justify-content:flex-end";
 
-      important(header, "padding", "6px 8px");
-      important(header, "margin", "0");
-      important(header, "border-radius", "0");
-      important(header, "border", "1px solid rgba(148,163,184,.14)");
-      important(header, "background", "#06111f");
-      important(header, "box-shadow", "none");
+      important(header, "padding", "18px 20px");
+      important(header, "margin", "0 0 18px");
+      important(header, "border-radius", "14px");
+      important(header, "border", "1px solid var(--nd-border)");
+      important(header, "background", "var(--nd-panel)");
+      important(header, "box-shadow", "0 18px 55px var(--nd-shadow)");
 
       const heading = header.querySelector<HTMLElement>("h1");
       if (heading) {
         heading.textContent = "WX ROUTING";
-        heading.style.cssText = "margin:0;color:#edf4fa;font-size:20px;font-weight:900;letter-spacing:.08em";
+        heading.style.cssText = "margin:0;color:var(--nd-text);font-size:20px;font-weight:700;letter-spacing:.02em";
       }
       const kicker = header.querySelector<HTMLElement>("div > div");
       if (kicker) kicker.style.cssText = "color:#f2b84b;font-size:8px;font-weight:900;letter-spacing:.16em;text-transform:uppercase";
       const intro = header.querySelector<HTMLElement>("p");
-      if (intro) intro.style.cssText = "margin-top:3px;color:#7f9caf;font-size:10px;line-height:1.35";
+      if (intro) intro.style.cssText = "margin-top:5px;color:var(--nd-muted);font-size:11px;line-height:1.45";
 
       header.querySelectorAll<HTMLElement>("button,label").forEach((el) => {
-        important(el, "border-radius", "3px");
-        important(el, "height", "30px");
+        important(el, "border-radius", "7px");
+        important(el, "height", "36px");
         important(el, "padding", "0 9px");
         important(el, "font-size", "9px");
         important(el, "font-weight", "900");
@@ -227,12 +229,14 @@ export function WxRoutingBridgeSkin() {
 
       shell.querySelectorAll<HTMLElement>("section, aside").forEach((el) => {
         if (el.closest("header")) return;
-        important(el, "border-radius", "0");
-        important(el, "box-shadow", "none");
+        important(el, "border-radius", "14px");
+        important(el, "border-color", "var(--nd-border)");
+        important(el, "background", "var(--nd-panel)");
+        important(el, "box-shadow", "0 18px 55px var(--nd-shadow)");
       });
 
       shell.querySelectorAll<HTMLElement>("button").forEach((el) => {
-        important(el, "border-radius", "3px");
+        important(el, "border-radius", "7px");
         important(el, "box-shadow", "none");
       });
 
