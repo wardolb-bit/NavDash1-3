@@ -8,10 +8,10 @@ body::before {
   z-index: 99999;
   pointer-events: none;
   padding: .28rem .7rem;
-  border: 1px solid #c9a227;
+  border: 1px solid #f2b84b;
   border-radius: .3rem;
-  background: #05090e;
-  color: #f5d76e;
+  background: #040d18;
+  color: #f0c46a;
   font: 800 .68rem/1 system-ui, sans-serif;
   letter-spacing: .14em;
 }
@@ -21,10 +21,10 @@ body::before {
   height: 28px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(201,162,39,.55);
+  border: 1px solid rgba(242,184,75,.55);
   background: #101820;
   padding: 0 10px;
-  color: #f1d56b;
+  color: #f0c46a;
   font: 900 9px/1 system-ui, sans-serif;
   letter-spacing: .08em;
   text-decoration: none;
@@ -51,10 +51,10 @@ body::before {
 /* Target the real main-screen shell directly. */
 .navdash-v12-night,
 .navdash-v12-day { padding: .55rem !important; }
-.navdash-v12-night { background: #05090e !important; }
+.navdash-v12-night { background: #040d18 !important; }
 .navdash-v12-night > header,
 .navdash-v12-day > header { margin-bottom: .4rem !important; padding: .45rem .65rem !important; border-radius: .55rem !important; box-shadow: none !important; backdrop-filter: none !important; }
-.navdash-v12-night > header { background: #091119 !important; border-color: rgba(201,162,39,.28) !important; }
+.navdash-v12-night > header { background: #091119 !important; border-color: rgba(242,184,75,.28) !important; }
 .navdash-v12-night > header h1,
 .navdash-v12-day > header h1 { font-size: 1.4rem !important; line-height: 1.5rem !important; }
 .navdash-v12-night > header .h-16.w-16,
@@ -69,7 +69,7 @@ body::before {
 .navdash-v12-night > div:has(> #v12-section-chart),
 .navdash-v12-day > div:has(> #v12-section-chart) { display: grid !important; grid-template-columns: minmax(0, 1fr) 300px !important; gap: .55rem !important; align-items: start !important; }
 #v12-section-chart { padding: .55rem !important; border-radius: .5rem !important; box-shadow: none !important; backdrop-filter: none !important; min-width: 0 !important; }
-.navdash-v12-night #v12-section-chart { background: #08111a !important; border-color: rgba(148,163,184,.16) !important; }
+.navdash-v12-night #v12-section-chart { background: #0a1c2e !important; border-color: rgba(148,163,184,.16) !important; }
 #v12-section-chart > div:first-child { margin-bottom: .4rem !important; gap: .45rem !important; }
 #v12-section-chart h2 { margin-top: 0 !important; font-size: 1.05rem !important; line-height: 1.2rem !important; }
 #v12-section-chart h2 + p { display: none !important; }
@@ -86,7 +86,7 @@ body::before {
 #v12-section-route { padding: .55rem !important; border-radius: .5rem !important; box-shadow: none !important; backdrop-filter: none !important; }
 #v12-section-route + section { padding: .55rem !important; border-radius: .5rem !important; box-shadow: none !important; backdrop-filter: none !important; }
 .navdash-v12-night #v12-section-route,
-.navdash-v12-night #v12-section-route + section { background: #08111a !important; border-color: rgba(148,163,184,.16) !important; }
+.navdash-v12-night #v12-section-route + section { background: #0a1c2e !important; border-color: rgba(148,163,184,.16) !important; }
 #v12-section-route .rounded-3xl,
 #v12-section-route .rounded-2xl,
 #v12-section-route + section .rounded-3xl,
@@ -103,7 +103,7 @@ body::before {
 .navdash-v12-day > div:has(> button):has(+ div > #v12-section-chart) { display: flex !important; gap: .35rem !important; margin-bottom: .4rem !important; }
 .navdash-v12-night > div:has(> button):has(+ div > #v12-section-chart) > button,
 .navdash-v12-day > div:has(> button):has(+ div > #v12-section-chart) > button { flex: 0 0 auto !important; padding: .42rem .68rem !important; border-radius: .4rem !important; font-size: .72rem !important; }
-#v12-section-chart::before { content: "MAP CONSOLE"; display: block; margin-bottom: .35rem; color: #c9a227; font: 800 .62rem/1 system-ui, sans-serif; letter-spacing: .18em; }
+#v12-section-chart::before { content: "MAP CONSOLE"; display: block; margin-bottom: .35rem; color: #f2b84b; font: 800 .62rem/1 system-ui, sans-serif; letter-spacing: .18em; }
 
 /* Bridge preview keeps the operational map clean. Weather remains on its dedicated page. */
 #v12-section-weather,
@@ -111,7 +111,7 @@ body::before {
 
 /* ECR preview styling only. No ECR TSX, WebSocket, route, weather, or calculation logic is changed. */
 main.min-h-screen[class*="circle_at_12"] {
-  background: #04080c !important;
+  background: #040d18 !important;
   padding: 6px !important;
   color: #dbe5ee !important;
   font-family: system-ui, sans-serif !important;
@@ -120,9 +120,9 @@ main.min-h-screen[class*="circle_at_12"] > div { max-width: none !important; }
 main.min-h-screen[class*="circle_at_12"] header {
   margin-bottom: 5px !important;
   padding: 12px !important;
-  border: 1px solid rgba(201,162,39,.30) !important;
+  border: 1px solid rgba(242,184,75,.30) !important;
   border-radius: 0 !important;
-  background: #071019 !important;
+  background: #06111f !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
 }
@@ -136,12 +136,12 @@ main.min-h-screen[class*="circle_at_12"] header h1 {
 main.min-h-screen[class*="circle_at_12"] header p {
   margin-top: 6px !important;
   max-width: 760px !important;
-  color: #8294a5 !important;
+  color: #7f9caf !important;
   font-size: 11px !important;
   line-height: 1.45 !important;
 }
 main.min-h-screen[class*="circle_at_12"] header [class*="uppercase"] {
-  color: #c9a227 !important;
+  color: #f2b84b !important;
   font-size: 9px !important;
   letter-spacing: .16em !important;
 }
@@ -150,16 +150,16 @@ main.min-h-screen[class*="circle_at_12"] header [class*="rounded-3xl"],
 main.min-h-screen[class*="circle_at_12"] section [class*="rounded-3xl"] {
   border-radius: 0 !important;
   border-color: rgba(148,163,184,.16) !important;
-  background: #08111a !important;
+  background: #0a1c2e !important;
   box-shadow: none !important;
 }
 main.min-h-screen[class*="circle_at_12"] header button,
 main.min-h-screen[class*="circle_at_12"] section button,
 main.min-h-screen[class*="circle_at_12"] a {
   border-radius: 2px !important;
-  border-color: rgba(201,162,39,.42) !important;
-  background: #071019 !important;
-  color: #d6bd58 !important;
+  border-color: rgba(242,184,75,.42) !important;
+  background: #06111f !important;
+  color: #f0c46a !important;
   box-shadow: none !important;
   font-size: 10px !important;
   font-weight: 800 !important;
@@ -175,7 +175,7 @@ main.min-h-screen[class*="circle_at_12"] section > article {
   backdrop-filter: none !important;
 }
 main.min-h-screen[class*="circle_at_12"] [class*="text-5xl"] {
-  color: #42d3c8 !important;
+  color: #56bad0 !important;
   font-size: 36px !important;
   line-height: 1 !important;
 }

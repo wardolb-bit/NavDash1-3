@@ -682,7 +682,7 @@ export default function AisTestPage() {
 
   const theme = nightMode
     ? {
-        page: "min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.24),transparent_30%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)] p-4 text-slate-100 md:p-6",
+        page: "min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(242,184,75,.24),transparent_30%),linear-gradient(135deg,#06111f,#101c2b_48%,#06111f)] p-4 text-slate-100 md:p-6",
         panel: "rounded-2xl border border-white/10 bg-white/[0.055] p-4 shadow-xl shadow-black/25 backdrop-blur-xl",
         card: "rounded-2xl border border-white/10 bg-black/25 p-4",
         button: "rounded-xl border border-white/10 bg-white/10 px-4 py-2 text-sm font-black text-slate-100 hover:bg-white/15",
@@ -706,7 +706,7 @@ export default function AisTestPage() {
         <header className={`${theme.panel} mb-4`}>
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <div className="text-xs font-bold uppercase tracking-[0.42em] text-[#c9a227]">NavDash 1.3 AIS</div>
+              <div className="text-xs font-bold uppercase tracking-[0.42em] text-[#f2b84b]">NavDash 1.3 AIS</div>
               <h1 className={`text-3xl font-black tracking-tight ${theme.value}`}>AIS Targets</h1>
               <div className={`mt-1 text-sm ${theme.muted}`}>Live NMEA/AIS decoder for the host WebSocket feed.</div>
               <div className={`mt-1 text-xs ${theme.muted}`}>
@@ -786,7 +786,7 @@ export default function AisTestPage() {
                           <button
                             type="button"
                             onClick={() => setSelectedMmsi(target.mmsi)}
-                            className="text-left hover:text-[#c9a227]"
+                            className="text-left hover:text-[#f2b84b]"
                           >
                             <div className="font-black">{target.vesselName || target.mmsi}</div>
                             <div className={theme.muted}>

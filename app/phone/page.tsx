@@ -426,12 +426,12 @@ export default function PhonePage() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#071019] text-slate-100">
+    <main className="min-h-screen bg-[#06111f] text-slate-100">
       <div className="mx-auto flex min-h-screen max-w-[560px] flex-col px-4 pb-24 pt-[max(16px,env(safe-area-inset-top))]">
         <header className="mb-4">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.32em] text-[#c9a227]">NavDash 1.3</div>
+              <div className="text-[11px] font-black uppercase tracking-[0.32em] text-[#f2b84b]">NavDash 1.3</div>
               <h1 className="mt-1 text-2xl font-black leading-tight text-white">Watch Pocket View</h1>
             </div>
             <Link href="/" className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-black text-slate-100">
@@ -445,7 +445,7 @@ export default function PhonePage() {
           <PhoneStat label="Route" value={route ? "Loaded" : "None"} />
         </section>
 
-        <nav className="sticky top-0 z-10 mb-3 grid grid-cols-2 gap-2 bg-[#071019]/95 py-2 backdrop-blur">
+        <nav className="sticky top-0 z-10 mb-3 grid grid-cols-2 gap-2 bg-[#06111f]/95 py-2 backdrop-blur">
           {[
             ["status", "Status"],
             ["ais", "AIS"],
@@ -454,7 +454,7 @@ export default function PhonePage() {
               key={key}
               type="button"
               onClick={() => setActiveTab(key as "status" | "ais")}
-              className={activeTab === key ? "rounded-xl bg-[#c9a227] px-3 py-3 text-sm font-black text-[#111827]" : "rounded-xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}
+              className={activeTab === key ? "rounded-xl bg-[#f2b84b] px-3 py-3 text-sm font-black text-[#111827]" : "rounded-xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}
             >
               {label}
             </button>

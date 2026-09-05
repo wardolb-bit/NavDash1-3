@@ -348,7 +348,7 @@ function IsolatedMainMap() {
       if (route.length < 2) return;
       const points = unwrapRoute(route);
       routeLayerRef.current = L.polyline(points as any, {
-        color: "#c9a227",
+        color: "#f2b84b",
         weight: 4,
         opacity: 0.95,
       }).addTo(map);
@@ -356,8 +356,8 @@ function IsolatedMainMap() {
       routeMarkersRef.current = route.map((wp, index) =>
         L.circleMarker(points[index] as any, {
           radius: 5,
-          color: "#c9a227",
-          fillColor: "#c9a227",
+          color: "#f2b84b",
+          fillColor: "#f2b84b",
           fillOpacity: 0.85,
           weight: 2,
         })
@@ -385,7 +385,7 @@ function IsolatedMainMap() {
 
       const icon = L.divIcon({
         className: "navmap-main-ownship-icon",
-        html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f1d56b" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`,
+        html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#06111f" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f0c46a" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       });
@@ -410,7 +410,7 @@ function IsolatedMainMap() {
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.heading, 0.8);
         headingVectorRef.current = L.polyline([position, [end.lat, end.lon]], {
           pane: "navmap-main-ownship",
-          color: "#f1d56b",
+          color: "#f0c46a",
           weight: 2,
           opacity: 0.9,
         }).addTo(layer);
@@ -443,7 +443,7 @@ function IsolatedMainMap() {
         width: "100%",
         height: "100%",
         minHeight: "100%",
-        background: "#0a141d",
+        background: "#10263a",
       }}
     />
   );

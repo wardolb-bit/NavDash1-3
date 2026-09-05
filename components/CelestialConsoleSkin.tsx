@@ -23,7 +23,7 @@ export function CelestialConsoleSkin() {
       style.id = "bc-celestial-console-style";
       style.textContent = `
         .bc-celestial-console {
-          background:#04080c !important;
+          background:#040d18 !important;
           color:#dbe5ee !important;
           font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif !important;
         }
@@ -34,9 +34,9 @@ export function CelestialConsoleSkin() {
         }
         .bc-celestial-console header {
           margin:0 0 5px !important;
-          border:1px solid rgba(201,162,39,.30) !important;
+          border:1px solid rgba(242,184,75,.30) !important;
           border-radius:0 !important;
-          background:#071019 !important;
+          background:#06111f !important;
           box-shadow:none !important;
           backdrop-filter:none !important;
         }
@@ -44,7 +44,7 @@ export function CelestialConsoleSkin() {
         .bc-celestial-console aside {
           border:1px solid rgba(148,163,184,.14) !important;
           border-radius:0 !important;
-          background:#071019 !important;
+          background:#06111f !important;
           box-shadow:none !important;
           backdrop-filter:none !important;
         }
@@ -56,15 +56,15 @@ export function CelestialConsoleSkin() {
           font-size:10px !important;
           letter-spacing:.08em !important;
         }
-        .bc-celestial-console button[class*="bg-[#c9a227]"] {
-          color:#071019 !important;
+        .bc-celestial-console button[class*="bg-[#f2b84b]"] {
+          color:#06111f !important;
           font-weight:900 !important;
         }
         .bc-celestial-console input,
         .bc-celestial-console select {
           border-radius:0 !important;
           border-color:#33485a !important;
-          background:#04080c !important;
+          background:#040d18 !important;
           color:#dbe5ee !important;
           box-shadow:none !important;
         }
@@ -74,8 +74,8 @@ export function CelestialConsoleSkin() {
         .bc-celestial-console table,
         .bc-celestial-console [role="table"] { border-collapse:collapse !important; }
         .bc-celestial-console ::-webkit-scrollbar { width:8px; height:8px; }
-        .bc-celestial-console ::-webkit-scrollbar-track { background:#04080c; }
-        .bc-celestial-console ::-webkit-scrollbar-thumb { background:#263442; }
+        .bc-celestial-console ::-webkit-scrollbar-track { background:#040d18; }
+        .bc-celestial-console ::-webkit-scrollbar-thumb { background:#1d3a52; }
 
         html[data-navdash-theme="day"] .bc-celestial-console header [class*="text-"],
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {

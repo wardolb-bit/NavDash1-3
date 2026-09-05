@@ -265,7 +265,7 @@ export default function MapLabPage() {
 
       const icon = L.divIcon({
         className: "navmap-ownship-icon",
-        html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f1d56b" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`,
+        html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#06111f" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f0c46a" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`,
         iconSize: [30, 30],
         iconAnchor: [15, 15],
       });
@@ -292,7 +292,7 @@ export default function MapLabPage() {
           [position, [headingEnd.lat, headingEnd.lon]],
           {
             pane: "navmap-ownship",
-            color: "#f1d56b",
+            color: "#f0c46a",
             weight: 2,
             opacity: 0.9,
           },
@@ -325,10 +325,10 @@ export default function MapLabPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#04080c] p-2 text-slate-100">
-      <div className="mb-2 flex items-center justify-between border border-amber-500/25 bg-[#071019] px-3 py-2">
+    <main className="min-h-screen bg-[#040d18] p-2 text-slate-100">
+      <div className="mb-2 flex items-center justify-between border border-amber-500/25 bg-[#06111f] px-3 py-2">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c9a227]">NAVMAP ISOLATION LAB</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#f2b84b]">NAVMAP ISOLATION LAB</div>
           <div className="text-sm font-black">Independent Leaflet lifecycle test</div>
         </div>
         <div className="flex items-center gap-2">
@@ -336,26 +336,26 @@ export default function MapLabPage() {
           <button
             type="button"
             onClick={centerOwnShip}
-            className="border border-cyan-400/40 bg-[#071019] px-3 py-2 text-[10px] font-black text-cyan-200"
+            className="border border-cyan-400/40 bg-[#06111f] px-3 py-2 text-[10px] font-black text-cyan-200"
           >
             CENTER OWN SHIP
           </button>
-          <Link href="/" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">
+          <Link href="/" className="border border-[#f2b84b]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f0c46a]">
             NAV CONSOLE
           </Link>
         </div>
       </div>
 
       <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="border border-slate-700/50 bg-[#071019] p-1">
+        <section className="border border-slate-700/50 bg-[#06111f] p-1">
           <div
             ref={mapElementRef}
             id="navmap-lab-map"
-            style={{ width: "100%", height: "calc(100vh - 86px)", minHeight: "620px", background: "#0a141d" }}
+            style={{ width: "100%", height: "calc(100vh - 86px)", minHeight: "620px", background: "#10263a" }}
           />
         </section>
 
-        <aside className="border border-slate-700/50 bg-[#071019] p-4">
+        <aside className="border border-slate-700/50 bg-[#06111f] p-4">
           <div className="mb-4 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">OWN SHIP</div>
           <div className="space-y-2 font-mono text-xl font-black text-cyan-300">
             <div>{ownShip ? formatLat(ownShip.lat) : "--"}</div>

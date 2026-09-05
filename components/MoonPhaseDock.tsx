@@ -75,19 +75,19 @@ export default function MoonPhaseDock(){
   useEffect(()=>{const id=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(id)},[]);
   const moon = useMemo(()=>lunarPhase(now),[now]);
 
-  return <aside className="fixed bottom-3 right-3 z-[60] w-[250px] border border-[#33485a] bg-[#071019]/95 text-[#dbe5ee] shadow-2xl backdrop-blur-sm max-sm:w-[205px]" aria-label="Current lunar phase">
-    <div className="border-b border-[#263442] px-3 py-2">
+  return <aside className="fixed bottom-3 right-3 z-[60] w-[250px] border border-[#33485a] bg-[#06111f]/95 text-[#dbe5ee] shadow-2xl backdrop-blur-sm max-sm:w-[205px]" aria-label="Current lunar phase">
+    <div className="border-b border-[#1d3a52] px-3 py-2">
       <div className="text-[9px] font-black uppercase tracking-[.18em] text-[#708496]">LUNAR PHASE</div>
     </div>
     <div className="flex items-center gap-3 p-3 max-sm:flex-col">
       <MoonDisk phase={moon.phase}/>
       <div className="min-w-0 flex-1 max-sm:text-center">
-        <div className="text-sm font-black leading-tight text-[#e7c95c]">{moon.name}</div>
+        <div className="text-sm font-black leading-tight text-[#f0c46a]">{moon.name}</div>
         <div className="mt-2 text-[9px] font-black uppercase tracking-[.12em] text-[#708496]">Illumination</div>
         <div className="text-xl font-black">{Math.round(moon.illumination * 100)}%</div>
         <div className="mt-1 text-[10px] text-[#9eafbd]">Age {moon.ageDays.toFixed(1)} days</div>
       </div>
     </div>
-    <div className="border-t border-[#263442] px-3 py-2 text-[8px] leading-3 text-[#708496]">Illustrated phase is computed from UTC and intended for bridge awareness, not almanac replacement.</div>
+    <div className="border-t border-[#1d3a52] px-3 py-2 text-[8px] leading-3 text-[#708496]">Illustrated phase is computed from UTC and intended for bridge awareness, not almanac replacement.</div>
   </aside>
 }

@@ -92,9 +92,9 @@ export function BridgeRailPolish() {
 
       const title = rail.querySelector<HTMLElement>(".bc2-rail-title");
       if (title) {
-        title.style.cssText = "padding:13px 14px;border-bottom:1px solid rgba(148,163,184,.14);background:linear-gradient(90deg,rgba(201,162,39,.045),transparent)";
+        title.style.cssText = "padding:13px 14px;border-bottom:1px solid rgba(148,163,184,.14);background:linear-gradient(90deg,rgba(242,184,75,.045),transparent)";
         const route = document.getElementById("bc2-route");
-        if (route) route.style.cssText = "display:block;font-size:18px;color:#e7c95c;line-height:1.1;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
+        if (route) route.style.cssText = "display:block;font-size:18px;color:#f0c46a;line-height:1.1;font-weight:850;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
         const dest = document.getElementById("bc2-dest");
         if (dest) dest.style.cssText = "display:block;margin-top:6px;color:#aebdca;font-size:11px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis";
       }
@@ -113,7 +113,7 @@ export function BridgeRailPolish() {
 
       const leg = rail.querySelector<HTMLElement>(".bc2-leg");
       if (leg) {
-        leg.style.cssText = "padding:15px 14px;border-bottom:1px solid rgba(148,163,184,.14);background:rgba(201,162,39,.03)";
+        leg.style.cssText = "padding:15px 14px;border-bottom:1px solid rgba(148,163,184,.14);background:rgba(242,184,75,.03)";
         const strong = leg.querySelector<HTMLElement>("strong");
         if (strong) strong.style.cssText = "display:block;color:#f0d568;font-size:24px;line-height:1.05;font-weight:850;font-variant-numeric:tabular-nums";
         const small = leg.querySelector<HTMLElement>("small");

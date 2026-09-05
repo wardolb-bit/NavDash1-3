@@ -874,12 +874,12 @@ export default function ToolsPage() {
 
   const theme = nightMode
     ? {
-        page: "min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)] p-6 text-slate-100",
+        page: "min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(242,184,75,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#06111f,#101c2b_48%,#06111f)] p-6 text-slate-100",
         panel:
           "rounded-[2rem] border border-white/10 bg-white/[0.055] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl",
         card: "rounded-3xl border border-white/10 bg-black/25 p-5",
         input:
-          "w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xl text-white outline-none focus:border-[#c9a227]",
+          "w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xl text-white outline-none focus:border-[#f2b84b]",
         button:
           "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xl font-bold text-slate-100 hover:bg-white/15",
         label: "text-xl font-bold uppercase tracking-[.18em] text-slate-400",
@@ -891,7 +891,7 @@ export default function ToolsPage() {
         panel: "rounded-[2rem] border border-slate-300 bg-white p-6 shadow-sm",
         card: "rounded-3xl border border-slate-300 bg-slate-50 p-5",
         input:
-          "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-xl text-slate-950 outline-none focus:border-[#c9a227]",
+          "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-xl text-slate-950 outline-none focus:border-[#f2b84b]",
         button:
           "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-xl font-bold text-slate-900 hover:bg-white",
         label: "text-xl font-bold uppercase tracking-[.18em] text-slate-500",
@@ -905,11 +905,11 @@ export default function ToolsPage() {
         <header className={`${theme.panel} mb-6`}>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-[#c9a227]/45 bg-[#c9a227]/15 text-3xl font-black text-[#c9a227]">
+              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-[#f2b84b]/45 bg-[#f2b84b]/15 text-3xl font-black text-[#f2b84b]">
                 T
               </div>
               <div>
-                <div className="text-xl font-bold uppercase tracking-[0.42em] text-[#c9a227]">
+                <div className="text-xl font-bold uppercase tracking-[0.42em] text-[#f2b84b]">
                   M/V MB480 Utilities
                 </div>
                 <h1
@@ -952,7 +952,7 @@ export default function ToolsPage() {
 
         <section className="grid gap-6 xl:grid-cols-3">
           <div className={`${theme.card} order-1`}>
-            <div className="mb-4 text-xl font-black text-[#c9a227]">
+            <div className="mb-4 text-xl font-black text-[#f2b84b]">
               Speed / Time / Distance
             </div>
 
@@ -1013,7 +1013,7 @@ export default function ToolsPage() {
           </div>
 
           <div className="hidden">
-            <div className="mb-4 text-xl font-black text-[#c9a227]">
+            <div className="mb-4 text-xl font-black text-[#f2b84b]">
               ETA UTC
             </div>
 
@@ -1065,7 +1065,7 @@ export default function ToolsPage() {
           </div>
 
           <div className="hidden">
-            <div className="mb-4 text-xl font-black text-[#c9a227]">
+            <div className="mb-4 text-xl font-black text-[#f2b84b]">
               Lat / Lon Converter
             </div>
 
@@ -1165,7 +1165,7 @@ export default function ToolsPage() {
             </div>
           </div>
             <div className={`${theme.card} order-4`}>
-              <div className="mb-4 text-xl font-black text-[#c9a227]">
+              <div className="mb-4 text-xl font-black text-[#f2b84b]">
                 Sunrise / Sunset
               </div>
               <div className="grid gap-3">
@@ -1208,7 +1208,7 @@ export default function ToolsPage() {
             </div>
 
             <div className="hidden">
-              <div className="mb-4 text-xl font-black text-[#c9a227]">
+              <div className="mb-4 text-xl font-black text-[#f2b84b]">
                 Time Zone Helper
               </div>
               <div className="grid gap-3">
@@ -1249,7 +1249,7 @@ export default function ToolsPage() {
             </div>
 
             <div className={`${theme.card} order-2`}>
-              <div className="mb-4 text-xl font-black text-[#c9a227]">
+              <div className="mb-4 text-xl font-black text-[#f2b84b]">
                 Tides
               </div>
 
@@ -1431,7 +1431,7 @@ export default function ToolsPage() {
             </div>
 
             <div className={`${theme.card} order-3`}>
-              <div className="mb-4 text-xl font-black text-[#c9a227]">
+              <div className="mb-4 text-xl font-black text-[#f2b84b]">
                 Required Speed
               </div>
               <div className="grid gap-3">
@@ -1448,7 +1448,7 @@ export default function ToolsPage() {
                     onClick={() => setReqSource("route-end")}
                     className={
                       reqSource === "route-end"
-                        ? `${theme.button} border-[#c9a227] bg-[#c9a227]/20`
+                        ? `${theme.button} border-[#f2b84b] bg-[#f2b84b]/20`
                         : theme.button
                     }
                   >
@@ -1459,7 +1459,7 @@ export default function ToolsPage() {
                     onClick={() => setReqSource("waypoint")}
                     className={
                       reqSource === "waypoint"
-                        ? `${theme.button} border-[#c9a227] bg-[#c9a227]/20`
+                        ? `${theme.button} border-[#f2b84b] bg-[#f2b84b]/20`
                         : theme.button
                     }
                   >
@@ -1470,7 +1470,7 @@ export default function ToolsPage() {
                     onClick={() => setReqSource("manual")}
                     className={
                       reqSource === "manual"
-                        ? `${theme.button} border-[#c9a227] bg-[#c9a227]/20`
+                        ? `${theme.button} border-[#f2b84b] bg-[#f2b84b]/20`
                         : theme.button
                     }
                   >
@@ -1517,7 +1517,7 @@ export default function ToolsPage() {
                                 }}
                                 className={
                                   active
-                                    ? `${theme.button} border-[#c9a227] bg-[#c9a227]/25 text-[#c9a227]`
+                                    ? `${theme.button} border-[#f2b84b] bg-[#f2b84b]/25 text-[#f2b84b]`
                                     : theme.button
                                 }
                               >

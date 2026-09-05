@@ -4,32 +4,102 @@
 
 :root,
 html[data-navdash-theme="bridge-night"] {
-  --nd-bg: #071019;
-  --nd-panel: #0b151f;
-  --nd-panel-alt: #111d28;
-  --nd-text: #e7edf3;
-  --nd-muted: #91a0ad;
-  --nd-border: rgba(148, 163, 184, .22);
-  --nd-control-bg: #101a24;
-  --nd-control-hover: #182531;
-  --nd-control-text: #e7edf3;
-  --nd-gold: #c9a227;
-  --nd-teal: #42d3c8;
+  --nd-bg: #06111f;
+  --nd-bg-deep: #040d18;
+  --nd-panel: #0a1c2e;
+  --nd-panel-alt: #10263a;
+  --nd-text: #eaf4fb;
+  --nd-muted: #7f9caf;
+  --nd-border: #1d3a52;
+  --nd-control-bg: #0a1a2a;
+  --nd-control-hover: #12304a;
+  --nd-control-text: #dcebf5;
+  --nd-gold: #f2b84b;
+  --nd-gold-soft: #f0c46a;
+  --nd-teal: #56bad0;
+  --nd-shadow: rgba(1, 7, 17, .48);
 }
 
 html[data-navdash-theme="day"] {
-  --nd-bg: #eef2f5;
+  --nd-bg: #edf3f7;
+  --nd-bg-deep: #dce7ee;
   --nd-panel: #ffffff;
-  --nd-panel-alt: #f4f7f9;
-  --nd-text: #17212b;
-  --nd-muted: #586773;
-  --nd-border: rgba(15, 23, 42, .22);
+  --nd-panel-alt: #e7eef3;
+  --nd-text: #122434;
+  --nd-muted: #52697a;
+  --nd-border: #b9cbd7;
   --nd-control-bg: #ffffff;
-  --nd-control-hover: #f3f6f8;
-  --nd-control-text: #17212b;
-  --nd-gold: #7a5b00;
-  --nd-teal: #006f78;
+  --nd-control-hover: #dce8ef;
+  --nd-control-text: #122434;
+  --nd-gold: #8a5a00;
+  --nd-gold-soft: #a16b06;
+  --nd-teal: #087c8c;
+  --nd-shadow: rgba(20, 51, 72, .14);
   color-scheme: light;
+}
+
+html,
+body {
+  font-family: "Avenir Next", "Segoe UI", system-ui, sans-serif;
+}
+
+html[data-navdash-theme="bridge-night"],
+html[data-navdash-theme="bridge-night"] body {
+  background: radial-gradient(circle at 72% -10%, #123a60 0, transparent 34%), var(--nd-bg) !important;
+  color: var(--nd-text) !important;
+  color-scheme: dark;
+}
+
+html[data-navdash-theme="bridge-night"] .navdash-global-nav {
+  background: rgba(6, 17, 31, .96) !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+  box-shadow: 0 16px 42px var(--nd-shadow) !important;
+}
+
+html[data-navdash-theme="bridge-night"] main[class*="min-h-screen"],
+html[data-navdash-theme="bridge-night"] body > main {
+  background-color: transparent !important;
+  color: var(--nd-text) !important;
+}
+
+html[data-navdash-theme="bridge-night"] main [class*="bg-slate-950"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-slate-900"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-slate-800"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-black/"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-[#06111f]"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-[#0a1c2e]"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-[#040d18]"],
+html[data-navdash-theme="bridge-night"] main [class*="bg-white/[0."] {
+  background: linear-gradient(145deg, rgba(12, 32, 51, .96), rgba(8, 24, 39, .98)) !important;
+  background-color: var(--nd-panel) !important;
+  color: var(--nd-text) !important;
+}
+
+html[data-navdash-theme="bridge-night"] main [class*="border-white/10"],
+html[data-navdash-theme="bridge-night"] main [class*="border-slate-700"],
+html[data-navdash-theme="bridge-night"] main [class*="border-slate-800"] {
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="bridge-night"] main input,
+html[data-navdash-theme="bridge-night"] main select,
+html[data-navdash-theme="bridge-night"] main textarea {
+  background: var(--nd-control-bg) !important;
+  color: var(--nd-control-text) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="bridge-night"] main button:not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#f2b84b]"]),
+html[data-navdash-theme="bridge-night"] main label:has(input[type="file"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#f2b84b]"]) {
+  background: var(--nd-control-bg) !important;
+  color: var(--nd-control-text) !important;
+  border-color: var(--nd-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-navdash-theme="bridge-night"] main button:not([disabled]):hover {
+  background-color: var(--nd-control-hover) !important;
 }
 
 html[data-navdash-theme="day"],
@@ -39,10 +109,10 @@ html[data-navdash-theme="day"] body {
 }
 
 html[data-navdash-theme="day"] .navdash-global-nav {
-  background: #ffffff !important;
+  background: rgba(255, 255, 255, .96) !important;
   color: var(--nd-text) !important;
   border-color: var(--nd-border) !important;
-  box-shadow: 0 2px 12px rgba(15, 23, 42, .08) !important;
+  box-shadow: 0 12px 34px var(--nd-shadow) !important;
 }
 
 html[data-navdash-theme="day"] .navdash-global-nav select {
@@ -56,7 +126,7 @@ html[data-navdash-theme="day"] .navdash-global-nav > div > div:last-child > div 
   border-color: var(--nd-border) !important;
 }
 
-html[data-navdash-theme="day"] .navdash-global-nav a:not([class*="bg-[#c9a227]"]) {
+html[data-navdash-theme="day"] .navdash-global-nav a:not([class*="bg-[#f2b84b]"]) {
   color: #26343f !important;
 }
 
@@ -74,11 +144,11 @@ html[data-navdash-theme="day"] main [class*="bg-slate-950"],
 html[data-navdash-theme="day"] main [class*="bg-slate-900"],
 html[data-navdash-theme="day"] main [class*="bg-slate-800"],
 html[data-navdash-theme="day"] main [class*="bg-black/"],
-html[data-navdash-theme="day"] main [class*="bg-[#071019]"],
-html[data-navdash-theme="day"] main [class*="bg-[#08111a]"],
-html[data-navdash-theme="day"] main [class*="bg-[#05090e]"],
+html[data-navdash-theme="day"] main [class*="bg-[#06111f]"],
+html[data-navdash-theme="day"] main [class*="bg-[#0a1c2e]"],
+html[data-navdash-theme="day"] main [class*="bg-[#040d18]"],
 html[data-navdash-theme="day"] main [class*="bg-white/[0."] {
-  background: var(--nd-panel) !important;
+  background: linear-gradient(145deg, #ffffff, #f5f9fb) !important;
   background-color: var(--nd-panel) !important;
   color: var(--nd-text) !important;
 }
@@ -108,15 +178,15 @@ html[data-navdash-theme="day"] main [class*="border-slate-800"] {
   border-color: var(--nd-border) !important;
 }
 
-html[data-navdash-theme="day"] main button:not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#c9a227]"]),
-html[data-navdash-theme="day"] main label:has(input[type="file"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#c9a227]"]) {
+html[data-navdash-theme="day"] main button:not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#f2b84b]"]),
+html[data-navdash-theme="day"] main label:has(input[type="file"]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#f2b84b]"]) {
   background: var(--nd-control-bg) !important;
   color: var(--nd-control-text) !important;
   border-color: var(--nd-border) !important;
   box-shadow: none !important;
 }
 
-html[data-navdash-theme="day"] main button:not([disabled]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#c9a227]"]):hover {
+html[data-navdash-theme="day"] main button:not([disabled]):not([class*="bg-red"]):not([class*="bg-amber"]):not([class*="bg-yellow"]):not([class*="bg-green"]):not([class*="bg-emerald"]):not([class*="bg-cyan"]):not([class*="bg-[#f2b84b]"]):hover {
   background: var(--nd-control-hover) !important;
 }
 
@@ -152,6 +222,23 @@ html[data-navdash-theme="day"] #bc2-status-route {
   background: #ffffff !important;
   background-color: #ffffff !important;
   border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme] main article,
+html[data-navdash-theme] main section[class*="rounded"],
+html[data-navdash-theme] main aside[class*="rounded"] {
+  box-shadow: 0 18px 55px var(--nd-shadow);
+}
+
+html[data-navdash-theme] [class*="text-[#f2b84b]"],
+html[data-navdash-theme] [class*="text-amber-300"],
+html[data-navdash-theme] [class*="text-amber-400"] {
+  color: var(--nd-gold) !important;
+}
+
+html[data-navdash-theme] [class*="text-cyan-"],
+html[data-navdash-theme] [class*="text-[#56bad0]"] {
+  color: var(--nd-teal) !important;
 }
 
 html[data-navdash-theme="day"] #bc2-status-ais,

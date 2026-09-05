@@ -1039,7 +1039,7 @@ export default function NavDashRouteConsolePage() {
 
       const routeLatLngs = route.map((wp) => [wp.lat, wp.lon]);
       routeLayerRef.current = L.polyline(routeLatLngs as any, {
-        color: "#c9a227",
+        color: "#f2b84b",
         weight: 4,
         opacity: 0.95,
       }).addTo(map);
@@ -1047,8 +1047,8 @@ export default function NavDashRouteConsolePage() {
       route.forEach((wp) => {
         L.circleMarker([wp.lat, wp.lon], {
           radius: 5,
-          color: "#c9a227",
-          fillColor: "#c9a227",
+          color: "#f2b84b",
+          fillColor: "#f2b84b",
           fillOpacity: 0.85,
           weight: 2,
         })
@@ -1257,7 +1257,7 @@ export default function NavDashRouteConsolePage() {
 
   const pageClass = dayMode
     ? "min-h-screen bg-white text-slate-950"
-    : "min-h-screen bg-[#071019] text-slate-100";
+    : "min-h-screen bg-[#06111f] text-slate-100";
   const panelClass = dayMode
     ? "rounded-[2rem] border border-slate-300 bg-white p-5 shadow-xl shadow-slate-900/10"
     : "rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 shadow-2xl shadow-black/40 backdrop-blur-xl";
@@ -1291,7 +1291,7 @@ export default function NavDashRouteConsolePage() {
         className={
           dayMode
             ? "absolute inset-0 bg-white"
-            : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)]"
+            : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(242,184,75,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#06111f,#101c2b_48%,#06111f)]"
         }
       />
 
@@ -1300,7 +1300,7 @@ export default function NavDashRouteConsolePage() {
           background: #e2e8f0;
         }
         .navdash-v12-night .leaflet-container {
-          background: #071019;
+          background: #06111f;
           filter: saturate(0.88) brightness(0.82);
         }
       `}</style>

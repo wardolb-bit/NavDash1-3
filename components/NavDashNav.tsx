@@ -31,13 +31,13 @@ export function NavDashNav() {
     : navGroups.find((group) => group.items.some((item) => itemIsActive(pathname, item.href))) || navGroups[0];
 
   return (
-    <nav className="navdash-global-nav sticky top-0 z-[1000] border-b border-white/10 bg-[#071019]/95 text-slate-100 shadow-xl shadow-black/30 backdrop-blur-xl">
+    <nav className="navdash-global-nav sticky top-0 z-[1000] border-b border-white/10 bg-[#06111f]/95 text-slate-100 shadow-xl shadow-black/30 backdrop-blur-xl">
       <div className="mx-auto flex max-w-none flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center justify-between gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#c9a227]/45 bg-[#c9a227]/15 text-lg font-black text-[#c9a227]">ND</span>
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#f2b84b]/45 bg-[#f2b84b]/15 text-lg font-black text-[#f2b84b]">ND</span>
             <span className="min-w-0">
-              <span className="block text-sm font-black uppercase text-[#c9a227]">NavDash 1.3</span>
+              <span className="block text-sm font-black uppercase text-[#f2b84b]">NavDash 1.3</span>
               <span className="block truncate text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{activeGroup.label}</span>
             </span>
           </Link>
@@ -60,7 +60,7 @@ export function NavDashNav() {
         <div className="hidden min-w-0 flex-1 items-center justify-end gap-2 lg:flex">
           <Link
             href="/celestial"
-            className={`inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-2xl border px-4 text-sm font-black shadow-lg transition ${celestialActive ? "border-[#c9a227] bg-[#c9a227] text-slate-950 shadow-[#c9a227]/20" : "border-[#c9a227]/45 bg-[#c9a227]/15 text-[#f6d66d] hover:bg-[#c9a227]/25"}`}
+            className={`inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-2xl border px-4 text-sm font-black shadow-lg transition ${celestialActive ? "border-[#f2b84b] bg-[#f2b84b] text-slate-950 shadow-[#f2b84b]/20" : "border-[#f2b84b]/45 bg-[#f2b84b]/15 text-[#f0c46a] hover:bg-[#f2b84b]/25"}`}
           >
             ✦ Star Finder
           </Link>
@@ -70,7 +70,7 @@ export function NavDashNav() {
               {navGroups.map((group) => {
                 const groupActive = group.items.some((item) => itemIsActive(pathname, item.href));
                 return (
-                  <div key={group.label} className={`flex shrink-0 items-center gap-1 rounded-xl px-1.5 py-1 ${groupActive ? "bg-[#c9a227]/10" : ""}`}>
+                  <div key={group.label} className={`flex shrink-0 items-center gap-1 rounded-xl px-1.5 py-1 ${groupActive ? "bg-[#f2b84b]/10" : ""}`}>
                     <span className="whitespace-nowrap px-2 text-xs font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</span>
                     {group.items.map((item) => {
                       const active = itemIsActive(pathname, item.href);
@@ -78,7 +78,7 @@ export function NavDashNav() {
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-black transition ${active ? "bg-[#c9a227] text-slate-950 shadow-md shadow-[#c9a227]/20" : "text-slate-200 hover:bg-white/10"}`}
+                          className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-black transition ${active ? "bg-[#f2b84b] text-slate-950 shadow-md shadow-[#f2b84b]/20" : "text-slate-200 hover:bg-white/10"}`}
                         >
                           {item.label}
                         </Link>

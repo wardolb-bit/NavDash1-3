@@ -1281,7 +1281,7 @@ export default function WxRoutingPage() {
 
   const pageClass = dayMode
     ? "min-h-screen bg-white text-slate-950"
-    : "min-h-screen bg-[#071019] text-slate-100";
+    : "min-h-screen bg-[#06111f] text-slate-100";
   const panelClass = dayMode
     ? "rounded-[1.4rem] border border-slate-300 bg-white p-4 shadow-xl shadow-slate-900/10"
     : "rounded-[1.4rem] border border-white/10 bg-white/[0.055] p-4 shadow-2xl shadow-black/40 backdrop-blur-xl";
@@ -1295,7 +1295,7 @@ export default function WxRoutingPage() {
   const buttonClass = dayMode
     ? "border border-slate-400 bg-white px-3 py-2 text-sm font-black text-slate-900 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
     : "border border-white/15 bg-white/10 px-3 py-2 text-sm font-black text-slate-100 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50";
-  const activeButtonClass = "border border-[#c9a227] bg-[#c9a227] px-3 py-2 text-sm font-black text-slate-950";
+  const activeButtonClass = "border border-[#f2b84b] bg-[#f2b84b] px-3 py-2 text-sm font-black text-slate-950";
 
   const mapFeatures = useMemo(() => {
     return (gribSummary?.overlayPoints || [])
@@ -1960,7 +1960,7 @@ export default function WxRoutingPage() {
     if (source?.setData) {
       source.setData(data);
       if (map.getLayer(ROUTE_LINE_LAYER_ID)) {
-        map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", gribSummary?.routeForecast ? "#334155" : "#c9a227");
+        map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", gribSummary?.routeForecast ? "#334155" : "#f2b84b");
         map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-width", gribSummary?.routeForecast ? 3 : 4);
         map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-opacity", gribSummary?.routeForecast ? 0.55 : 0.92);
       }
@@ -1976,7 +1976,7 @@ export default function WxRoutingPage() {
         source: ROUTE_SOURCE_ID,
         filter: ["==", ["geometry-type"], "LineString"],
         paint: {
-          "line-color": gribSummary?.routeForecast ? "#334155" : "#c9a227",
+          "line-color": gribSummary?.routeForecast ? "#334155" : "#f2b84b",
           "line-width": gribSummary?.routeForecast ? 3 : 4,
           "line-opacity": gribSummary?.routeForecast ? 0.55 : 0.92,
         },
@@ -1989,7 +1989,7 @@ export default function WxRoutingPage() {
         filter: ["==", ["geometry-type"], "Point"],
         paint: {
           "circle-radius": 5,
-          "circle-color": "#c9a227",
+          "circle-color": "#f2b84b",
           "circle-stroke-color": nightMode ? "#020617" : "#ffffff",
           "circle-stroke-width": 1.5,
         },
@@ -3035,7 +3035,7 @@ export default function WxRoutingPage() {
                     type="button"
                     className={
                       projectionMode === mode
-                        ? "border border-[#c9a227] bg-[#c9a227] px-2 py-2 text-black"
+                        ? "border border-[#f2b84b] bg-[#f2b84b] px-2 py-2 text-black"
                         : dayMode
                           ? "border border-slate-300 bg-white px-2 py-2 text-slate-900"
                           : "border border-white/10 bg-black/25 px-2 py-2 text-slate-100"
@@ -3343,7 +3343,7 @@ export default function WxRoutingPage() {
                         type="checkbox"
                         checked={layer.checked}
                         onChange={(event) => layer.setChecked(event.target.checked)}
-                        className="mt-1 h-4 w-4 accent-[#c9a227]"
+                        className="mt-1 h-4 w-4 accent-[#f2b84b]"
                       />
                     </label>
                   ))}
@@ -3751,7 +3751,7 @@ export default function WxRoutingPage() {
             </div>
 
             <input
-              className="min-w-0 flex-1 accent-[#c9a227]"
+              className="min-w-0 flex-1 accent-[#f2b84b]"
               type="range"
               min={0}
               max={Math.max(0, timeline.length - 1)}

@@ -89,7 +89,7 @@ function ensurePlanningUi(root: HTMLElement) {
   if (!helper) {
     helper = document.createElement("div");
     helper.dataset.wxrEtaSpeedHelper = "true";
-    helper.style.cssText = "margin-top:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;font:700 10px system-ui;color:#8294a5";
+    helper.style.cssText = "margin-top:7px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;font:700 10px system-ui;color:#7f9caf";
 
     const readout = document.createElement("span");
     readout.dataset.wxrAisSog = "true";
@@ -100,7 +100,7 @@ function ensurePlanningUi(root: HTMLElement) {
     button.dataset.wxrUseAisSog = "true";
     button.textContent = "Use AIS SOG";
     button.disabled = true;
-    button.style.cssText = "height:26px;padding:0 8px;border:1px solid rgba(201,162,39,.55);border-radius:3px;background:#071019;color:#e7c95c;font:900 9px system-ui;letter-spacing:.04em;opacity:.45";
+    button.style.cssText = "height:26px;padding:0 8px;border:1px solid rgba(242,184,75,.55);border-radius:3px;background:#06111f;color:#f0c46a;font:900 9px system-ui;letter-spacing:.04em;opacity:.45";
     button.addEventListener("click", () => {
       const sog = Number(button.dataset.sog);
       if (Number.isFinite(sog) && sog >= 0) setReactInputValue(speedInput, sog.toFixed(1));
@@ -160,7 +160,7 @@ export function WxRoutingBridgeSkin() {
       const globalNav = document.querySelector<HTMLElement>("body > nav");
       if (globalNav) important(globalNav, "display", "none");
 
-      important(main, "background", "#04080c");
+      important(main, "background", "#040d18");
       important(main, "color", "#dbe5ee");
       important(shell, "padding", "6px");
       important(shell, "gap", "5px");
@@ -177,15 +177,15 @@ export function WxRoutingBridgeSkin() {
         shell.insertBefore(topbar, header);
       }
 
-      topbar.style.cssText = "height:46px;display:grid;grid-template-columns:280px 1fr 180px;align-items:center;padding:0 12px;border:1px solid rgba(201,162,39,.30);background:#071019;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
+      topbar.style.cssText = "height:46px;display:grid;grid-template-columns:280px 1fr 180px;align-items:center;padding:0 12px;border:1px solid rgba(242,184,75,.30);background:#06111f;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
       const brand = topbar.querySelector<HTMLElement>(".wxr-brand");
       if (brand) brand.style.cssText = "display:flex;align-items:center;gap:9px";
       const logo = topbar.querySelector<HTMLElement>(".wxr-logo");
-      if (logo) logo.style.cssText = "display:grid;place-items:center;width:28px;height:28px;border:1px solid #c9a227;color:#e7c95c;font-size:15px;font-weight:900";
+      if (logo) logo.style.cssText = "display:grid;place-items:center;width:28px;height:28px;border:1px solid #f2b84b;color:#f0c46a;font-size:15px;font-weight:900";
       const stack = topbar.querySelector<HTMLElement>(".wxr-brand span:last-child");
       if (stack) stack.style.cssText = "display:flex;flex-direction:column;line-height:1";
       const small = topbar.querySelector<HTMLElement>("small");
-      if (small) small.style.cssText = "margin-top:4px;font-size:8px;color:#8294a5;letter-spacing:.14em";
+      if (small) small.style.cssText = "margin-top:4px;font-size:8px;color:#7f9caf;letter-spacing:.14em";
       const center = topbar.querySelector<HTMLElement>(".wxr-center");
       if (center) center.style.cssText = "display:flex;justify-content:center;gap:8px";
       topbar.querySelectorAll<HTMLElement>(".wxr-center span").forEach((el) => {
@@ -194,7 +194,7 @@ export function WxRoutingBridgeSkin() {
       const dot = topbar.querySelector<HTMLElement>(".wxr-live i");
       if (dot) dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;background:#22d3ee;margin-right:6px;box-shadow:0 0 8px rgba(34,211,238,.55)";
       const action = topbar.querySelector<HTMLAnchorElement>(".wxr-actions a");
-      if (action) action.style.cssText = "display:inline-flex;height:30px;min-width:110px;align-items:center;justify-content:center;border:1px solid rgba(201,162,39,.55);background:#071019;color:#e7c95c;text-decoration:none;font:900 9px system-ui;letter-spacing:.10em";
+      if (action) action.style.cssText = "display:inline-flex;height:30px;min-width:110px;align-items:center;justify-content:center;border:1px solid rgba(242,184,75,.55);background:#06111f;color:#f0c46a;text-decoration:none;font:900 9px system-ui;letter-spacing:.10em";
       const actions = topbar.querySelector<HTMLElement>(".wxr-actions");
       if (actions) actions.style.cssText = "display:flex;justify-content:flex-end";
 
@@ -202,7 +202,7 @@ export function WxRoutingBridgeSkin() {
       important(header, "margin", "0");
       important(header, "border-radius", "0");
       important(header, "border", "1px solid rgba(148,163,184,.14)");
-      important(header, "background", "#071019");
+      important(header, "background", "#06111f");
       important(header, "box-shadow", "none");
 
       const heading = header.querySelector<HTMLElement>("h1");
@@ -211,9 +211,9 @@ export function WxRoutingBridgeSkin() {
         heading.style.cssText = "margin:0;color:#edf4fa;font-size:20px;font-weight:900;letter-spacing:.08em";
       }
       const kicker = header.querySelector<HTMLElement>("div > div");
-      if (kicker) kicker.style.cssText = "color:#c9a227;font-size:8px;font-weight:900;letter-spacing:.16em;text-transform:uppercase";
+      if (kicker) kicker.style.cssText = "color:#f2b84b;font-size:8px;font-weight:900;letter-spacing:.16em;text-transform:uppercase";
       const intro = header.querySelector<HTMLElement>("p");
-      if (intro) intro.style.cssText = "margin-top:3px;color:#8294a5;font-size:10px;line-height:1.35";
+      if (intro) intro.style.cssText = "margin-top:3px;color:#7f9caf;font-size:10px;line-height:1.35";
 
       header.querySelectorAll<HTMLElement>("button,label").forEach((el) => {
         important(el, "border-radius", "3px");

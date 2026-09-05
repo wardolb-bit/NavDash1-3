@@ -122,8 +122,8 @@ function formatLon(value: number) {
 function vesselIconHtml(vessel: Vessel, ownShip: boolean) {
   const orientation = vessel.heading ?? vessel.cog ?? 0;
   const stroke = ownShip ? "#22d3ee" : "#38bdf8";
-  const fill = ownShip ? "#071019" : "#08131c";
-  const accent = ownShip ? "#f1d56b" : "#38bdf8";
+  const fill = ownShip ? "#06111f" : "#08131c";
+  const accent = ownShip ? "#f0c46a" : "#38bdf8";
   const size = ownShip ? 34 : 22;
   const center = size / 2;
   return `<div style="width:${size}px;height:${size}px;transform:rotate(${orientation}deg);transform-origin:${center}px ${center}px;filter:drop-shadow(0 0 4px rgba(34,211,238,.35))"><svg width="${size}" height="${size}" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="${fill}" stroke="${stroke}" stroke-width="${ownShip ? 2.2 : 1.8}" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="${accent}" stroke-width="1.4"/><circle cx="15" cy="15" r="2" fill="${stroke}"/></svg></div>`;
@@ -339,7 +339,7 @@ export default function PilotPage() {
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.heading, 1);
         headingVectorRef.current = L.polyline([pos, [end.lat, end.lon]], {
           pane: "pilot-ownship",
-          color: "#f1d56b",
+          color: "#f0c46a",
           weight: 2,
           opacity: 0.9,
         }).addTo(layer);
@@ -421,7 +421,7 @@ export default function PilotPage() {
   }
 
   const dayMode = !nightMode;
-  const pageClass = dayMode ? "bg-white text-slate-950" : "bg-[#071019] text-slate-100";
+  const pageClass = dayMode ? "bg-white text-slate-950" : "bg-[#06111f] text-slate-100";
   const glassPanel = dayMode
     ? "rounded-[2rem] border border-slate-300 bg-white/95 shadow-xl shadow-slate-900/10"
     : "rounded-[2rem] border border-white/10 bg-white/[0.055] shadow-2xl shadow-black/35 backdrop-blur-xl";
@@ -489,7 +489,7 @@ export default function PilotPage() {
           <div
             ref={mapElementRef}
             className="absolute inset-1.5 overflow-hidden rounded-[1.65rem] md:inset-2"
-            style={{ background: dayMode ? "#dce7eb" : "#0a141d" }}
+            style={{ background: dayMode ? "#dce7eb" : "#10263a" }}
           />
 
           <div className="pointer-events-none absolute left-4 top-4 z-[800] flex gap-2 md:left-5 md:top-5">
