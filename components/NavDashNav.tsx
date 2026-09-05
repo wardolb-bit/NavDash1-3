@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
-  { label: "Console", items: [{ label: "Main Console", href: "/" }, { label: "ECR", href: "/ecr" }] },
+  { label: "Console", items: [{ label: "Main Console", href: "/" }, { label: "Tides", href: "/tides" }, { label: "ECR", href: "/ecr" }] },
   { label: "AIS", items: [{ label: "AIS Targets", href: "/ais-test" }] },
   { label: "Weather", items: [{ label: "Weather", href: "/wx" }, { label: "WX Routing", href: "/wx-routing" }, { label: "Official Weather", href: "/official-weather" }] },
   { label: "MSI", items: [{ label: "EGC / MSI", href: "/msi" }] },
@@ -23,7 +24,13 @@ function itemIsActive(pathname: string, href: string) {
 
 export function NavDashNav() {
   const pathname = usePathname();
-  if (pathname.startsWith("/tides")) return null;
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const celestialActive = pathname.startsWith("/celestial");
   const activeGroup = celestialActive
@@ -31,19 +38,26 @@ export function NavDashNav() {
     : navGroups.find((group) => group.items.some((item) => itemIsActive(pathname, item.href))) || navGroups[0];
 
   return (
-    <nav className="navdash-global-nav sticky top-0 z-[1000] border-b border-white/10 bg-[#071019]/95 text-slate-100 shadow-xl shadow-black/30 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-none flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center justify-between gap-3">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#c9a227]/45 bg-[#c9a227]/15 text-lg font-black text-[#c9a227]">ND</span>
-            <span className="min-w-0">
-              <span className="block text-sm font-black uppercase text-[#c9a227]">NavDash 1.3</span>
-              <span className="block truncate text-xs font-bold uppercase tracking-[0.16em] text-slate-400">{activeGroup.label}</span>
+    <nav className="navdash-global-nav">
+      <div className="navdash-global-shell">
+        <div className="navdash-global-topbar">
+          <Link href="/" className="navdash-global-brand">
+            <span className="navdash-global-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M3 15c2.2 0 2.2-1.6 4.4-1.6S9.6 15 11.8 15s2.2-1.6 4.4-1.6S18.4 15 20.6 15"/><path d="M5 10.5c1.7 0 1.7-1.3 3.4-1.3s1.7 1.3 3.4 1.3 1.7-1.3 3.4-1.3 1.7 1.3 3.4 1.3"/></svg>
+            </span>
+            <span className="navdash-global-brand-copy">
+              <strong>NAVDASH</strong>
+              <small>MARINER&apos;S BRIDGE CONSOLE · {activeGroup.label.toUpperCase()}</small>
             </span>
           </Link>
 
+          <div className="navdash-global-clock" aria-label="Current UTC time">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span><strong>{now ? `${now.toLocaleTimeString("en-US", { timeZone: "UTC", hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })}Z` : "--:--:--Z"}</strong><small>{now ? now.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", day: "2-digit", month: "short", year: "numeric" }).toUpperCase() : "UTC"}</small></span>
+          </div>
+
           <select
-            className="max-w-[13rem] rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-sm font-bold text-slate-100 outline-none lg:hidden"
+            className="navdash-global-select"
             value={celestialActive ? "/celestial" : pathname}
             onChange={(event) => { window.location.href = event.target.value; }}
             aria-label="NavDash page"
@@ -57,28 +71,28 @@ export function NavDashNav() {
           </select>
         </div>
 
-        <div className="hidden min-w-0 flex-1 items-center justify-end gap-2 lg:flex">
+        <div className="navdash-global-links">
           <Link
             href="/celestial"
-            className={`inline-flex h-11 shrink-0 items-center justify-center whitespace-nowrap rounded-2xl border px-4 text-sm font-black shadow-lg transition ${celestialActive ? "border-[#c9a227] bg-[#c9a227] text-slate-950 shadow-[#c9a227]/20" : "border-[#c9a227]/45 bg-[#c9a227]/15 text-[#f6d66d] hover:bg-[#c9a227]/25"}`}
+            className={`navdash-global-star ${celestialActive ? "is-active" : ""}`}
           >
             ✦ Star Finder
           </Link>
 
-          <div className="min-w-0 overflow-x-auto">
-            <div className="flex w-max flex-nowrap items-center gap-1 rounded-2xl border border-white/10 bg-white/[0.055] p-1.5">
+          <div className="navdash-global-scroll">
+            <div className="navdash-global-groups">
               {navGroups.map((group) => {
                 const groupActive = group.items.some((item) => itemIsActive(pathname, item.href));
                 return (
-                  <div key={group.label} className={`flex shrink-0 items-center gap-1 rounded-xl px-1.5 py-1 ${groupActive ? "bg-[#c9a227]/10" : ""}`}>
-                    <span className="whitespace-nowrap px-2 text-xs font-black uppercase tracking-[0.12em] text-slate-400">{group.label}</span>
+                  <div key={group.label} className={`navdash-global-group ${groupActive ? "is-active" : ""}`}>
+                    <span>{group.label}</span>
                     {group.items.map((item) => {
                       const active = itemIsActive(pathname, item.href);
                       return (
                         <Link
                           key={item.href}
                           href={item.href}
-                          className={`whitespace-nowrap rounded-xl px-3 py-2 text-sm font-black transition ${active ? "bg-[#c9a227] text-slate-950 shadow-md shadow-[#c9a227]/20" : "text-slate-200 hover:bg-white/10"}`}
+                          className={active ? "is-active" : ""}
                         >
                           {item.label}
                         </Link>

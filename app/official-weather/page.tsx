@@ -506,14 +506,14 @@ export default function OfficialWeatherPage() {
         button:
           "rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-bold text-slate-900 hover:bg-slate-100",
         primaryButton:
-          "rounded-2xl border border-[#c9a227]/50 bg-[#c9a227] px-4 py-3 text-sm font-black text-slate-950 hover:brightness-105",
+          "rounded-2xl border border-[#f2b84b]/50 bg-[#f2b84b] px-4 py-3 text-sm font-black text-slate-950 hover:brightness-105",
         input:
-          "rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-950 outline-none focus:border-[#c9a227]",
+          "rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-950 outline-none focus:border-[#f2b84b]",
         badge: "rounded-2xl bg-emerald-100 px-3 py-2 text-xs font-black text-emerald-800",
       }
     : {
         page:
-          "min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(201,162,39,.18),transparent_28%),#07111d] text-slate-100",
+          "min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.16),transparent_30%),radial-gradient(circle_at_top_right,rgba(242,184,75,.18),transparent_28%),#07111d] text-slate-100",
         shell: "mx-auto max-w-7xl px-5 py-6",
         panel:
           "rounded-[2rem] border border-white/10 bg-white/[.055] p-5 shadow-2xl shadow-black/30 backdrop-blur-xl",
@@ -525,11 +525,11 @@ export default function OfficialWeatherPage() {
         button:
           "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-sm font-bold text-slate-100 hover:bg-white/15",
         primaryButton:
-          "rounded-2xl border border-[#c9a227]/50 bg-[#c9a227] px-4 py-3 text-sm font-black text-[#111827] shadow-lg shadow-[#c9a227]/10 hover:brightness-110",
+          "rounded-2xl border border-[#f2b84b]/50 bg-[#f2b84b] px-4 py-3 text-sm font-black text-[#111827] shadow-lg shadow-[#f2b84b]/10 hover:brightness-110",
         input:
-          "rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-sm text-white outline-none focus:border-[#c9a227]",
+          "rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-sm text-white outline-none focus:border-[#f2b84b]",
         badge:
-          "rounded-2xl bg-emerald-400 px-3 py-2 text-xs font-black text-[#071019]",
+          "rounded-2xl bg-emerald-400 px-3 py-2 text-xs font-black text-[#06111f]",
       };
 
   return (
@@ -538,11 +538,11 @@ export default function OfficialWeatherPage() {
         <header className={`${theme.panel} mb-5`}>
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-[#c9a227]/45 bg-[#c9a227]/15 text-3xl font-black text-[#c9a227]">
+              <div className="grid h-16 w-16 place-items-center rounded-3xl border border-[#f2b84b]/45 bg-[#f2b84b]/15 text-3xl font-black text-[#f2b84b]">
                 O
               </div>
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.42em] text-[#c9a227]">
+                <div className="text-xs font-bold uppercase tracking-[0.42em] text-[#f2b84b]">
                   M/V MB480 
                 </div>
                 <h1 className={`text-4xl font-black tracking-tight ${theme.title}`}>
@@ -564,7 +564,7 @@ export default function OfficialWeatherPage() {
 
         <section className="mb-5 grid gap-5 lg:grid-cols-12">
           <div className={`${theme.card} lg:col-span-5`}>
-            <div className="mb-3 text-sm font-bold uppercase tracking-[.22em] text-[#c9a227]">
+            <div className="mb-3 text-sm font-bold uppercase tracking-[.22em] text-[#f2b84b]">
               Position / Region Selector
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -644,7 +644,7 @@ export default function OfficialWeatherPage() {
           </div>
 
           <div className={`${theme.card} lg:col-span-7`}>
-            <div className="mb-3 text-sm font-bold uppercase tracking-[.22em] text-[#c9a227]">
+            <div className="mb-3 text-sm font-bold uppercase tracking-[.22em] text-[#f2b84b]">
               Use Guidance
             </div>
             <div className="grid gap-3 md:grid-cols-3">
@@ -682,7 +682,7 @@ export default function OfficialWeatherPage() {
                     <div className={`text-xs font-bold uppercase tracking-[.18em] ${theme.muted}`}>
                       {source.agency}
                     </div>
-                    <h2 className="mt-1 text-2xl font-black text-[#c9a227]">
+                    <h2 className="mt-1 text-2xl font-black text-[#f2b84b]">
                       {source.name}
                     </h2>
                     <div className={`mt-1 text-sm ${theme.muted}`}>{source.region}</div>

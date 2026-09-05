@@ -1577,7 +1577,7 @@ export default function NavDashHomePage() {
       routeLayerRef.current = L.layerGroup(
         routeSegments.map((segment) =>
           L.polyline(segment as any, {
-            color: "#c9a227",
+            color: "#f2b84b",
             weight: 4,
             opacity: 0.95,
           }),
@@ -1590,8 +1590,8 @@ export default function NavDashHomePage() {
         );
         const marker = L.circleMarker([wp.lat, wp.lon], {
           radius: armedAlert ? 8 : 5,
-          color: armedAlert ? "#fb7185" : "#c9a227",
-          fillColor: armedAlert ? "#fb7185" : "#c9a227",
+          color: armedAlert ? "#fb7185" : "#f2b84b",
+          fillColor: armedAlert ? "#fb7185" : "#f2b84b",
           fillOpacity: armedAlert ? 0.3 : 0.85,
           weight: armedAlert ? 3 : 2,
         })
@@ -1926,7 +1926,7 @@ export default function NavDashHomePage() {
 
   const pageClass = dayMode
     ? "min-h-screen bg-white text-slate-950"
-    : "min-h-screen bg-[#071019] text-slate-100";
+    : "min-h-screen bg-[#06111f] text-slate-100";
   const panelClass = dayMode
     ? "rounded-[2rem] border border-slate-300 bg-white p-5 shadow-xl shadow-slate-900/10"
     : "rounded-[2rem] border border-white/10 bg-white/[0.055] p-5 shadow-2xl shadow-black/40 backdrop-blur-xl";
@@ -1983,7 +1983,7 @@ export default function NavDashHomePage() {
         className={
           dayMode
             ? "absolute inset-0 bg-white"
-            : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)]"
+            : "absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(242,184,75,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#06111f,#101c2b_48%,#06111f)]"
         }
       />
 
@@ -1992,7 +1992,7 @@ export default function NavDashHomePage() {
           background: #e2e8f0;
         }
         .navdash-v12-night .leaflet-container {
-          background: #071019;
+          background: #06111f;
           filter: saturate(0.88) brightness(0.82);
         }
         .navdash-readable-font .text-xs {
@@ -2414,7 +2414,7 @@ export default function NavDashHomePage() {
 
       {selectedWaypoint && (
         <div className="fixed inset-0 z-[2000] grid place-items-center bg-black/55 p-4">
-          <div className={dayMode ? "w-full max-w-lg rounded-3xl border border-slate-300 bg-white p-5 text-slate-950 shadow-2xl" : "w-full max-w-lg rounded-3xl border border-cyan-300/25 bg-[#071019] p-5 text-slate-100 shadow-2xl shadow-black/60"}>
+          <div className={dayMode ? "w-full max-w-lg rounded-3xl border border-slate-300 bg-white p-5 text-slate-950 shadow-2xl" : "w-full max-w-lg rounded-3xl border border-cyan-300/25 bg-[#06111f] p-5 text-slate-100 shadow-2xl shadow-black/60"}>
             <div className="text-xs font-black uppercase tracking-[0.22em] text-cyan-400">Waypoint Route Alert</div>
             <div className="mt-2 text-2xl font-black">{selectedWaypoint.id} · {selectedWaypoint.name}</div>
             <div className={`mt-1 text-sm ${mutedClass}`}>{formatPositionDdm(selectedWaypoint.lat, selectedWaypoint.lon)}</div>

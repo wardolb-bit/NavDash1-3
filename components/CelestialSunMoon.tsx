@@ -120,7 +120,7 @@ export function CelestialSunMoon(){
    }
    const buttons=Array.from(main?.querySelectorAll("button")||[]);
    const planner=buttons.find(b=>b.textContent?.trim()==="SIGHT PLANNER") as HTMLButtonElement|undefined;
-   const active=!!planner&&String(planner.className).includes("bg-[#c9a227]");
+   const active=!!planner&&String(planner.className).includes("bg-[#f2b84b]");
    setPlannerActive(prev=>prev===active?prev:active);
    const input=main?.querySelector('input[type="datetime-local"]') as HTMLInputElement|null;
    if(input?.value){
@@ -143,26 +143,26 @@ export function CelestialSunMoon(){
  const pDate=plannerDate??now,pOffset=shipOffsetHours(pos.lon),pSolar=useMemo(()=>solarEvents(pos.lat,pos.lon,pDate,pOffset),[pos.lat,pos.lon,pDate,pOffset]),pMoon=useMemo(()=>moonEvents(pos.lat,pos.lon,pDate,pOffset),[pos.lat,pos.lon,pDate,pOffset]);
  const pSunAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,pDate,sunRaDec(pDate)),[pos.lat,pos.lon,pDate]),pMoonAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,pDate,moonRaDec(pDate)),[pos.lat,pos.lon,pDate]);
  if(!pathname.startsWith("/celestial"))return null;
- const cell="border-r border-[#263442] px-3 py-2 last:border-r-0";
+ const cell="border-r border-[#1d3a52] px-3 py-2 last:border-r-0";
  const lab="text-[8px] font-black tracking-[.15em] text-[#708496]";
  const val="mt-1 text-[13px] font-black text-[#dbe5ee]";
  return <>
-  {bannerTarget&&createPortal(<div className="mb-[5px] grid grid-cols-2 border border-[#263442] bg-[#071019] sm:grid-cols-4 xl:grid-cols-8">
-   <div className={cell}><div className={lab}>SHIP LT</div><div className={`${val} text-[#e7c95c]`}>{new Date(now.getTime()+offset*3600000).toISOString().slice(11,16)} · {offsetLabel(offset)}</div></div>
+  {bannerTarget&&createPortal(<div className="mb-[5px] grid grid-cols-2 border border-[#1d3a52] bg-[#06111f] sm:grid-cols-4 xl:grid-cols-8">
+   <div className={cell}><div className={lab}>SHIP LT</div><div className={`${val} text-[#f0c46a]`}>{new Date(now.getTime()+offset*3600000).toISOString().slice(11,16)} · {offsetLabel(offset)}</div></div>
    <div className={cell}><div className={lab}>SUNRISE</div><div className={val}>{minutesToLocalText(solar.sunrise)}</div></div>
    <div className={cell}><div className={lab}>SUNSET</div><div className={val}>{minutesToLocalText(solar.sunset)}</div></div>
-   <div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#e7c95c]`}>{azText(sunAz)}</div></div>
+   <div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#f0c46a]`}>{azText(sunAz)}</div></div>
    <div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(moon.moonrise)}</div></div>
    <div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(moon.moonset)}</div></div>
-   <div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#42d3c8]`}>{azText(moonAz)}</div></div>
-   <div className={cell}><div className={lab}>MOON</div><div className={`${val} text-[#42d3c8]`}>{moon.illumination.toFixed(0)}% ILLUM</div></div>
+   <div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#56bad0]`}>{azText(moonAz)}</div></div>
+   <div className={cell}><div className={lab}>MOON</div><div className={`${val} text-[#56bad0]`}>{moon.illumination.toFixed(0)}% ILLUM</div></div>
   </div>,bannerTarget)}
-  {plannerActive&&plannerTarget&&createPortal(<section className="mb-[5px] border border-[#263442] bg-[#071019]">
-   <div className="border-b border-[#263442] px-3 py-2"><span className={lab}>LIGHT CONDITIONS · VESSEL POSITION · SHIP LOCAL TIME {offsetLabel(pOffset)}</span></div>
+  {plannerActive&&plannerTarget&&createPortal(<section className="mb-[5px] border border-[#1d3a52] bg-[#06111f]">
+   <div className="border-b border-[#1d3a52] px-3 py-2"><span className={lab}>LIGHT CONDITIONS · VESSEL POSITION · SHIP LOCAL TIME {offsetLabel(pOffset)}</span></div>
    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
-    {[["ASTRO DAWN",pSolar.astroDawn],["NAUT DAWN",pSolar.nauticalDawn],["CIVIL DAWN",pSolar.civilDawn],["SUNRISE",pSolar.sunrise],["LAN",pSolar.lan],["SUNSET",pSolar.sunset],["NAUT DUSK",pSolar.nauticalDusk],["ASTRO DUSK",pSolar.astroDusk]].map(([a,b])=><div key={String(a)} className={cell}><div className={lab}>{a}</div><div className={a==="NAUT DAWN"||a==="NAUT DUSK"||a==="LAN"?`${val} text-[#e7c95c]`:val}>{minutesToLocalText(b as EventValue)}</div></div>)}
+    {[["ASTRO DAWN",pSolar.astroDawn],["NAUT DAWN",pSolar.nauticalDawn],["CIVIL DAWN",pSolar.civilDawn],["SUNRISE",pSolar.sunrise],["LAN",pSolar.lan],["SUNSET",pSolar.sunset],["NAUT DUSK",pSolar.nauticalDusk],["ASTRO DUSK",pSolar.astroDusk]].map(([a,b])=><div key={String(a)} className={cell}><div className={lab}>{a}</div><div className={a==="NAUT DAWN"||a==="NAUT DUSK"||a==="LAN"?`${val} text-[#f0c46a]`:val}>{minutesToLocalText(b as EventValue)}</div></div>)}
    </div>
-   <div className="grid grid-cols-2 border-t border-[#263442] md:grid-cols-5"><div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#e7c95c]`}>{azText(pSunAz)}</div></div><div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(pMoon.moonrise)}</div></div><div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(pMoon.moonset)}</div></div><div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#42d3c8]`}>{azText(pMoonAz)}</div></div><div className={cell}><div className={lab}>MOON ILLUMINATION</div><div className={`${val} text-[#42d3c8]`}>{pMoon.illumination.toFixed(0)}%</div></div></div>
+   <div className="grid grid-cols-2 border-t border-[#1d3a52] md:grid-cols-5"><div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#f0c46a]`}>{azText(pSunAz)}</div></div><div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(pMoon.moonrise)}</div></div><div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(pMoon.moonset)}</div></div><div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#56bad0]`}>{azText(pMoonAz)}</div></div><div className={cell}><div className={lab}>MOON ILLUMINATION</div><div className={`${val} text-[#56bad0]`}>{pMoon.illumination.toFixed(0)}%</div></div></div>
   </section>,plannerTarget)}
  </>;
 }

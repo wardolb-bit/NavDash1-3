@@ -47,14 +47,14 @@
 .navdash-v12-day > header > :first-child > :last-child > label,
 .navdash-v12-day > header > :first-child > :last-child > a.bc-header-nav {
   background: #ffffff !important;
-  color: #17212b !important;
+  color: #122434 !important;
   border-color: rgba(15,23,42,.28) !important;
 }
 
 .navdash-v12-night > header > :first-child > :last-child > button,
 .navdash-v12-night > header > :first-child > :last-child > label,
 .navdash-v12-night > header > :first-child > :last-child > a.bc-header-nav {
-  background: #071019 !important;
+  background: #06111f !important;
   color: #dbe5ee !important;
   border-color: rgba(148,163,184,.28) !important;
 }

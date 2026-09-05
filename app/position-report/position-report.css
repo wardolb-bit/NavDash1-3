@@ -10,10 +10,10 @@
   align-items: center;
   justify-content: center;
   padding: 0 10px;
-  border: 1px solid rgba(201, 162, 39, .42);
+  border: 1px solid rgba(242, 184, 75, .42);
   border-radius: 2px;
-  background: #071019;
-  color: #d6bd58;
+  background: #06111f;
+  color: #f0c46a;
   box-shadow: none;
   font: 900 9px/1 system-ui, sans-serif;
   letter-spacing: .06em;
@@ -32,8 +32,8 @@ main > div.relative.z-10.min-h-screen > header {
   margin-bottom: 5px !important;
   padding: 10px 12px !important;
   border-radius: 0 !important;
-  border: 1px solid rgba(201, 162, 39, .30) !important;
-  background: #071019 !important;
+  border: 1px solid rgba(242, 184, 75, .30) !important;
+  background: #06111f !important;
   box-shadow: none !important;
   backdrop-filter: none !important;
 }
@@ -41,22 +41,22 @@ main > div.relative.z-10.min-h-screen > header {
 main > div.relative.z-10.min-h-screen > header > div { gap: 8px !important; }
 main > div.relative.z-10.min-h-screen > header .h-16.w-16 {
   width:30px !important; height:30px !important; border-radius:0 !important; font-size:15px !important;
-  background:#101820 !important; border-color:rgba(201,162,39,.65) !important;
+  background:#101820 !important; border-color:rgba(242,184,75,.65) !important;
 }
 main > div.relative.z-10.min-h-screen > header h1 { font-size:22px !important; line-height:1.05 !important; color:#edf4fa !important; }
-main > div.relative.z-10.min-h-screen > header h1 + div { margin-top:4px !important; font-size:10px !important; color:#8294a5 !important; }
-main > div.relative.z-10.min-h-screen > header [class*="tracking-[0.42em]"] { font-size:8px !important; letter-spacing:.16em !important; color:#c9a227 !important; }
+main > div.relative.z-10.min-h-screen > header h1 + div { margin-top:4px !important; font-size:10px !important; color:#7f9caf !important; }
+main > div.relative.z-10.min-h-screen > header [class*="tracking-[0.42em]"] { font-size:8px !important; letter-spacing:.16em !important; color:#f2b84b !important; }
 main > div.relative.z-10.min-h-screen > header button,
 main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"] {
   height:30px !important; min-height:30px !important; width:auto !important; min-width:112px !important;
   padding:0 10px !important; border-radius:2px !important; box-shadow:none !important; font-size:9px !important;
   font-weight:900 !important; letter-spacing:.06em !important;
 }
-main > div.relative.z-10.min-h-screen > header button { border-color:rgba(201,162,39,.42) !important; background:#071019 !important; color:#d6bd58 !important; }
+main > div.relative.z-10.min-h-screen > header button { border-color:rgba(242,184,75,.42) !important; background:#06111f !important; color:#f0c46a !important; }
 
 main > div.relative.z-10.min-h-screen > .grid.w-full.grid-cols-2 { grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important; gap:5px !important; }
 main > div.relative.z-10.min-h-screen section {
-  border-radius:0 !important; border-color:rgba(148,163,184,.16) !important; background:#071019 !important;
+  border-radius:0 !important; border-color:rgba(148,163,184,.16) !important; background:#06111f !important;
   box-shadow:none !important; backdrop-filter:none !important; padding:10px !important;
 }
 main > div.relative.z-10.min-h-screen section [class*="rounded-3xl"],
@@ -79,7 +79,7 @@ main > div.relative.z-10.min-h-screen textarea {
 }
 main > div.relative.z-10.min-h-screen input:focus,
 main > div.relative.z-10.min-h-screen select:focus,
-main > div.relative.z-10.min-h-screen textarea:focus { border-color:rgba(201,162,39,.75) !important; outline:none !important; }
+main > div.relative.z-10.min-h-screen textarea:focus { border-color:rgba(242,184,75,.75) !important; outline:none !important; }
 main > div.relative.z-10.min-h-screen section button { border-radius:2px !important; box-shadow:none !important; }
 main > div.relative.z-10.min-h-screen pre { border-radius:2px !important; border-color:rgba(148,163,184,.18) !important; background:#050a0f !important; color:#c7d2dc !important; }
 
@@ -92,37 +92,37 @@ main > div.relative.z-10.min-h-screen [class*="bg-red-500/10"] { background:rgba
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen > header,
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section {
   background:#ffffff !important;
-  color:#17212b !important;
+  color:#122434 !important;
   border-color:rgba(15,23,42,.22) !important;
 }
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section [class*="bg-black/25"],
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section > div:first-child.grid.grid-cols-2 {
-  background:#f4f7f9 !important;
-  color:#17212b !important;
+  background:#e7eef3 !important;
+  color:#122434 !important;
   border-color:rgba(15,23,42,.18) !important;
 }
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen input,
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen select,
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen textarea {
   background:#ffffff !important;
-  color:#17212b !important;
+  color:#122434 !important;
   border-color:rgba(15,23,42,.24) !important;
 }
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen pre {
-  background:#f4f7f9 !important;
-  color:#17212b !important;
+  background:#e7eef3 !important;
+  color:#122434 !important;
   border-color:rgba(15,23,42,.18) !important;
 }
-html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section .font-mono.text-lg { color:#17212b !important; }
-html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section [class*="tracking-[.18em]"] { color:#586773 !important; }
+html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section .font-mono.text-lg { color:#122434 !important; }
+html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen section [class*="tracking-[.18em]"] { color:#52697a !important; }
 
 /* NAV CONSOLE is its own anchor, so explicitly switch it out of the night palette. */
 html[data-navdash-theme="day"] .position-report-nav-console {
   background:#ffffff !important;
-  color:#17212b !important;
+  color:#122434 !important;
   border-color:rgba(15,23,42,.28) !important;
 }
-html[data-navdash-theme="day"] .position-report-nav-console:hover { background:#f3f6f8 !important; }
+html[data-navdash-theme="day"] .position-report-nav-console:hover { background:#e7eef3 !important; }
 
 /* The small POSITION REPORT screen identifier in the header should be high-contrast in Day mode. */
 html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen > header [class*="tracking-[0.42em]"] {

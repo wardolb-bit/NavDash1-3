@@ -91,7 +91,7 @@ function decodeAisPosition(line: string): Vessel | null {
 
 function vesselIconHtml(vessel: Vessel) {
   const orientation = vessel.heading ?? vessel.cog ?? 0;
-  return `<div style="width:24px;height:24px;transform:rotate(${orientation}deg);transform-origin:12px 12px;filter:drop-shadow(0 0 3px rgba(250,204,21,.6))"><svg width="24" height="24" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#071019" stroke="#facc15" stroke-width="2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#facc15" stroke-width="1.4"/><circle cx="15" cy="15" r="2" fill="#facc15"/></svg></div>`;
+  return `<div style="width:24px;height:24px;transform:rotate(${orientation}deg);transform-origin:12px 12px;filter:drop-shadow(0 0 3px rgba(250,204,21,.6))"><svg width="24" height="24" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#06111f" stroke="#facc15" stroke-width="2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#facc15" stroke-width="1.4"/><circle cx="15" cy="15" r="2" fill="#facc15"/></svg></div>`;
 }
 
 function installMapCapture(L: any) {

@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body { height: 100%; margin: 0; background: #071019; }
+html, body { height: 100%; margin: 0; background: #06111f; }
 .leaflet-container { background: #08111b; font-family: inherit; }
 .leaflet-control-attribution { display: none !important; }
 .console-shadow { box-shadow: 0 24px 80px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.06); }
-.map-glow { box-shadow: 0 0 0 1px rgba(201,162,39,.18), 0 26px 80px rgba(0,0,0,.5); }
+.map-glow { box-shadow: 0 0 0 1px rgba(242,184,75,.18), 0 26px 80px rgba(0,0,0,.5); }
 .no-scrollbar::-webkit-scrollbar { width: 0px; height: 0px; }
 
 /* Production: suppress the preview-only banner while preserving bridge-console styling. */
@@ -51,30 +51,30 @@ body::before { content: none !important; display: none !important; }
 .navdash-v12-day #bc-v2-instruments .bc2-wx {
   background: #ffffff !important;
   background-color: #ffffff !important;
-  color: #17212b !important;
+  color: #122434 !important;
   border-color: rgba(15,23,42,.22) !important;
 }
 
 .navdash-v12-day #bc-v2-instruments label,
 .navdash-v12-day #bc-v2-instruments small {
-  color: #586773 !important;
+  color: #52697a !important;
 }
 
 .navdash-v12-day #bc-v2-instruments .bc2-big-grid strong,
 .navdash-v12-day #bc-v2-instruments .bc2-small-grid strong {
-  color: #17212b !important;
+  color: #122434 !important;
 }
 
-.navdash-v12-day #bc-v2-instruments .bc2-pos strong { color: #006f78 !important; }
+.navdash-v12-day #bc-v2-instruments .bc2-pos strong { color: #087c8c !important; }
 .navdash-v12-day #bc-v2-instruments .bc2-rail-title span,
 .navdash-v12-day #bc-v2-instruments .bc2-rail-title b,
-.navdash-v12-day #bc-v2-instruments .bc2-leg strong { color: #7a5b00 !important; }
+.navdash-v12-day #bc-v2-instruments .bc2-leg strong { color: #8a5a00 !important; }
 
 .navdash-v12-day #bc-v2-instruments ~ *,
 .navdash-v12-day #bc-v2-instruments ~ * *,
 .navdash-v12-day #bc-v2-instruments + * {
   background-color: #ffffff !important;
-  color: #17212b !important;
+  color: #122434 !important;
   border-color: rgba(15,23,42,.22) !important;
 }
 

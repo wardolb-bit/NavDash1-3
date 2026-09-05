@@ -401,9 +401,9 @@ function IsolatedMainMap() {
         measurementLayerRef.current?.clearLayers();
         L.polyline([[start.lat, start.lon], [end.lat, end.lon]], { pane: "navmap-main-tools-v1", color: "#22d3ee", weight: 3, opacity: 0.95, dashArray: "8 6" }).addTo(measurementLayerRef.current);
         if (source === "points") {
-          L.circleMarker([start.lat, start.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
+          L.circleMarker([start.lat, start.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#06111f", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
         }
-        L.circleMarker([end.lat, end.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
+        L.circleMarker([end.lat, end.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#06111f", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
         const midpoint: [number, number] = [(start.lat + end.lat) / 2, (start.lon + end.lon) / 2];
         L.tooltip({ permanent: true, direction: "center", className: "navmap-measure-label", pane: "navmap-main-tools-v1" })
           .setLatLng(midpoint)
@@ -430,7 +430,7 @@ function IsolatedMainMap() {
           measureStartRef.current = point;
           setMeasurement(null);
           measurementLayerRef.current?.clearLayers();
-          L.circleMarker([point.lat, point.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
+          L.circleMarker([point.lat, point.lon], { pane: "navmap-main-tools-v1", radius: 5, color: "#22d3ee", fillColor: "#06111f", fillOpacity: 1, weight: 2 }).addTo(measurementLayerRef.current);
           return;
         }
         const start = measureStartRef.current;
@@ -532,9 +532,9 @@ function IsolatedMainMap() {
       const referenceLon = ownShip?.lon ?? map.getCenter().lng;
       const points = unwrapRouteNear(route, referenceLon);
       const worldOffsets = [-360, 0, 360];
-      const routeCopies = worldOffsets.map((offset) => L.polyline(points.map(([lat, lon]) => [lat, lon + offset]) as any, { color: "#c9a227", weight: 4, opacity: 0.95 }));
+      const routeCopies = worldOffsets.map((offset) => L.polyline(points.map(([lat, lon]) => [lat, lon + offset]) as any, { color: "#f2b84b", weight: 4, opacity: 0.95 }));
       routeLayerRef.current = L.layerGroup(routeCopies).addTo(map);
-      routeMarkersRef.current = worldOffsets.flatMap((offset) => route.map((wp, index) => L.circleMarker([points[index][0], points[index][1] + offset] as any, { radius: 5, color: "#c9a227", fillColor: "#c9a227", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map)));
+      routeMarkersRef.current = worldOffsets.flatMap((offset) => route.map((wp, index) => L.circleMarker([points[index][0], points[index][1] + offset] as any, { radius: 5, color: "#f2b84b", fillColor: "#f2b84b", fillOpacity: 0.85, weight: 2 }).bindTooltip(`${wp.id || `WP${index + 1}`} ${wp.name || ""}`.trim()).addTo(map)));
       didInitialRouteFitRef.current = true;
     }
     updateRoute();
@@ -559,7 +559,7 @@ function IsolatedMainMap() {
           L.circleMarker([event.lat, baseLon + offset], {
             pane: "navmap-main-celestial-v1",
             radius: 7,
-            color: "#071019",
+            color: "#06111f",
             fillColor: color,
             fillOpacity: 1,
             weight: 2,
@@ -577,7 +577,7 @@ function IsolatedMainMap() {
       const L = await import("leaflet");
       layer.clearLayers();
       for (const mark of userMarks) {
-        const marker = L.circleMarker([mark.lat, mark.lon], { pane: "navmap-main-tools-v1", radius: 6, color: "#f1d56b", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(layer);
+        const marker = L.circleMarker([mark.lat, mark.lon], { pane: "navmap-main-tools-v1", radius: 6, color: "#f0c46a", fillColor: "#06111f", fillOpacity: 1, weight: 2 }).addTo(layer);
         marker.bindTooltip(`${mark.name}<br>${mark.lat.toFixed(5)}, ${mark.lon.toFixed(5)}`);
       }
     }
@@ -594,7 +594,7 @@ function IsolatedMainMap() {
       const position: [number, number] = [ownShip.lat, displayLon];
       if (!didInitialOwnShipCenterRef.current) { didInitialOwnShipCenterRef.current = true; map.setView(position, Math.max(map.getZoom(), 7), { animate: false }); }
       const orientation = ownShip.heading !== null && Number.isFinite(ownShip.heading) ? ownShip.heading : ownShip.cog;
-      const icon = L.divIcon({ className: "navmap-main-ownship-icon", html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f1d56b" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+      const icon = L.divIcon({ className: "navmap-main-ownship-icon", html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#06111f" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f0c46a" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`, iconSize: [30, 30], iconAnchor: [15, 15] });
       if (!ownMarkerRef.current) ownMarkerRef.current = L.marker(position, { icon, pane: "navmap-main-ownship-v2", interactive: false }).addTo(layer);
       else { ownMarkerRef.current.setLatLng(position); ownMarkerRef.current.setIcon(icon); }
       if (headingVectorRef.current) layer.removeLayer(headingVectorRef.current);
@@ -602,7 +602,7 @@ function IsolatedMainMap() {
       headingVectorRef.current = null; cogVectorRef.current = null;
       if (ownShip.heading !== null && Number.isFinite(ownShip.heading)) {
         const end = destinationPoint(ownShip.lat, ownShip.lon, ownShip.heading, 0.8);
-        headingVectorRef.current = L.polyline([position, [end.lat, longitudeNearReference(end.lon, displayLon)]], { pane: "navmap-main-ownship-v2", color: "#f1d56b", weight: 2, opacity: 0.9 }).addTo(layer);
+        headingVectorRef.current = L.polyline([position, [end.lat, longitudeNearReference(end.lon, displayLon)]], { pane: "navmap-main-ownship-v2", color: "#f0c46a", weight: 2, opacity: 0.9 }).addTo(layer);
       }
       if (Number.isFinite(ownShip.sog) && ownShip.sog > 0.1 && Number.isFinite(ownShip.cog)) {
         const distanceNm = ownShip.sog * (6 / 60);
@@ -620,7 +620,7 @@ function IsolatedMainMap() {
   const buttonStyle = (active: boolean): React.CSSProperties => ({
     border: `1px solid ${active ? "#22d3ee" : "rgba(241,213,107,.45)"}`,
     background: active ? "rgba(34,211,238,.16)" : "rgba(7,16,25,.90)",
-    color: active ? "#d9fbff" : "#f1d56b",
+    color: active ? "#d9fbff" : "#f0c46a",
     minHeight: 36,
     padding: "7px 11px",
     borderRadius: 5,
@@ -633,7 +633,7 @@ function IsolatedMainMap() {
 
   return (
     <>
-      <div ref={elementRef} id="navmap-main-isolated-v2" style={{ position: "absolute", inset: 0, zIndex: 650, width: "100%", height: "100%", minHeight: "100%", background: "#0a141d" }} />
+      <div ref={elementRef} id="navmap-main-isolated-v2" style={{ position: "absolute", inset: 0, zIndex: 650, width: "100%", height: "100%", minHeight: "100%", background: "#10263a" }} />
       <div style={{ position: "absolute", zIndex: 760, top: 10, left: 54, right: 10, display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", pointerEvents: "none" }}>
         <div style={{ display: "flex", gap: 6, padding: 6, border: "1px solid rgba(241,213,107,.28)", borderRadius: 7, background: "rgba(5,12,18,.88)", backdropFilter: "blur(6px)", pointerEvents: "auto", flexWrap: "wrap" }}>
           <button type="button" style={buttonStyle(toolMode === "pan")} onClick={() => { setToolMode("pan"); clearMeasurement(); }}>PAN</button>
@@ -655,7 +655,7 @@ function IsolatedMainMap() {
           {toolMode === "pan" && !measurement ? `${userMarks.length} user mark${userMarks.length === 1 ? "" : "s"}` : null}
         </div>
       </div>
-      <style>{`.navmap-measure-label{background:#071019!important;border:1px solid #22d3ee!important;color:#d9fbff!important;box-shadow:none!important;font:700 12px/1.2 system-ui,sans-serif!important;padding:5px 7px!important}.navmap-measure-label:before{display:none!important}`}</style>
+      <style>{`.navmap-measure-label{background:#06111f!important;border:1px solid #22d3ee!important;color:#d9fbff!important;box-shadow:none!important;font:700 12px/1.2 system-ui,sans-serif!important;padding:5px 7px!important}.navmap-measure-label:before{display:none!important}`}</style>
     </>
   );
 }

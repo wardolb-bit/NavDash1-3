@@ -180,12 +180,12 @@ export default function MsiPage() {
   const updatedAt = isFelcom ? egcSnapshot?.scannedAt : feed?.fetchedAt;
 
   return (
-    <main className="min-h-screen bg-[#071019] px-4 py-5 text-slate-100 md:px-6">
+    <main className="min-h-screen bg-[#06111f] px-4 py-5 text-slate-100 md:px-6">
       <div className="mx-auto max-w-[1600px] space-y-4">
         <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/25">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <div className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a227]">GMDSS SUPPORT</div>
+              <div className="text-xs font-black uppercase tracking-[0.18em] text-[#f2b84b]">GMDSS SUPPORT</div>
               <h1 className="mt-1 text-2xl font-black uppercase tracking-tight md:text-3xl">EGC / Maritime Safety Information</h1>
               <p className="mt-2 max-w-4xl text-sm font-semibold text-slate-400">
                 Live shipboard FELCOM 19 EGC messages with supplemental official NGA navigational warnings.
@@ -198,7 +198,7 @@ export default function MsiPage() {
               <button
                 type="button"
                 onClick={() => (isFelcom ? refreshEgc() : void refreshNga())}
-                className="rounded-xl border border-[#c9a227]/50 bg-[#c9a227]/15 px-4 py-2.5 text-sm font-black text-[#f6d66d] transition hover:bg-[#c9a227]/25"
+                className="rounded-xl border border-[#f2b84b]/50 bg-[#f2b84b]/15 px-4 py-2.5 text-sm font-black text-[#f0c46a] transition hover:bg-[#f2b84b]/25"
               >
                 {loading && !isFelcom ? "REFRESHING..." : "REFRESH"}
               </button>
@@ -230,7 +230,7 @@ export default function MsiPage() {
                 }}
                 className={`rounded-xl border px-4 py-2 text-sm font-black transition ${
                   !isFelcom && area === item
-                    ? "border-[#c9a227] bg-[#c9a227] text-slate-950"
+                    ? "border-[#f2b84b] bg-[#f2b84b] text-slate-950"
                     : "border-white/10 bg-white/[0.05] text-slate-300 hover:bg-white/10"
                 }`}
               >
@@ -283,7 +283,7 @@ export default function MsiPage() {
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder="warning no., NAVAREA, cable, debris..."
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-slate-100 outline-none placeholder:text-slate-600 focus:border-[#c9a227]/60"
+                className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm font-bold text-slate-100 outline-none placeholder:text-slate-600 focus:border-[#f2b84b]/60"
               />
               <div className="mt-3 space-y-1 text-xs font-black uppercase tracking-wider text-slate-500">
                 <div className="flex items-center justify-between"><span>Messages</span><span>{displayedCount}</span></div>
@@ -384,7 +384,7 @@ export default function MsiPage() {
             <div className="grid min-h-[620px] gap-4 xl:grid-cols-[390px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-3">
                 <div className="mb-3 px-1">
-                  <div className="text-xs font-black uppercase tracking-[0.16em] text-[#c9a227]">{area === "XII" || area === "IV" ? `NAVAREA ${area}` : area}</div>
+                  <div className="text-xs font-black uppercase tracking-[0.16em] text-[#f2b84b]">{area === "XII" || area === "IV" ? `NAVAREA ${area}` : area}</div>
                   <div className="text-sm font-black text-slate-200">ACTIVE NGA WARNINGS</div>
                 </div>
                 <div className="max-h-[570px] space-y-2 overflow-y-auto pr-1">
@@ -395,7 +395,7 @@ export default function MsiPage() {
                     const active = selected?.id === warning.id;
                     const preview = warning.body.replace(/\s+/g, " ").slice(0, 190);
                     return (
-                      <button key={warning.id} type="button" onClick={() => setSelected(warning)} className={`w-full rounded-xl border p-3 text-left transition ${active ? "border-[#c9a227] bg-[#c9a227]/15" : "border-white/10 bg-black/15 hover:bg-white/[0.06]"}`}>
+                      <button key={warning.id} type="button" onClick={() => setSelected(warning)} className={`w-full rounded-xl border p-3 text-left transition ${active ? "border-[#f2b84b] bg-[#f2b84b]/15" : "border-white/10 bg-black/15 hover:bg-white/[0.06]"}`}>
                         <div className="flex items-center justify-between gap-3"><span className="font-black text-slate-100">{warning.area} {warning.number}</span><span className="text-[10px] font-black uppercase tracking-wider text-slate-500">ACTIVE</span></div>
                         <p className="mt-1 text-xs font-semibold leading-5 text-slate-400">{preview}{warning.body.length > 190 ? "…" : ""}</p>
                       </button>
@@ -408,7 +408,7 @@ export default function MsiPage() {
                 {selected ? (
                   <>
                     <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
-                      <div><div className="text-xs font-black uppercase tracking-[0.16em] text-[#c9a227]">{selected.area} WARNING</div><h2 className="mt-1 text-2xl font-black">{selected.number}</h2>{selected.issueDate && <div className="mt-1 text-xs font-bold text-slate-500">ISSUED {selected.issueDate}</div>}</div>
+                      <div><div className="text-xs font-black uppercase tracking-[0.16em] text-[#f2b84b]">{selected.area} WARNING</div><h2 className="mt-1 text-2xl font-black">{selected.number}</h2>{selected.issueDate && <div className="mt-1 text-xs font-bold text-slate-500">ISSUED {selected.issueDate}</div>}</div>
                       <span className="w-fit rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-black uppercase tracking-wider text-emerald-300">Active on NGA source</span>
                     </div>
                     <pre className="mt-5 whitespace-pre-wrap break-words font-mono text-[13px] font-semibold leading-6 text-slate-200">{selected.body}</pre>

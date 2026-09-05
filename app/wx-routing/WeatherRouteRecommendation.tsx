@@ -298,7 +298,7 @@ export default function WeatherRouteRecommendation() {
     return { route, candidates, best: candidates[0] };
   }, [gribData, routeData, speedKt]);
 
-  const shell = dayMode ? "border-slate-300 bg-white/95 text-slate-950 shadow-slate-900/20" : "border-white/15 bg-[#071019]/95 text-slate-100 shadow-black/50";
+  const shell = dayMode ? "border-slate-300 bg-white/95 text-slate-950 shadow-slate-900/20" : "border-white/15 bg-[#06111f]/95 text-slate-100 shadow-black/50";
   const muted = dayMode ? "text-slate-600" : "text-slate-400";
   const card = dayMode ? "border-slate-200 bg-slate-50" : "border-white/10 bg-white/[0.055]";
   const allPlotPoints = analysis ? [...analysis.route, ...analysis.best.points] : [];
@@ -309,7 +309,7 @@ export default function WeatherRouteRecommendation() {
     <aside className={`fixed bottom-4 right-4 z-[70] w-[min(460px,calc(100vw-24px))] rounded-2xl border shadow-2xl backdrop-blur-xl ${shell}`}>
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#c9a227]">WX ROUTING</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-[#f2b84b]">WX ROUTING</div>
           <div className="text-sm font-black uppercase tracking-[0.08em]">Safest + Most Efficient Route</div>
         </div>
         <button type="button" onClick={() => setCollapsed((value) => !value)} className={`rounded-lg border px-3 py-1.5 text-xs font-black ${dayMode ? "border-slate-300 bg-white" : "border-white/15 bg-white/10"}`}>
@@ -330,7 +330,7 @@ export default function WeatherRouteRecommendation() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className={`text-[10px] font-black uppercase tracking-[0.18em] ${muted}`}>Weather recommendation</div>
-                    <div className="mt-1 text-xl font-black text-[#c9a227]">{analysis.best.label}</div>
+                    <div className="mt-1 text-xl font-black text-[#f2b84b]">{analysis.best.label}</div>
                   </div>
                   <div className={`rounded-full px-2.5 py-1 text-[10px] font-black ${analysis.best.highCount ? "bg-red-500/20 text-red-400" : analysis.best.cautionCount ? "bg-amber-500/20 text-amber-400" : "bg-emerald-500/20 text-emerald-400"}`}>
                     {analysis.best.highCount ? "NOT RECOMMENDED" : analysis.best.cautionCount ? "ACCEPTABLE" : "RECOMMENDED"}
@@ -342,10 +342,10 @@ export default function WeatherRouteRecommendation() {
               <div className={`mt-3 rounded-xl border p-2 ${card}`}>
                 <svg viewBox="0 0 410 126" className="h-28 w-full" role="img" aria-label="Loaded route and weather recommended route schematic">
                   <path d={loadedPath} fill="none" stroke="#64748b" strokeWidth="3" strokeDasharray="7 6" opacity="0.8" />
-                  <path d={recommendedPath} fill="none" stroke="#c9a227" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d={recommendedPath} fill="none" stroke="#f2b84b" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <div className={`flex items-center justify-between px-1 text-[10px] font-bold ${muted}`}>
-                  <span>--- Loaded RTZ</span><span className="text-[#c9a227]">━━ Recommended</span>
+                  <span>--- Loaded RTZ</span><span className="text-[#f2b84b]">━━ Recommended</span>
                 </div>
               </div>
 
@@ -379,7 +379,7 @@ export default function WeatherRouteRecommendation() {
               <div className="mt-3 space-y-1.5">
                 {analysis.candidates.slice(0, 3).map((candidate, index) => (
                   <div key={candidate.label} className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${card}`}>
-                    <div><span className="mr-2 font-black text-[#c9a227]">#{index + 1}</span><span className="font-black">{candidate.label}</span></div>
+                    <div><span className="mr-2 font-black text-[#f2b84b]">#{index + 1}</span><span className="font-black">{candidate.label}</span></div>
                     <div className={muted}>{candidate.safetyScore.toFixed(0)} SAFE · {candidate.addedNm > 0.5 ? `+${candidate.addedNm.toFixed(0)} NM` : "BASE"}</div>
                   </div>
                 ))}

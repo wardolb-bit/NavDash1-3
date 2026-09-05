@@ -89,7 +89,7 @@ export function BridgeMapLayerControls() {
     height: 28,
     padding: "0 10px",
     borderRadius: 3,
-    background: "#071019",
+    background: "#06111f",
     font: "800 9px system-ui",
     letterSpacing: ".08em",
     cursor: "pointer",
@@ -117,7 +117,7 @@ export function BridgeMapLayerControls() {
         onClick={() => setEncOn((value) => !value)}
         style={{
           ...buttonBase,
-          color: encOn ? "#45d6a8" : "#8294a5",
+          color: encOn ? "#45d6a8" : "#7f9caf",
           border: encOn ? "1px solid rgba(69,214,168,.55)" : "1px solid rgba(148,163,184,.25)",
         }}
       >
@@ -128,7 +128,7 @@ export function BridgeMapLayerControls() {
         onClick={() => setSeamarksOn((value) => !value)}
         style={{
           ...buttonBase,
-          color: seamarksOn ? "#42d3c8" : "#8294a5",
+          color: seamarksOn ? "#56bad0" : "#7f9caf",
           border: seamarksOn ? "1px solid rgba(66,211,200,.55)" : "1px solid rgba(148,163,184,.25)",
         }}
       >

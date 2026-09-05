@@ -419,7 +419,7 @@ export default function PositionReportPage() {
 
   async function copyReport() { await copyTextToClipboard(reportText); setCopyStatus('Report copied to clipboard.'); window.setTimeout(() => setCopyStatus(''), 3000); }
 
-  const pageClass = nightMode ? 'min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)] p-6 text-slate-100' : 'min-h-screen bg-white p-6 text-slate-950';
+  const pageClass = nightMode ? 'min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(242,184,75,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#06111f,#101c2b_48%,#06111f)] p-6 text-slate-100' : 'min-h-screen bg-white p-6 text-slate-950';
   const panelClass = nightMode ? 'rounded-[2rem] border border-white/10 bg-white/[0.055] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl' : 'rounded-[2rem] border border-slate-300 bg-white p-6 shadow-sm';
   const inputClass = nightMode ? 'w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-sm text-white outline-none focus:border-wardGold' : 'w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-sm text-slate-950 outline-none focus:border-wardGold';
   const labelClass = nightMode ? 'text-sm text-slate-200' : 'text-sm text-slate-700';
@@ -458,7 +458,7 @@ export default function PositionReportPage() {
               {Object.entries(manual).map(([key, value]) => <label key={key} className={labelClass}><span className={labelTextClass}>{formatFieldLabel(key)}</span><input className={inputClass} value={value} onChange={e => updateField(key as keyof typeof manual, e.target.value)} /></label>)}
             </div>
             <div className={nightMode ? "mt-4 rounded-2xl border border-white/10 bg-black/25 p-3 text-xs text-slate-300" : "mt-4 rounded-2xl border border-slate-300 bg-slate-50 p-3 text-xs text-slate-600"}>Report DTG: <span className="font-mono">{emailSubject}</span></div>
-            <button onClick={copyReport} className={nightMode ? "mt-6 rounded-2xl border border-wardGold/40 bg-wardGold px-5 py-3 font-black text-[#111827] shadow-lg shadow-wardGold/10 hover:brightness-110" : "mt-6 rounded-2xl border border-[#c9a227]/50 bg-[#c9a227] px-5 py-3 font-black text-slate-950 hover:brightness-105"}>Copy Report</button>
+            <button onClick={copyReport} className={nightMode ? "mt-6 rounded-2xl border border-wardGold/40 bg-wardGold px-5 py-3 font-black text-[#111827] shadow-lg shadow-wardGold/10 hover:brightness-110" : "mt-6 rounded-2xl border border-[#f2b84b]/50 bg-[#f2b84b] px-5 py-3 font-black text-slate-950 hover:brightness-105"}>Copy Report</button>
             {copyStatus && <div className={nightMode ? "mt-3 text-sm text-red-300" : "mt-3 text-sm text-emerald-700"}>{copyStatus}</div>}
           </section>
           <section className={panelClass}><h2 className="mb-4 text-xl font-black text-wardGold">Generated Report</h2><pre className={nightMode ? "whitespace-pre-wrap font-mono text-sm leading-5 text-slate-100" : "whitespace-pre-wrap font-mono text-sm leading-5 text-slate-900"}>{reportText}</pre></section>

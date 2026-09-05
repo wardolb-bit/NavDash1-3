@@ -1348,12 +1348,12 @@ export default function EcrTestPage() {
 
   const theme = localNightMode
     ? {
-        page: "min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(201,162,39,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#071019,#101c2b_48%,#071019)] p-6 text-slate-100",
+        page: "min-h-screen bg-[radial-gradient(circle_at_12%_0%,rgba(242,184,75,.28),transparent_30%),radial-gradient(circle_at_90%_10%,rgba(56,189,248,.12),transparent_28%),linear-gradient(135deg,#06111f,#101c2b_48%,#06111f)] p-6 text-slate-100",
         panel:
           "rounded-[2rem] border border-white/10 bg-white/[0.055] p-6 shadow-2xl shadow-black/30 backdrop-blur-xl",
         card: "rounded-3xl border border-white/10 bg-black/25 p-5",
         input:
-          "w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xl text-white outline-none focus:border-[#c9a227]",
+          "w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 font-mono text-xl text-white outline-none focus:border-[#f2b84b]",
         button:
           "rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xl font-bold text-slate-100 hover:bg-white/15",
         label: "text-xl font-bold uppercase tracking-[.18em] text-slate-400",
@@ -1365,7 +1365,7 @@ export default function EcrTestPage() {
         panel: "rounded-[2rem] border border-slate-300 bg-white p-6 shadow-sm",
         card: "rounded-3xl border border-slate-300 bg-slate-50 p-5",
         input:
-          "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-xl text-slate-950 outline-none focus:border-[#c9a227]",
+          "w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 font-mono text-xl text-slate-950 outline-none focus:border-[#f2b84b]",
         button:
           "rounded-2xl border border-slate-300 bg-slate-100 px-4 py-3 text-xl font-bold text-slate-900 hover:bg-white",
         label: "text-xl font-bold uppercase tracking-[.18em] text-slate-500",
