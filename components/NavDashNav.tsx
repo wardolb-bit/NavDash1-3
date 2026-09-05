@@ -8,7 +8,7 @@ type NavItem = { label: string; href: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
-  { label: "Console", items: [{ label: "Main Console", href: "/" }, { label: "ECR", href: "/ecr" }] },
+  { label: "Console", items: [{ label: "Main Console", href: "/" }, { label: "Tides", href: "/tides" }, { label: "ECR", href: "/ecr" }] },
   { label: "AIS", items: [{ label: "AIS Targets", href: "/ais-test" }] },
   { label: "Weather", items: [{ label: "Weather", href: "/wx" }, { label: "WX Routing", href: "/wx-routing" }, { label: "Official Weather", href: "/official-weather" }] },
   { label: "MSI", items: [{ label: "EGC / MSI", href: "/msi" }] },
