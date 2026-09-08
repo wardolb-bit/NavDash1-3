@@ -26,7 +26,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 const saved = localStorage.getItem("navConsoleTheme");
                 const theme = saved === "day" ? "day" : "bridge-night";
                 document.documentElement.setAttribute("data-navdash-theme", theme);
-                localStorage.removeItem("navdash-user-chart-v1");
               } catch {
                 document.documentElement.setAttribute("data-navdash-theme", "bridge-night");
               }
