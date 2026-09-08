@@ -73,6 +73,20 @@ function normalizeMarks(raw: any[]): UserMark[] {
 function parseUserChartText(text: string, fileName: string) {
   const trimmed = text.trim();
   if (!trimmed) throw new Error("User chart file is empty.");
+  if (/\.xml$/i.test(fileName) || trimmed.startsWith("<?xml") || trimmed.startsWith("<userchart")) {
+    const doc = new DOMParser().parseFromString(trimmed, "application/xml");
+    if (doc.querySelector("parsererror")) throw new Error("Could not parse user chart XML.");
+    const labels = Array.from(doc.querySelectorAll("userchart labels label, labels label, label"));
+    const marks = labels.map((label, index) => {
+      const vertex = label.querySelector("position vertex, vertex");
+      const lat = Number(vertex?.getAttribute("latitude"));
+      const lon = Number(vertex?.getAttribute("longitude"));
+      const name = label.getAttribute("name") || label.querySelector("attribute")?.getAttribute("labelText") || `Mark ${index + 1}`;
+      return { id: `mark-${index + 1}`, name, lat, lon };
+    }).filter(mark => Number.isFinite(mark.lat) && Number.isFinite(mark.lon) && Math.abs(mark.lat) <= 90 && Math.abs(mark.lon) <= 180);
+    if (!marks.length) throw new Error("No point labels were found in the user chart XML.");
+    return marks;
+  }
   if (/\.(json|geojson)$/i.test(fileName) || trimmed.startsWith("{") || trimmed.startsWith("[")) {
     const parsed = JSON.parse(trimmed);
     const raw = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.marks) ? parsed.marks : Array.isArray(parsed?.userMarks) ? parsed.userMarks : Array.isArray(parsed?.features) ? parsed.features : [];
@@ -202,8 +216,8 @@ export default function NavBriefBuilderPage() {
         <div className={`border p-3 ${panel}`}>
           <div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>02 · User Chart</div>
           <h2 className="mt-1 text-[15px] font-black">USER LAYER</h2>
-          <p className={`mt-1 text-[11px] leading-5 ${muted}`}>JSON / GeoJSON / CSV point marks. Imported marks are saved to the same user layer used by the main map.</p>
-          <input type="file" accept=".json,.geojson,.csv,.txt" onChange={loadUserChart} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} />
+          <p className={`mt-1 text-[11px] leading-5 ${muted}`}>Navtor user-chart XML, JSON / GeoJSON, or CSV point marks. Imported marks are saved to the same user layer used by the main map.</p>
+          <input type="file" accept=".xml,.json,.geojson,.csv,.txt" onChange={loadUserChart} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} />
           <div className={`mt-2 font-mono text-[10px] ${muted}`}>{userChartFile ? `FILE · ${userChartFile}` : userMarks.length ? `SAVED LAYER · ${userMarks.length} MARKS` : "NO USER CHART"}</div>
           {userChartError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{userChartError}</div>}
         </div>
