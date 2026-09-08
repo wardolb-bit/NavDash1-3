@@ -65,6 +65,7 @@ async function signedR2Request(method: "PUT" | "GET" | "DELETE", key: string, bo
 }
 
 export async function GET() {
+  // Fresh deployment marker after Preview environment variables were enabled.
   const key = "health/navdash-r2-test.json";
   const marker = JSON.stringify({ service: "NavDash", purpose: "R2 health check", timestamp: new Date().toISOString() });
 
