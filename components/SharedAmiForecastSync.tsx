@@ -9,6 +9,7 @@ const REFRESH_MS = 60_000;
 
 type SharedStateResponse = {
   ok: boolean;
+  initialized?: boolean;
   forecast?: AmiRouteForecast | null;
   updatedAt?: string | null;
   error?: string;
@@ -17,6 +18,17 @@ type SharedStateResponse = {
 function validForecast(value: unknown): value is AmiRouteForecast {
   const forecast = value as AmiRouteForecast | null;
   return Boolean(forecast && forecast.version === 1 && Array.isArray(forecast.forecastPoints));
+}
+
+function readLocalForecast(): AmiRouteForecast | null {
+  try {
+    const raw = window.localStorage.getItem(AMI_OVERLAY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return validForecast(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export function SharedAmiForecastSync() {
@@ -41,11 +53,28 @@ export function SharedAmiForecastSync() {
       }
     };
 
+    const writeShared = async (forecast: AmiRouteForecast | null) => {
+      return fetch(SHARED_STATE_URL, {
+        method: forecast ? "PUT" : "DELETE",
+        headers: forecast ? { "Content-Type": "application/json" } : undefined,
+        body: forecast ? JSON.stringify({ forecast }) : undefined,
+        cache: "no-store",
+      });
+    };
+
     const refreshFromShared = async () => {
       try {
         const response = await fetch(SHARED_STATE_URL, { cache: "no-store" });
         const json = (await response.json()) as SharedStateResponse;
         if (!response.ok || !json.ok) return;
+
+        if (!json.initialized) {
+          const local = readLocalForecast();
+          const seedResponse = await writeShared(local);
+          if (seedResponse.ok) applyRemote(local);
+          return;
+        }
+
         applyRemote(validForecast(json.forecast) ? json.forecast : null);
       } catch {
         // Keep the most recent local overlay if shared state is temporarily unavailable.
@@ -57,15 +86,8 @@ export function SharedAmiForecastSync() {
       const custom = event as CustomEvent<AmiRouteForecast | null>;
       const forecast = validForecast(custom.detail) ? custom.detail : null;
       try {
-        const response = await fetch(SHARED_STATE_URL, {
-          method: forecast ? "PUT" : "DELETE",
-          headers: forecast ? { "Content-Type": "application/json" } : undefined,
-          body: forecast ? JSON.stringify({ forecast }) : undefined,
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          window.setTimeout(refreshFromShared, 1500);
-        }
+        const response = await writeShared(forecast);
+        if (!response.ok) window.setTimeout(refreshFromShared, 1500);
       } catch {
         window.setTimeout(refreshFromShared, 1500);
       }
