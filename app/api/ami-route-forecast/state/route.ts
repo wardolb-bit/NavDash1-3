@@ -16,6 +16,16 @@ function headers(extra: Record<string, string> = {}) {
   };
 }
 
+async function writeState(forecast: unknown) {
+  const response = await fetch(TABLE_URL, {
+    method: "POST",
+    headers: headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
+    body: JSON.stringify({ id: "current", forecast, updated_at: new Date().toISOString() }),
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Supabase write failed: ${response.status} ${await response.text()}`);
+}
+
 export async function GET() {
   try {
     const response = await fetch(`${TABLE_URL}?id=eq.current&select=forecast,updated_at&limit=1`, {
@@ -26,7 +36,12 @@ export async function GET() {
     const rows = await response.json();
     const row = Array.isArray(rows) ? rows[0] : null;
     return NextResponse.json(
-      { ok: true, forecast: row?.forecast ?? null, updatedAt: row?.updated_at ?? null },
+      {
+        ok: true,
+        initialized: Boolean(row),
+        forecast: row?.forecast ?? null,
+        updatedAt: row?.updated_at ?? null,
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
@@ -44,14 +59,7 @@ export async function PUT(request: NextRequest) {
     if (!forecast || forecast.version !== 1 || !Array.isArray(forecast.forecastPoints)) {
       return NextResponse.json({ ok: false, error: "Invalid AMI forecast payload." }, { status: 400 });
     }
-
-    const response = await fetch(TABLE_URL, {
-      method: "POST",
-      headers: headers({ Prefer: "resolution=merge-duplicates,return=minimal" }),
-      body: JSON.stringify({ id: "current", forecast, updated_at: new Date().toISOString() }),
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`Supabase write failed: ${response.status} ${await response.text()}`);
+    await writeState(forecast);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
@@ -63,12 +71,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE() {
   try {
-    const response = await fetch(`${TABLE_URL}?id=eq.current`, {
-      method: "DELETE",
-      headers: headers({ Prefer: "return=minimal" }),
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error(`Supabase delete failed: ${response.status} ${await response.text()}`);
+    await writeState(null);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return NextResponse.json(
