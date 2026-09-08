@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
+import type { AmiForecastPoint, AmiRouteForecast } from "../lib/amiRouteForecast";
 
 type OwnShip = { lat: number; lon: number; sog: number; cog: number; heading: number | null };
 type Waypoint = { id?: string; name?: string; lat: number; lon: number };
@@ -14,6 +15,7 @@ type MeasureMode = "ship" | "points";
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v3";
 const USER_CHART_STORAGE_KEY = "navdash-user-chart-v1";
+const AMI_OVERLAY_STORAGE_KEY = "navdash-ami-route-forecast-v1";
 
 function sixBitCharToValue(char: string) {
   let value = char.charCodeAt(0) - 48;
@@ -276,6 +278,35 @@ function readUserChart(): UserMark[] {
   } catch { return []; }
 }
 
+function readAmiOverlay(): AmiRouteForecast | null {
+  try {
+    const raw = window.localStorage.getItem(AMI_OVERLAY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AmiRouteForecast;
+    if (parsed?.version !== 1 || !Array.isArray(parsed.forecastPoints)) return null;
+    return parsed;
+  } catch { return null; }
+}
+
+function escapeMapText(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+}
+
+function amiTime(value: string) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return value;
+  return `${String(date.getUTCDate()).padStart(2, "0")} ${date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase()} ${String(date.getUTCHours()).padStart(2, "0")}00Z`;
+}
+
+function amiTooltip(point: AmiForecastPoint) {
+  return `<strong>${escapeMapText(amiTime(point.validAt))}</strong><br>`
+    + `Position ${point.lat.toFixed(2)}°, ${point.lon.toFixed(2)}°<br>`
+    + `Wind ${String(point.windDirectionDeg).padStart(3, "0")}° / ${point.windSpeedKt} kt, gust ${point.gustKt} kt<br>`
+    + `Seas ${point.significantWaveM.toFixed(1)} m @ ${point.significantWavePeriodSec}s, max ${point.maximumWaveM.toFixed(1)} m<br>`
+    + `Swell ${String(point.swellDirectionDeg).padStart(3, "0")}° / ${point.swellHeightM.toFixed(1)} m @ ${point.swellPeriodSec}s<br>`
+    + `${escapeMapText(point.conditions)} · Visibility ${point.visibilityKm} km · ${escapeMapText(point.confidence)} confidence`;
+}
+
 export function NavMapMainOverlayV2() {
   const [host, setHost] = useState<HTMLElement | null>(null);
 
@@ -310,6 +341,7 @@ function IsolatedMainMap() {
   const routeLayerRef = useRef<any>(null);
   const routeMarkersRef = useRef<any[]>([]);
   const celestialLayerRef = useRef<any>(null);
+  const amiLayerRef = useRef<any>(null);
   const userChartLayerRef = useRef<any>(null);
   const measurementLayerRef = useRef<any>(null);
   const routeSignatureRef = useRef("");
@@ -326,6 +358,9 @@ function IsolatedMainMap() {
   const [userMarks, setUserMarks] = useState<UserMark[]>([]);
   const [measurement, setMeasurement] = useState<{ distanceNm: number; bearing: number; source: MeasureMode } | null>(null);
   const [sunEventsVisible, setSunEventsVisible] = useState(true);
+  const [amiOverlay, setAmiOverlay] = useState<AmiRouteForecast | null>(null);
+  const [amiVisible, setAmiVisible] = useState(true);
+  const [amiSelectedIndex, setAmiSelectedIndex] = useState(0);
 
   useEffect(() => { toolModeRef.current = toolMode; }, [toolMode]);
   useEffect(() => { measureModeRef.current = measureMode; }, [measureMode]);
@@ -347,6 +382,18 @@ function IsolatedMainMap() {
 
   useEffect(() => { setUserMarks(readUserChart()); }, []);
   useEffect(() => { try { window.localStorage.setItem(USER_CHART_STORAGE_KEY, JSON.stringify(userMarks)); } catch {} }, [userMarks]);
+  useEffect(() => {
+    const refresh = (event?: Event) => {
+      const custom = event as CustomEvent<AmiRouteForecast | null>;
+      const next = custom?.detail === null ? null : custom?.detail?.version === 1 ? custom.detail : readAmiOverlay();
+      setAmiOverlay(next);
+      setAmiSelectedIndex(0);
+    };
+    refresh();
+    window.addEventListener("storage", refresh);
+    window.addEventListener("navdash-ami-overlay-updated", refresh);
+    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("navdash-ami-overlay-updated", refresh); };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -390,10 +437,13 @@ function IsolatedMainMap() {
       toolPane.style.zIndex = "730";
       const celestialPane = map.createPane("navmap-main-celestial-v1");
       celestialPane.style.zIndex = "740";
+      const amiPane = map.createPane("navmap-main-ami-v1");
+      amiPane.style.zIndex = "745";
       ownLayerRef.current = L.layerGroup([], { pane: "navmap-main-ownship-v2" } as any).addTo(map);
       userChartLayerRef.current = L.layerGroup([], { pane: "navmap-main-tools-v1" } as any).addTo(map);
       measurementLayerRef.current = L.layerGroup([], { pane: "navmap-main-tools-v1" } as any).addTo(map);
       celestialLayerRef.current = L.layerGroup([], { pane: "navmap-main-celestial-v1" } as any).addTo(map);
+      amiLayerRef.current = L.layerGroup([], { pane: "navmap-main-ami-v1" } as any).addTo(map);
       mapRef.current = map;
 
       const drawMeasurement = (start: MeasurePoint, end: MeasurePoint, source: MeasureMode) => {
@@ -480,6 +530,7 @@ function IsolatedMainMap() {
       ownLayerRef.current = null; ownMarkerRef.current = null; headingVectorRef.current = null; cogVectorRef.current = null;
       routeLayerRef.current = null; routeMarkersRef.current = [];
       userChartLayerRef.current = null; measurementLayerRef.current = null; celestialLayerRef.current = null;
+      amiLayerRef.current = null;
     };
   }, []);
 
@@ -571,6 +622,45 @@ function IsolatedMainMap() {
   }, [route, ownShip?.lat, ownShip?.lon, ownShip?.sog, sunEventsVisible]);
 
   useEffect(() => {
+    async function updateAmiOverlay() {
+      const map = mapRef.current;
+      const layer = amiLayerRef.current;
+      if (!map || !layer) return;
+      const L = await import("leaflet");
+      layer.clearLayers();
+      if (!amiVisible || !amiOverlay?.forecastPoints.length) return;
+      const centerLon = map.getCenter().lng;
+      const offsets = [-360, 0, 360];
+      amiOverlay.forecastPoints.forEach((point, index) => {
+        const selected = index === Math.min(amiSelectedIndex, amiOverlay.forecastPoints.length - 1);
+        const baseLon = longitudeNearReference(point.lon, centerLon);
+        for (const offset of offsets) {
+          const icon = L.divIcon({
+            className: "navmap-ami-wind-icon",
+            html: `<div class="navmap-ami-wind ${selected ? "is-selected" : ""}"><span class="navmap-ami-staff" style="transform:rotate(${point.windDirectionDeg}deg)"></span><b>${point.windSpeedKt}</b><small>KT</small></div>`,
+            iconSize: [42, 42], iconAnchor: [21, 21],
+          });
+          L.marker([point.lat, baseLon + offset], { icon, pane: "navmap-main-ami-v1" }).bindTooltip(amiTooltip(point), { direction: "top", opacity: 0.98, pane: "navmap-main-ami-v1" }).addTo(layer);
+        }
+      });
+
+      if (amiOverlay.cyclone?.track.length) {
+        const points = amiOverlay.cyclone.track.map((point) => [point.lat, longitudeNearReference(point.lon, centerLon)] as [number, number]);
+        for (const offset of offsets) {
+          L.polyline(points.map(([lat, lon]) => [lat, lon + offset]), { pane: "navmap-main-ami-v1", color: "#fb7185", weight: 3, opacity: 0.9, dashArray: "8 6" }).addTo(layer);
+          amiOverlay.cyclone.track.forEach((point) => {
+            const lon = longitudeNearReference(point.lon, centerLon) + offset;
+            L.circle([point.lat, lon], { pane: "navmap-main-ami-v1", radius: point.radius34KtNm * 1852, color: "#fb7185", fillColor: "#fb7185", fillOpacity: 0.035, weight: 1 }).addTo(layer);
+            L.circleMarker([point.lat, lon], { pane: "navmap-main-ami-v1", radius: 5, color: "#fecdd3", fillColor: "#9f1239", fillOpacity: 1, weight: 2 })
+              .bindTooltip(`<strong>${escapeMapText(amiOverlay.cyclone!.name)}</strong><br>${escapeMapText(amiTime(point.validAt))}<br>Max wind ${point.maximumWindKt} kt<br>34 kt radius ${point.radius34KtNm} NM${point.radius50KtNm !== null ? `<br>50 kt radius ${point.radius50KtNm} NM` : ""}`, { pane: "navmap-main-ami-v1" }).addTo(layer);
+          });
+        }
+      }
+    }
+    updateAmiOverlay();
+  }, [amiOverlay, amiVisible, amiSelectedIndex]);
+
+  useEffect(() => {
     async function updateUserChart() {
       const layer = userChartLayerRef.current;
       if (!layer) return;
@@ -646,6 +736,10 @@ function IsolatedMainMap() {
             <input type="checkbox" checked={sunEventsVisible} onChange={(event) => setSunEventsVisible(event.target.checked)} style={{ width: 14, height: 14, accentColor: "#fbbf24", cursor: "pointer" }} />
             SUN EVENTS
           </label>
+          <label style={{ ...buttonStyle(amiVisible && Boolean(amiOverlay)), display: "inline-flex", alignItems: "center", gap: 7, cursor: amiOverlay ? "pointer" : "default", opacity: amiOverlay ? 1 : 0.55 }}>
+            <input type="checkbox" checked={amiVisible && Boolean(amiOverlay)} disabled={!amiOverlay} onChange={(event) => setAmiVisible(event.target.checked)} style={{ width: 14, height: 14, accentColor: "#22d3ee", cursor: amiOverlay ? "pointer" : "default" }} />
+            AMI WX
+          </label>
         </div>
         <div style={{ padding: "8px 10px", minHeight: 36, display: "flex", alignItems: "center", border: "1px solid rgba(34,211,238,.28)", borderRadius: 6, background: "rgba(5,12,18,.88)", color: "#d7e7ee", fontSize: 12, fontWeight: 650, pointerEvents: "auto" }}>
           {toolMode === "measure" && measureMode === "ship" && !measurement ? (ownShip ? "Tap map for range / bearing from ship" : "Waiting for AIS position") : null}
@@ -654,8 +748,18 @@ function IsolatedMainMap() {
           {measurement ? `${measurement.source === "ship" ? "SHIP → " : ""}${measurement.bearing.toFixed(1)}°T · ${measurement.distanceNm.toFixed(2)} NM` : null}
           {toolMode === "pan" && !measurement ? `${userMarks.length} user mark${userMarks.length === 1 ? "" : "s"}` : null}
         </div>
+        {amiOverlay?.forecastPoints.length ? (
+          <div style={{ minWidth: 280, padding: "7px 10px", border: "1px solid rgba(34,211,238,.35)", borderRadius: 7, background: "rgba(5,12,18,.92)", color: "#d7e7ee", pointerEvents: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 11, fontWeight: 750 }}>
+              <span>AMI ROUTE WX</span>
+              <span style={{ color: "#67e8f9" }}>{amiTime(amiOverlay.forecastPoints[Math.min(amiSelectedIndex, amiOverlay.forecastPoints.length - 1)].validAt)}</span>
+            </div>
+            <input aria-label="AMI forecast time" type="range" min={0} max={amiOverlay.forecastPoints.length - 1} step={1} value={Math.min(amiSelectedIndex, amiOverlay.forecastPoints.length - 1)} onChange={(event) => setAmiSelectedIndex(Number(event.target.value))} style={{ width: "100%", accentColor: "#22d3ee" }} />
+            <div style={{ fontSize: 10, color: "#94a3b8" }}>{amiOverlay.sourceName} · {amiOverlay.forecastPoints.length} coordinate points</div>
+          </div>
+        ) : null}
       </div>
-      <style>{`.navmap-measure-label{background:#071019!important;border:1px solid #22d3ee!important;color:#d9fbff!important;box-shadow:none!important;font:700 12px/1.2 system-ui,sans-serif!important;padding:5px 7px!important}.navmap-measure-label:before{display:none!important}`}</style>
+      <style>{`.navmap-measure-label{background:#071019!important;border:1px solid #22d3ee!important;color:#d9fbff!important;box-shadow:none!important;font:700 12px/1.2 system-ui,sans-serif!important;padding:5px 7px!important}.navmap-measure-label:before{display:none!important}.navmap-ami-wind-icon{background:transparent!important;border:0!important}.navmap-ami-wind{position:relative;width:42px;height:42px;border:2px solid #67e8f9;border-radius:50%;background:rgba(7,16,25,.92);color:#e6fbff;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px rgba(7,16,25,.75);font:800 12px/1 system-ui,sans-serif}.navmap-ami-wind.is-selected{border-color:#f1d56b;box-shadow:0 0 0 3px rgba(241,213,107,.32),0 0 12px rgba(34,211,238,.65)}.navmap-ami-wind small{position:absolute;bottom:4px;font-size:7px;color:#94a3b8}.navmap-ami-staff{position:absolute;left:19px;top:-14px;width:3px;height:21px;background:#67e8f9;transform-origin:50% 35px;border-radius:2px}.navmap-ami-staff:before{content:"";position:absolute;left:-3px;top:-1px;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:7px solid #67e8f9}`}</style>
     </>
   );
 }

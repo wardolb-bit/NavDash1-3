@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
+import type { AmiRouteForecast } from "../lib/amiRouteForecast";
 import { useBridgeTheme } from "../lib/useBridgeTheme";
 
 type OwnShip = {
@@ -20,6 +21,10 @@ type BriefResponse = {
   sourceName?: string;
   error?: string;
 };
+
+type OverlayResponse = { ok: boolean; forecast?: AmiRouteForecast; error?: string };
+
+const AMI_OVERLAY_STORAGE_KEY = "navdash-ami-route-forecast-v1";
 
 function sixBitCharToValue(char: string) {
   const code = char.charCodeAt(0);
@@ -79,6 +84,8 @@ export default function AiWeatherBrief() {
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const [overlayLoading, setOverlayLoading] = useState(false);
+  const [overlayStatus, setOverlayStatus] = useState("");
   const [summary, setSummary] = useState("");
   const [error, setError] = useState("");
   const [ownShip, setOwnShip] = useState<OwnShip>({});
@@ -187,6 +194,37 @@ export default function AiWeatherBrief() {
     }
   }
 
+  async function addToChart() {
+    if (!file) {
+      setError("Select an AMI weather PDF first.");
+      return;
+    }
+    setOverlayLoading(true);
+    setOverlayStatus("");
+    setError("");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/ami-route-forecast", { method: "POST", body: form });
+      const json = (await response.json()) as OverlayResponse;
+      if (!response.ok || !json.ok || !json.forecast) throw new Error(json.error || `${response.status} ${response.statusText}`);
+      window.localStorage.setItem(AMI_OVERLAY_STORAGE_KEY, JSON.stringify(json.forecast));
+      window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: json.forecast }));
+      const skipped = json.forecast.skippedLocationRows;
+      setOverlayStatus(`Chart overlay saved: ${json.forecast.forecastPoints.length} route point${json.forecast.forecastPoints.length === 1 ? "" : "s"}${json.forecast.cyclone ? ` and ${json.forecast.cyclone.track.length} cyclone positions` : ""}.${skipped ? ` ${skipped} post-arrival row${skipped === 1 ? " was" : "s were"} omitted because the PDF gave no coordinates.` : ""}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "AMI chart overlay failed.");
+    } finally {
+      setOverlayLoading(false);
+    }
+  }
+
+  function clearChartOverlay() {
+    window.localStorage.removeItem(AMI_OVERLAY_STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: null }));
+    setOverlayStatus("AMI chart overlay cleared.");
+  }
+
   function printBrief() {
     if (!summary) return;
 
@@ -293,13 +331,18 @@ export default function AiWeatherBrief() {
                     setFile(event.target.files?.[0] || null);
                     setSummary("");
                     setError("");
+                    setOverlayStatus("");
                     setMeta({});
                   }}
                 />
                 <button type="button" className={secondaryButton} onClick={() => inputRef.current?.click()}>Load AMI PDF</button>
+                <button type="button" className={primaryButton} disabled={!file || overlayLoading} onClick={addToChart}>
+                  {overlayLoading ? "Reading PDF..." : "Add to Chart"}
+                </button>
                 <button type="button" className={primaryButton} disabled={!file || loading} onClick={analyze}>
                   {loading ? "Analyzing..." : "Analyze Weather"}
                 </button>
+                <button type="button" className={secondaryButton} onClick={clearChartOverlay}>Clear Chart WX</button>
               </div>
             </div>
 
@@ -308,6 +351,7 @@ export default function AiWeatherBrief() {
             </div>
 
             {error ? <div className="mt-4 rounded-xl border border-red-400/50 bg-red-950/30 p-4 text-2xl text-red-100">{error}</div> : null}
+            {overlayStatus ? <div className={`mt-4 rounded-xl border p-4 text-2xl ${nightMode ? "border-cyan-300/30 bg-cyan-950/25 text-cyan-100" : "border-cyan-300 bg-cyan-50 text-cyan-950"}`}>{overlayStatus}</div> : null}
 
             {summary ? (
               <div className="mt-5">
