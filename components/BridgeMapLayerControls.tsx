@@ -57,7 +57,19 @@ export function BridgeMapLayerControls() {
         const src = tile.src || "";
         if (src.includes("tiles.openseamap.org/seamark")) {
           tile.style.setProperty("display", seamarksOn ? "" : "none", "important");
-        } else if (src.includes("gis.charttools.noaa.gov")) {
+          return;
+        }
+
+        if (src.includes("gis.charttools.noaa.gov")) {
+          try {
+            const sourceUrl = new URL(src);
+            tile.src = `/api/noaa-charts/wms${sourceUrl.search}`;
+          } catch {}
+          tile.style.setProperty("display", encOn ? "" : "none", "important");
+          return;
+        }
+
+        if (src.includes("/api/noaa-charts/wms")) {
           tile.style.setProperty("display", encOn ? "" : "none", "important");
         }
       });
