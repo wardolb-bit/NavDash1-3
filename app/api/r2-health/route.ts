@@ -24,17 +24,19 @@ function encodePath(path: string) {
 }
 
 async function signedR2Request(method: "PUT" | "GET" | "DELETE", key: string, body = "") {
-  const accountId = process.env.R2_ACCOUNT_ID;
+  const endpoint = process.env.R2_ENDPOINT;
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
   const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
   const bucket = process.env.R2_BUCKET_NAME;
 
-  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
+  if (!endpoint || !accessKeyId || !secretAccessKey || !bucket) {
     throw new Error("Missing one or more R2 environment variables.");
   }
 
-  const host = `${accountId}.r2.cloudflarestorage.com`;
-  const canonicalUri = `/${encodePath(bucket)}/${encodePath(key)}`;
+  const endpointUrl = new URL(endpoint);
+  const host = endpointUrl.host;
+  const basePath = endpointUrl.pathname.replace(/\/$/, "");
+  const canonicalUri = `${basePath}/${encodePath(bucket)}/${encodePath(key)}` || "/";
   const now = new Date();
   const timestamp = amzDate(now);
   const dateStamp = timestamp.slice(0, 8);
@@ -51,7 +53,7 @@ async function signedR2Request(method: "PUT" | "GET" | "DELETE", key: string, bo
   const signature = createHmac("sha256", kSigning).update(stringToSign).digest("hex");
   const authorization = `AWS4-HMAC-SHA256 Credential=${accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
-  return fetch(`https://${host}${canonicalUri}`, {
+  return fetch(new URL(canonicalUri, `${endpointUrl.protocol}//${host}`).toString(), {
     method,
     headers: {
       Authorization: authorization,
@@ -65,7 +67,6 @@ async function signedR2Request(method: "PUT" | "GET" | "DELETE", key: string, bo
 }
 
 export async function GET() {
-  // Fresh deployment marker after Preview environment variables were enabled.
   const key = "health/navdash-r2-test.json";
   const marker = JSON.stringify({ service: "NavDash", purpose: "R2 health check", timestamp: new Date().toISOString() });
 
