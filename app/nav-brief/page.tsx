@@ -7,6 +7,7 @@ import type { AmiForecastPoint, AmiRouteForecast } from "../../lib/amiRouteForec
 type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteBrief = { routeName: string; waypoints: Waypoint[] };
 type UserMark = { id: string; name: string; lat: number; lon: number };
+type OverlayResponse = { ok: boolean; forecast?: AmiRouteForecast; error?: string };
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const USER_CHART_STORAGE_KEY = "navdash-user-chart-v1";
@@ -124,6 +125,9 @@ export default function NavBriefBuilderPage() {
   const [userChartFile, setUserChartFile] = useState("");
   const [userChartError, setUserChartError] = useState("");
   const [ami, setAmi] = useState<AmiRouteForecast | null>(null);
+  const [amiFile, setAmiFile] = useState("");
+  const [amiLoading, setAmiLoading] = useState(false);
+  const [amiError, setAmiError] = useState("");
   const [opsNotes, setOpsNotes] = useState("");
   const [portNotes, setPortNotes] = useState("");
 
@@ -164,6 +168,21 @@ export default function NavBriefBuilderPage() {
   }, []);
   async function loadRtz(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setRouteError(""); try { setRoute(parseRtz(await file.text())); setRouteSource(`RTZ · ${file.name}`); } catch (e) { setRouteError(e instanceof Error ? e.message : "Unable to load route."); } }
   async function loadUserChart(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setUserChartError(""); try { const marks = parseUserChartText(await file.text(), file.name); setUserMarks(marks); setUserChartFile(file.name); window.localStorage.setItem(USER_CHART_STORAGE_KEY, JSON.stringify(marks)); window.dispatchEvent(new CustomEvent("navdash-user-chart-updated")); } catch (e) { setUserChartError(e instanceof Error ? e.message : "Unable to load user chart."); } }
+  async function loadAmiPdf(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setAmiError(""); setAmiLoading(true); setAmiFile(file.name);
+    try {
+      const form = new FormData(); form.append("file", file);
+      const response = await fetch("/api/ami-route-forecast", { method: "POST", body: form });
+      const json = (await response.json()) as OverlayResponse;
+      if (!response.ok || !json.ok || !json.forecast) throw new Error(json.error || `${response.status} ${response.statusText}`);
+      setAmi(json.forecast);
+      window.localStorage.setItem(AMI_OVERLAY_STORAGE_KEY, JSON.stringify(json.forecast));
+      window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: json.forecast }));
+    } catch (e) { setAmiError(e instanceof Error ? e.message : "AMI route forecast could not be read."); }
+    finally { setAmiLoading(false); }
+  }
   function refreshInputs() { const current = readCurrentRoute(); if (current) { setRoute(current); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); } setUserMarks(readUserMarks()); setAmi(readAmi()); }
 
   const status = [
@@ -224,7 +243,7 @@ export default function NavBriefBuilderPage() {
 
         <div className={`border p-3 ${panel}`}>
           <div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>03 · Planning</div>
-          <h2 className="mt-1 text-[15px] font-black">VOYAGE INPUTS</h2>
+          <h2 className="mt-1 text-[15px] font-black">VOYAGE INPUTS / AMI WX</h2>
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             <label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Departure
               <input type="datetime-local" value={departure} onChange={e => setDeparture(e.target.value)} className={`mt-1 w-full border px-3 py-2 text-[11px] normal-case tracking-normal ${input}`} />
@@ -233,7 +252,10 @@ export default function NavBriefBuilderPage() {
               <input type="number" min="1" step="0.1" value={plannedSpeed} onChange={e => setPlannedSpeed(e.target.value)} className={`mt-1 w-full border px-3 py-2 text-[11px] normal-case tracking-normal ${input}`} />
             </label>
           </div>
-          <div className={`mt-2 font-mono text-[10px] ${muted}`}>{ami ? `AMI · ${ami.sourceName}` : "AMI OVERLAY · NOT LOADED"}</div>
+          <div className={`mt-3 text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>AMI Weather PDF</div>
+          <input type="file" accept="application/pdf,.pdf" onChange={loadAmiPdf} disabled={amiLoading} className={`mt-1 w-full border px-3 py-2 text-[11px] ${input}`} />
+          <div className={`mt-2 font-mono text-[10px] ${muted}`}>{amiLoading ? "READING AMI PDF..." : amiFile ? `FILE · ${amiFile}` : ami ? `AMI · ${ami.sourceName}` : "AMI OVERLAY · NOT LOADED"}</div>
+          {amiError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{amiError}</div>}
         </div>
       </section>
 
