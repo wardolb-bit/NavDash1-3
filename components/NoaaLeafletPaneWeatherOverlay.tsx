@@ -30,6 +30,7 @@ type NoaaForecast = {
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_PANE = "navmap-main-noaa-wx-v1";
+const NOAA_TOOLTIP_PANE = "navmap-main-noaa-wx-tooltip-v1";
 
 function normalizeRoute(payload: any): Waypoint[] {
   return (Array.isArray(payload?.waypoints) ? payload.waypoints : [])
@@ -182,6 +183,12 @@ export function NoaaLeafletPaneWeatherOverlay() {
         pane.style.zIndex = "750";
         pane.style.pointerEvents = "auto";
       }
+      let tooltipPane = map.getPane(NOAA_TOOLTIP_PANE);
+      if (!tooltipPane) {
+        tooltipPane = map.createPane(NOAA_TOOLTIP_PANE);
+        tooltipPane.style.zIndex = "950";
+        tooltipPane.style.pointerEvents = "none";
+      }
       if (!layerRef.current) layerRef.current = L.layerGroup([], { pane: NOAA_PANE } as any).addTo(map);
       const layer = layerRef.current;
       layer.clearLayers();
@@ -198,7 +205,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
             iconAnchor: [44, 31],
           });
           const marker = L.marker([point.lat, baseLon + offset], { icon, pane: NOAA_PANE });
-          marker.bindTooltip(`${validLabel(frame.validAt)} | ${windSpeedText(point)}${point.gustKt === null ? "" : ` | ${gustText(point)}`} | ${directionText(point)} | Seas ${point.waveHeightFt ?? "--"} ft @ ${point.wavePeriodSec ?? "--"} s | ${point.source}`, { direction: "top", opacity: 0.98, pane: NOAA_PANE });
+          marker.bindTooltip(`${validLabel(frame.validAt)} | ${windSpeedText(point)}${point.gustKt === null ? "" : ` | ${gustText(point)}`} | ${directionText(point)} | Seas ${point.waveHeightFt ?? "--"} ft @ ${point.wavePeriodSec ?? "--"} s | ${point.source}`, { direction: "top", opacity: 0.98, pane: NOAA_TOOLTIP_PANE });
           marker.addTo(layer);
         }
       }
