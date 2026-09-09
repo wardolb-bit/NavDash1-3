@@ -5,6 +5,7 @@ import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 
 const ROUTE_CACHE_KEY = "navdash-wx-routing-route";
 const GRIB_CACHE_KEY = "navdash-wx-routing-grib";
+const SOURCE_KEY = "navdash-wx-routing-source";
 
 function cacheJson(key: string, value: unknown) {
   try { window.sessionStorage.setItem(key, JSON.stringify(value)); } catch {}
@@ -14,6 +15,9 @@ function readJson(key: string) {
 }
 function clearJson(key: string) {
   try { window.sessionStorage.removeItem(key); } catch {}
+}
+function sourceMode() {
+  try { return window.localStorage.getItem(SOURCE_KEY) === "noaa" ? "noaa" : "grib"; } catch { return "grib"; }
 }
 function requestDetails(input: RequestInfo | URL, init?: RequestInit) {
   const request = input instanceof Request ? input : null;
@@ -114,12 +118,28 @@ function noaaAsGrib(noaa: any) {
     status: "NOAA route weather loaded",
     summary: `${noaa?.coveredSampleCount ?? overlayPoints.length}/${noaa?.sampleCount ?? overlayPoints.length} NOAA route samples`,
     sourceNotes: `${noaa?.provider || "NOAA / National Weather Service"} · ${noaa?.product || "Route forecast"}`,
-    inventoryPreview: "NOAA route weather fallback. Existing GRIB upload remains preferred when loaded.",
+    inventoryPreview: "NOAA route weather source for WX Routing.",
     timeline,
     overlayPoints,
     routeForecast: null,
     isobarGrid: [],
   };
+}
+
+async function loadNoaaFallback(nativeFetch: typeof window.fetch, routeData: any) {
+  if (!validRoute(routeData)) return null;
+  try {
+    const noaaResponse = await nativeFetch("/api/noaa-route-weather", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waypoints: routeData.waypoints }),
+      cache: "no-store",
+    });
+    if (!noaaResponse.ok) return null;
+    return noaaAsGrib(await noaaResponse.json());
+  } catch {
+    return null;
+  }
 }
 
 export default function WeatherRoutingDataBridge() {
@@ -157,9 +177,11 @@ export default function WeatherRoutingDataBridge() {
           }
 
           if (isGrib) {
-            if (data?.hasGrib) { cacheJson(GRIB_CACHE_KEY, data); return response; }
+            const forceNoaa = sourceMode() === "noaa";
+            if (!forceNoaa && data?.hasGrib) { cacheJson(GRIB_CACHE_KEY, data); return response; }
+
             const cachedGrib = readJson(GRIB_CACHE_KEY);
-            if (cachedGrib?.hasGrib && cachedGrib?.fileName !== "NOAA Route Forecast") return jsonResponse(cachedGrib);
+            if (!forceNoaa && cachedGrib?.hasGrib && cachedGrib?.fileName !== "NOAA Route Forecast") return jsonResponse(cachedGrib);
 
             let routeData = readJson(ROUTE_CACHE_KEY);
             if (!validRoute(routeData)) {
@@ -168,21 +190,14 @@ export default function WeatherRoutingDataBridge() {
                 if (routeResponse.ok) routeData = await routeResponse.json();
               } catch {}
             }
-            if (validRoute(routeData)) {
-              try {
-                const noaaResponse = await nativeFetch("/api/noaa-route-weather", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ waypoints: routeData.waypoints }),
-                  cache: "no-store",
-                });
-                if (noaaResponse.ok) {
-                  const noaaData = await noaaResponse.json();
-                  const fallback = noaaAsGrib(noaaData);
-                  if (fallback) { cacheJson(GRIB_CACHE_KEY, fallback); return jsonResponse(fallback); }
-                }
-              } catch {}
+
+            const noaa = await loadNoaaFallback(nativeFetch, routeData);
+            if (noaa) {
+              cacheJson(GRIB_CACHE_KEY, noaa);
+              return jsonResponse(noaa);
             }
+
+            if (data?.hasGrib) return response;
             if (cachedGrib?.hasGrib) return jsonResponse(cachedGrib);
           }
         } catch {}
