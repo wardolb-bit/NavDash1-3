@@ -38,10 +38,13 @@ export default function WeatherSourceSelector() {
   });
 
   return (
-    <div style={{ position: "fixed", right: 14, top: 14, zIndex: 5000, display: "flex", gap: 5, padding: 5, border: "1px solid rgba(148,163,184,.22)", borderRadius: 6, background: "rgba(4,8,12,.94)", backdropFilter: "blur(6px)", boxShadow: "0 6px 18px rgba(0,0,0,.28)" }}>
-      <span style={{ alignSelf: "center", padding: "0 5px", color: "#708496", fontSize: 9, fontWeight: 900, letterSpacing: ".12em" }}>WX SOURCE</span>
-      <button type="button" style={button(mode === "grib")} onClick={() => choose("grib")}>GRIB</button>
-      <button type="button" style={button(mode === "noaa")} onClick={() => choose("noaa")}>NOAA</button>
+    <div style={{ position: "fixed", right: 14, top: 14, zIndex: 5000, display: "flex", alignItems: "center", gap: 5, padding: 5, border: "1px solid rgba(148,163,184,.22)", borderRadius: 6, background: "rgba(4,8,12,.94)", backdropFilter: "blur(6px)", boxShadow: "0 6px 18px rgba(0,0,0,.28)" }}>
+      <span style={{ padding: "0 5px", color: "#708496", fontSize: 9, fontWeight: 900, letterSpacing: ".12em" }}>WX SOURCE</span>
+      <button type="button" aria-pressed={mode === "grib"} style={button(mode === "grib")} onClick={() => choose("grib")}>GRIB</button>
+      <button type="button" aria-pressed={mode === "noaa"} style={button(mode === "noaa")} onClick={() => choose("noaa")}>NOAA</button>
+      <span style={{ marginLeft: 3, padding: "0 6px", color: mode === "noaa" ? "#d9fbff" : "#cbd5e1", fontSize: 9, fontWeight: 900, letterSpacing: ".08em", whiteSpace: "nowrap" }}>
+        {mode === "noaa" ? "NOAA ONLY" : "GRIB ONLY"}
+      </span>
     </div>
   );
 }
