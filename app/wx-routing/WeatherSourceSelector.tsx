@@ -13,10 +13,39 @@ function readMode(): SourceMode {
   }
 }
 
+function relabelWeatherUi(mode: SourceMode) {
+  const replacements: Array<[RegExp, string]> = [
+    [/^GRIB Sample Points$/i, "Weather Points"],
+    [/^GRIB Forecast File$/i, mode === "noaa" ? "NOAA Forecast" : "GRIB Forecast File"],
+    [/^Imported GRIB weather is displayed as route exposure, projected forecast values, flowing wind, and pressure isobars when data is available\.$/i,
+      mode === "noaa"
+        ? "NOAA route weather is displayed as route exposure, forecast points, and flowing wind where the selected NOAA product provides data."
+        : "Imported GRIB weather is displayed as route exposure, projected forecast values, flowing wind, and pressure isobars when data is available."],
+    [/^Load a route and GRIB file to show leg-by-leg weather\.$/i, "Load a route and weather source to show leg-by-leg weather."],
+  ];
+
+  document.querySelectorAll<HTMLElement>("div,span,p").forEach((element) => {
+    const text = (element.textContent || "").trim();
+    for (const [pattern, replacement] of replacements) {
+      if (pattern.test(text) && element.children.length === 0 && element.textContent !== replacement) {
+        element.textContent = replacement;
+        break;
+      }
+    }
+  });
+}
+
 export default function WeatherSourceSelector() {
   const [mode, setMode] = useState<SourceMode>("grib");
 
-  useEffect(() => { setMode(readMode()); }, []);
+  useEffect(() => {
+    const current = readMode();
+    setMode(current);
+    relabelWeatherUi(current);
+    const observer = new MutationObserver(() => relabelWeatherUi(current));
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   const choose = (next: SourceMode) => {
     try { window.localStorage.setItem(SOURCE_KEY, next); } catch {}
