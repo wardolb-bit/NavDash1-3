@@ -425,7 +425,7 @@ function IsolatedMainMap() {
       L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
       try {
         L.tileLayer.wms("https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer", {
-          layers: "0,1,2,3,4,5,6,7", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85,
+          layers: "1,2,3,4,5,6,7", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85, tileSize: 512,
         } as any).addTo(map);
       } catch {}
 
