@@ -7,11 +7,12 @@ import { createPortal } from "react-dom";
 
 export function BridgeQuickAccess() {
   const pathname = usePathname();
+  const isMainNavDashRoute = pathname === "/" || pathname === "/navdash";
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const [dayMode, setDayMode] = useState(false);
 
   useEffect(() => {
-    if (pathname !== "/") {
+    if (!isMainNavDashRoute) {
       setTarget(null);
       return;
     }
@@ -46,9 +47,9 @@ export function BridgeQuickAccess() {
       window.clearTimeout(timer);
       themeObserver?.disconnect();
     };
-  }, [pathname]);
+  }, [isMainNavDashRoute]);
 
-  if (pathname !== "/" || !target) return null;
+  if (!isMainNavDashRoute || !target) return null;
 
   const buttonClass = dayMode
     ? "bc-header-nav inline-flex flex-none items-center justify-center whitespace-nowrap border border-slate-400 bg-white font-black text-slate-950 shadow-sm hover:bg-slate-50"
