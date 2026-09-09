@@ -22,10 +22,11 @@ import { MsiConsoleSkin } from "./MsiConsoleSkin";
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
   const [mapReady, setMapReady] = useState(false);
+  const isMainNavDashRoute = pathname === "/" || pathname === "/navdash";
 
   useEffect(() => {
     setMapReady(false);
-    if (pathname !== "/") return;
+    if (!isMainNavDashRoute) return;
 
     let cancelled = false;
     let timer = 0;
@@ -54,7 +55,7 @@ export function BridgeConsoleRouteGate() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pathname]);
+  }, [isMainNavDashRoute]);
 
   if (pathname.startsWith("/celestial")) {
     return <CelestialConsoleSkin />;
@@ -64,7 +65,7 @@ export function BridgeConsoleRouteGate() {
     return <MsiConsoleSkin />;
   }
 
-  if (pathname !== "/" || !mapReady) return null;
+  if (!isMainNavDashRoute || !mapReady) return null;
 
   return (
     <>
