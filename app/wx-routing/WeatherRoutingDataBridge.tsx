@@ -118,9 +118,26 @@ function noaaAsGrib(noaa: any) {
     status: "NOAA route weather loaded",
     summary: `${noaa?.coveredSampleCount ?? overlayPoints.length}/${noaa?.sampleCount ?? overlayPoints.length} NOAA route samples`,
     sourceNotes: `${noaa?.provider || "NOAA / National Weather Service"} · ${noaa?.product || "Route forecast"}`,
-    inventoryPreview: "NOAA route weather source for WX Routing.",
+    inventoryPreview: noaa?.note || "NOAA route weather source for WX Routing.",
     timeline,
     overlayPoints,
+    routeForecast: null,
+    isobarGrid: [],
+  };
+}
+
+function emptyNoaa(reason = "NOAA route weather is unavailable for the loaded route.") {
+  return {
+    hasGrib: false,
+    fileName: "NOAA Route Forecast",
+    fileSize: 0,
+    loadedAt: new Date().toISOString(),
+    status: "NOAA selected · no NOAA data available",
+    summary: reason,
+    sourceNotes: "NOAA / National Weather Service only",
+    inventoryPreview: "GRIB is intentionally hidden while NOAA is selected.",
+    timeline: [],
+    overlayPoints: [],
     routeForecast: null,
     isobarGrid: [],
   };
@@ -162,7 +179,7 @@ export default function WeatherRoutingDataBridge() {
         try {
           const data = await response.clone().json();
           if (isRoute && validRoute(data)) cacheJson(ROUTE_CACHE_KEY, data);
-          if (isGrib && data?.hasGrib) cacheJson(GRIB_CACHE_KEY, data);
+          if (isGrib && data?.hasGrib && data?.fileName !== "NOAA Route Forecast") cacheJson(GRIB_CACHE_KEY, data);
         } catch {}
         return response;
       }
@@ -177,11 +194,17 @@ export default function WeatherRoutingDataBridge() {
           }
 
           if (isGrib) {
-            const forceNoaa = sourceMode() === "noaa";
-            if (!forceNoaa && data?.hasGrib) { cacheJson(GRIB_CACHE_KEY, data); return response; }
+            const mode = sourceMode();
 
-            const cachedGrib = readJson(GRIB_CACHE_KEY);
-            if (!forceNoaa && cachedGrib?.hasGrib && cachedGrib?.fileName !== "NOAA Route Forecast") return jsonResponse(cachedGrib);
+            if (mode === "grib") {
+              if (data?.hasGrib && data?.fileName !== "NOAA Route Forecast") {
+                cacheJson(GRIB_CACHE_KEY, data);
+                return response;
+              }
+              const cachedGrib = readJson(GRIB_CACHE_KEY);
+              if (cachedGrib?.hasGrib && cachedGrib?.fileName !== "NOAA Route Forecast") return jsonResponse(cachedGrib);
+              return response;
+            }
 
             let routeData = readJson(ROUTE_CACHE_KEY);
             if (!validRoute(routeData)) {
@@ -191,14 +214,12 @@ export default function WeatherRoutingDataBridge() {
               } catch {}
             }
 
-            const noaa = await loadNoaaFallback(nativeFetch, routeData);
-            if (noaa) {
-              cacheJson(GRIB_CACHE_KEY, noaa);
-              return jsonResponse(noaa);
-            }
+            if (!validRoute(routeData)) return jsonResponse(emptyNoaa("Load a route before requesting NOAA route weather."));
 
-            if (data?.hasGrib) return response;
-            if (cachedGrib?.hasGrib) return jsonResponse(cachedGrib);
+            const noaa = await loadNoaaFallback(nativeFetch, routeData);
+            if (noaa) return jsonResponse(noaa);
+
+            return jsonResponse(emptyNoaa());
           }
         } catch {}
       }
