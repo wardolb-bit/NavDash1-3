@@ -7,30 +7,14 @@ const ROUTE_CACHE_KEY = "navdash-wx-routing-route";
 const GRIB_CACHE_KEY = "navdash-wx-routing-grib";
 
 function cacheJson(key: string, value: unknown) {
-  try {
-    window.sessionStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Browser cache is only a fallback. Keep the live page working if storage is unavailable/full.
-  }
+  try { window.sessionStorage.setItem(key, JSON.stringify(value)); } catch {}
 }
-
 function readJson(key: string) {
-  try {
-    const raw = window.sessionStorage.getItem(key);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
+  try { const raw = window.sessionStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
 }
-
 function clearJson(key: string) {
-  try {
-    window.sessionStorage.removeItem(key);
-  } catch {
-    // No-op.
-  }
+  try { window.sessionStorage.removeItem(key); } catch {}
 }
-
 function requestDetails(input: RequestInfo | URL, init?: RequestInit) {
   const request = input instanceof Request ? input : null;
   const rawUrl = request ? request.url : String(input);
@@ -38,12 +22,104 @@ function requestDetails(input: RequestInfo | URL, init?: RequestInit) {
   const method = String(init?.method || request?.method || "GET").toUpperCase();
   return { path: url.pathname, method };
 }
-
 function jsonResponse(data: unknown) {
-  return new Response(JSON.stringify(data), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
+  return new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
+}
+function validRoute(data: any) {
+  return Boolean(data?.hasRoute && Array.isArray(data?.waypoints) && data.waypoints.length >= 2);
+}
+function noaaRow(frame: any, point: any) {
+  return {
+    label: frame?.validAt || "NOAA",
+    valid: frame?.validAt || "",
+    forecast: "NOAA / NWS route forecast",
+    windKt: point?.windKt ?? null,
+    windDir: point?.windDirectionDeg ?? null,
+    gustKt: point?.gustKt ?? null,
+    seasFt: point?.waveHeightFt ?? null,
+    swellFt: null,
+    swellPeriod: point?.wavePeriodSec ?? null,
+    pressureHpa: null,
+    tempC: null,
+  };
+}
+function nearestPoint(points: any[], lat: number, lon: number) {
+  let best: any = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+  for (const point of points || []) {
+    const dLat = Number(point?.lat) - lat;
+    const dLon = Number(point?.lon) - lon;
+    const score = dLat * dLat + dLon * dLon;
+    if (Number.isFinite(score) && score < bestScore) { best = point; bestScore = score; }
+  }
+  return best;
+}
+function noaaAsGrib(noaa: any) {
+  const frames = Array.isArray(noaa?.frames) ? noaa.frames : [];
+  const firstFrame = frames.find((frame: any) => Array.isArray(frame?.points) && frame.points.length) || null;
+  if (!firstFrame) return null;
+  const overlayPoints = firstFrame.points.map((basePoint: any, index: number) => {
+    const lat = Number(basePoint.lat);
+    const lon = Number(basePoint.lon);
+    const timeline = frames.map((frame: any) => {
+      const point = frame?.points?.[index] || nearestPoint(frame?.points || [], lat, lon);
+      return point ? noaaRow(frame, point) : null;
+    }).filter(Boolean);
+    const first = timeline[0] || noaaRow(firstFrame, basePoint);
+    return {
+      lat,
+      lon,
+      label: `NOAA ${index + 1}`,
+      valid: first.valid,
+      windKt: first.windKt,
+      windDir: first.windDir,
+      gustKt: first.gustKt,
+      seasFt: first.seasFt,
+      swellFt: null,
+      swellPeriod: first.swellPeriod,
+      routePoint: `NOAA ${index + 1}`,
+      timeline,
+    };
   });
+  const timeline = frames.map((frame: any) => {
+    const points = Array.isArray(frame?.points) ? frame.points : [];
+    const maxWind = points.reduce((max: number | null, point: any) => {
+      const value = Math.max(Number(point?.windKt) || 0, Number(point?.gustKt) || 0);
+      return max === null ? value : Math.max(max, value);
+    }, null);
+    const maxSeas = points.reduce((max: number | null, point: any) => {
+      const value = Number(point?.waveHeightFt);
+      if (!Number.isFinite(value)) return max;
+      return max === null ? value : Math.max(max, value);
+    }, null);
+    return {
+      label: frame?.validAt || "NOAA",
+      valid: frame?.validAt || "",
+      forecast: "NOAA / NWS route forecast",
+      windKt: maxWind,
+      windDir: null,
+      gustKt: null,
+      seasFt: maxSeas,
+      swellFt: null,
+      swellPeriod: null,
+      pressureHpa: null,
+      tempC: null,
+    };
+  });
+  return {
+    hasGrib: true,
+    fileName: "NOAA Route Forecast",
+    fileSize: 0,
+    loadedAt: noaa?.generatedAt || new Date().toISOString(),
+    status: "NOAA route weather loaded",
+    summary: `${noaa?.coveredSampleCount ?? overlayPoints.length}/${noaa?.sampleCount ?? overlayPoints.length} NOAA route samples`,
+    sourceNotes: `${noaa?.provider || "NOAA / National Weather Service"} · ${noaa?.product || "Route forecast"}`,
+    inventoryPreview: "NOAA route weather fallback. Existing GRIB upload remains preferred when loaded.",
+    timeline,
+    overlayPoints,
+    routeForecast: null,
+    isobarGrid: [],
+  };
 }
 
 export default function WeatherRoutingDataBridge() {
@@ -54,9 +130,7 @@ export default function WeatherRoutingDataBridge() {
       const { path, method } = requestDetails(input, init);
       const isRoute = path === "/api/route-state";
       const isGrib = path === "/api/grib-summary";
-
       const response = await nativeFetch(input, init);
-
       if (!isRoute && !isGrib) return response;
 
       if (method === "DELETE") {
@@ -67,15 +141,9 @@ export default function WeatherRoutingDataBridge() {
       if (method === "POST" && response.ok) {
         try {
           const data = await response.clone().json();
-          if (isRoute && data?.hasRoute && Array.isArray(data?.waypoints) && data.waypoints.length >= 2) {
-            cacheJson(ROUTE_CACHE_KEY, data);
-          }
-          if (isGrib && data?.hasGrib) {
-            cacheJson(GRIB_CACHE_KEY, data);
-          }
-        } catch {
-          // Leave the original fetch response untouched if it is not JSON.
-        }
+          if (isRoute && validRoute(data)) cacheJson(ROUTE_CACHE_KEY, data);
+          if (isGrib && data?.hasGrib) cacheJson(GRIB_CACHE_KEY, data);
+        } catch {}
         return response;
       }
 
@@ -83,74 +151,71 @@ export default function WeatherRoutingDataBridge() {
         try {
           const data = await response.clone().json();
           if (isRoute) {
-            if (data?.hasRoute && Array.isArray(data?.waypoints) && data.waypoints.length >= 2) {
-              cacheJson(ROUTE_CACHE_KEY, data);
-              return response;
-            }
+            if (validRoute(data)) { cacheJson(ROUTE_CACHE_KEY, data); return response; }
             const cached = readJson(ROUTE_CACHE_KEY);
-            if (cached?.hasRoute && Array.isArray(cached?.waypoints) && cached.waypoints.length >= 2) {
-              return jsonResponse(cached);
-            }
+            if (validRoute(cached)) return jsonResponse(cached);
           }
 
           if (isGrib) {
-            if (data?.hasGrib) {
-              cacheJson(GRIB_CACHE_KEY, data);
-              return response;
+            if (data?.hasGrib) { cacheJson(GRIB_CACHE_KEY, data); return response; }
+            const cachedGrib = readJson(GRIB_CACHE_KEY);
+            if (cachedGrib?.hasGrib && cachedGrib?.fileName !== "NOAA Route Forecast") return jsonResponse(cachedGrib);
+
+            let routeData = readJson(ROUTE_CACHE_KEY);
+            if (!validRoute(routeData)) {
+              try {
+                const routeResponse = await nativeFetch("/api/route-state", { cache: "no-store" });
+                if (routeResponse.ok) routeData = await routeResponse.json();
+              } catch {}
             }
-            const cached = readJson(GRIB_CACHE_KEY);
-            if (cached?.hasGrib) {
-              return jsonResponse(cached);
+            if (validRoute(routeData)) {
+              try {
+                const noaaResponse = await nativeFetch("/api/noaa-route-weather", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ waypoints: routeData.waypoints }),
+                  cache: "no-store",
+                });
+                if (noaaResponse.ok) {
+                  const noaaData = await noaaResponse.json();
+                  const fallback = noaaAsGrib(noaaData);
+                  if (fallback) { cacheJson(GRIB_CACHE_KEY, fallback); return jsonResponse(fallback); }
+                }
+              } catch {}
             }
+            if (cachedGrib?.hasGrib) return jsonResponse(cachedGrib);
           }
-        } catch {
-          // Use the network response unchanged if parsing fails.
-        }
+        } catch {}
       }
 
       return response;
     };
 
-    return () => {
-      window.fetch = nativeFetch;
-    };
+    return () => { window.fetch = nativeFetch; };
   }, []);
 
   useEffect(() => {
     let closed = false;
     let ws: WebSocket | null = null;
-
     try {
       ws = new WebSocket(getAisWebSocketUrl());
       ws.onmessage = (event) => {
         if (closed) return;
         try {
           const message = JSON.parse(event.data);
-          if (message?.type !== "route-state") return;
-          if (!Array.isArray(message?.waypoints) || message.waypoints.length < 2) return;
-
+          if (message?.type !== "route-state" || !Array.isArray(message?.waypoints) || message.waypoints.length < 2) return;
           cacheJson(ROUTE_CACHE_KEY, {
             hasRoute: true,
             type: "route-state",
             routeName: message.routeName || "AIS Host Route",
             waypoints: message.waypoints,
-            activeWaypointIndex: Number.isFinite(Number(message.activeWaypointIndex))
-              ? Number(message.activeWaypointIndex)
-              : 1,
+            activeWaypointIndex: Number.isFinite(Number(message.activeWaypointIndex)) ? Number(message.activeWaypointIndex) : 1,
             savedAt: message.savedAt || new Date().toISOString(),
           });
-        } catch {
-          // Ignore unrelated or malformed AIS websocket messages.
-        }
+        } catch {}
       };
-    } catch {
-      // The normal WX page will continue handling AIS even if this bridge cannot connect.
-    }
-
-    return () => {
-      closed = true;
-      ws?.close();
-    };
+    } catch {}
+    return () => { closed = true; ws?.close(); };
   }, []);
 
   return null;
