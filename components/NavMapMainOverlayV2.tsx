@@ -192,8 +192,6 @@ function cPositionAt(points: Array<[number, number]>, cumulative: number[], dist
   if (legNm <= 0) return start;
   const f = Math.max(0, Math.min(1, (target - cumulative[i]) / legNm));
 
-  // Interpolate in Web Mercator, matching the exact geometry Leaflet uses to
-  // draw the visible gold route segment. This keeps the event dot on the line.
   const mercatorY = (lat: number) => {
     const clipped = Math.max(-85.05112878, Math.min(85.05112878, lat));
     return Math.log(Math.tan(Math.PI / 4 + cRad(clipped) / 2));
@@ -427,7 +425,7 @@ function IsolatedMainMap() {
       L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
       try {
         L.tileLayer.wms("https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer", {
-          layers: "0,1,2,3,4,5,6,7,8,9,10,11,12", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85,
+          layers: "0,1,2,3,4,5,6,7", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85,
         } as any).addTo(map);
       } catch {}
 
