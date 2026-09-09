@@ -42,8 +42,8 @@ export function BridgeLegSequenceDisplay() {
       const style = document.createElement("style");
       style.id = styleId;
       style.textContent = `
-        #bc2-leg[data-sequence-label],
-        #bc2-top-leg[data-sequence-label] {
+        #bc-v2-instruments #bc2-leg[data-sequence-label],
+        #bc-v2-topbar #bc2-top-leg[data-sequence-label] {
           color: transparent !important;
           position: relative !important;
         }
@@ -62,6 +62,12 @@ export function BridgeLegSequenceDisplay() {
           justify-content: center;
           color: #aebdca;
         }
+        .navdash-v12-day #bc2-leg[data-sequence-label]::after {
+          color: #7a5b00;
+        }
+        .navdash-v12-day #bc2-top-leg[data-sequence-label]::after {
+          color: #334155;
+        }
       `;
       document.head.appendChild(style);
     }
@@ -74,10 +80,16 @@ export function BridgeLegSequenceDisplay() {
       if (!sequenceLabel) return;
 
       const railLeg = document.getElementById("bc2-leg");
-      if (railLeg) railLeg.dataset.sequenceLabel = sequenceLabel;
+      if (railLeg) {
+        railLeg.dataset.sequenceLabel = sequenceLabel;
+        railLeg.style.setProperty("color", "transparent", "important");
+      }
 
       const topLeg = document.getElementById("bc2-top-leg");
-      if (topLeg) topLeg.dataset.sequenceLabel = `LEG ${sequenceLabel}`;
+      if (topLeg) {
+        topLeg.dataset.sequenceLabel = `LEG ${sequenceLabel}`;
+        topLeg.style.setProperty("color", "transparent", "important");
+      }
     };
 
     const schedule = () => {
