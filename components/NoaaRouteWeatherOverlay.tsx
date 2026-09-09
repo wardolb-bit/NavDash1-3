@@ -91,10 +91,14 @@ function validLabel(value: string) {
 }
 
 function windText(point: NoaaPoint) {
+  const wind = point.windKt === null ? "--" : String(Math.round(point.windKt));
+  const gust = point.gustKt === null ? "" : `G${Math.round(point.gustKt)}`;
+  return `WIND ${wind}${gust} KT`;
+}
+
+function directionText(point: NoaaPoint) {
   const dir = point.windDirectionDeg === null ? "---" : String(Math.round(point.windDirectionDeg)).padStart(3, "0");
-  const wind = point.windKt === null ? "--" : Math.round(point.windKt);
-  const gust = point.gustKt === null ? "--" : Math.round(point.gustKt);
-  return `${dir}° ${wind}G${gust}`;
+  return `DIR ${dir}°`;
 }
 
 export function NoaaRouteWeatherOverlay() {
@@ -173,11 +177,13 @@ export function NoaaRouteWeatherOverlay() {
             const pos = screenPosition(point, mapView, size.width, size.height);
             if (pos.left < -80 || pos.top < -80 || pos.left > size.width + 80 || pos.top > size.height + 80) return null;
             return (
-              <div key={`${point.lat}-${point.lon}-${index}`} title={`${validLabel(frame.validAt)} | Wind ${windText(point)} kt | Seas ${point.waveHeightFt ?? "--"} ft @ ${point.wavePeriodSec ?? "--"} s | ${point.source}`} style={{ position: "absolute", left: pos.left, top: pos.top, transform: "translate(-50%,-50%)", pointerEvents: "auto" }}>
-                <div style={{ width: 48, minHeight: 44, border: "2px solid #a7f3d0", background: "rgba(3,18,24,.94)", color: "#ecfeff", borderRadius: 6, boxShadow: "0 0 0 2px rgba(3,18,24,.7)", display: "grid", placeItems: "center", padding: "3px 4px", fontFamily: "system-ui,sans-serif" }}>
-                  {showWind ? <div style={{ fontSize: 10, fontWeight: 900, lineHeight: 1.05 }}>{windText(point)}</div> : null}
+              <div key={`${point.lat}-${point.lon}-${index}`} title={`${validLabel(frame.validAt)} | ${windText(point)} | ${directionText(point)} | Seas ${point.waveHeightFt ?? "--"} ft @ ${point.wavePeriodSec ?? "--"} s | ${point.source}`} style={{ position: "absolute", left: pos.left, top: pos.top, transform: "translate(-50%,-50%)", pointerEvents: "auto" }}>
+                <div style={{ width: 68, minHeight: 46, border: "2px solid #a7f3d0", background: "rgba(3,18,24,.94)", color: "#ecfeff", borderRadius: 6, boxShadow: "0 0 0 2px rgba(3,18,24,.7)", display: "grid", placeItems: "center", padding: "4px 5px", fontFamily: "system-ui,sans-serif" }}>
+                  {showWind ? <>
+                    <div style={{ fontSize: 10, fontWeight: 900, lineHeight: 1.05 }}>{windText(point)}</div>
+                    <div style={{ marginTop: 2, fontSize: 8, fontWeight: 800, color: "#a7f3d0" }}>{directionText(point)}</div>
+                  </> : null}
                   {showSeas ? <div style={{ marginTop: 2, fontSize: 9, fontWeight: 800, color: "#f1d56b" }}>{point.waveHeightFt === null ? "SEA --" : `${point.waveHeightFt.toFixed(1)} FT`}</div> : null}
-                  <div style={{ position: "absolute", width: 2, height: 18, background: "#a7f3d0", left: 23, top: -14, transformOrigin: "50% 36px", transform: `rotate(${point.windDirectionDeg ?? 0}deg)` }} />
                 </div>
               </div>
             );
