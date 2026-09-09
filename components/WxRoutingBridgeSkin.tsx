@@ -135,6 +135,61 @@ function refreshPlanningUi(root: HTMLElement) {
   if (button.dataset.sog !== nextSog) button.dataset.sog = nextSog;
 }
 
+function monthName(month: number) {
+  return ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"][month - 1] || "";
+}
+
+function cleanWeatherTime(value: string) {
+  const text = value.trim();
+  const utc = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})\s+UTC$/i.exec(text);
+  if (utc) return `${utc[3]} ${monthName(Number(utc[2]))} ${utc[4]}${utc[5]}Z`;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(text);
+  if (iso) return `${iso[3]} ${monthName(Number(iso[2]))} ${iso[4]}${iso[5]}Z`;
+  return text;
+}
+
+function compassDirection(degrees: number) {
+  const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const normalized = ((degrees % 360) + 360) % 360;
+  return points[Math.round(normalized / 45) % 8];
+}
+
+function cleanWind(value: string) {
+  const match = /^([\d.]+)\s*kt\s+from\s+([\d.]+)\s*(?:deg|°)$/i.exec(value.trim());
+  if (!match) return value;
+  const speed = Number(match[1]);
+  const direction = Number(match[2]);
+  if (!Number.isFinite(speed) || !Number.isFinite(direction)) return value;
+  return `${compassDirection(direction)} ${speed.toFixed(1)} kt`;
+}
+
+function cleanEta(value: string) {
+  const match = /^(\d{2})\/(\d{2})\s+(\d{4})$/.exec(value.trim());
+  if (!match) return value;
+  return `${match[2]} ${monthName(Number(match[1]))} ${match[3]} LT`;
+}
+
+function cleanRouteWeatherCards(root: HTMLElement) {
+  const noaaOnly = (() => {
+    try { return window.localStorage.getItem("navdash-wx-routing-source") === "noaa"; } catch { return false; }
+  })();
+
+  root.querySelectorAll<HTMLElement>("div").forEach((label) => {
+    const text = (label.textContent || "").trim();
+    if (!["WX Time", "Wind", "ETA WPT", "Seas"].includes(text)) return;
+    const field = label.parentElement;
+    const value = field?.querySelector<HTMLElement>(":scope > .font-black");
+    if (!value) return;
+    const current = (value.textContent || "").trim();
+    let next = current;
+    if (text === "WX Time") next = cleanWeatherTime(current);
+    if (text === "Wind") next = cleanWind(current);
+    if (text === "ETA WPT") next = cleanEta(current);
+    if (text === "Seas" && noaaOnly && /^0(?:\.0+)?\s*ft$/i.test(current)) next = "--";
+    if (next !== current) value.textContent = next;
+  });
+}
+
 export function WxRoutingBridgeSkin() {
   const pathname = usePathname();
 
@@ -237,16 +292,23 @@ export function WxRoutingBridgeSkin() {
       });
 
       hideTechnicalWxDetails(shell);
+      cleanRouteWeatherCards(shell);
       refreshPlanningUi(shell);
 
       if (!observer) {
-        observer = new MutationObserver(() => hideTechnicalWxDetails(shell));
+        observer = new MutationObserver(() => {
+          hideTechnicalWxDetails(shell);
+          cleanRouteWeatherCards(shell);
+        });
         observer.observe(shell, { childList: true, subtree: true, characterData: true });
       }
 
       if (!refreshTimer) {
         refreshTimer = window.setInterval(() => {
-          if (!cancelled) refreshPlanningUi(shell);
+          if (!cancelled) {
+            refreshPlanningUi(shell);
+            cleanRouteWeatherCards(shell);
+          }
         }, 750);
       }
     };
