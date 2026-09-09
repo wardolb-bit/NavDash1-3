@@ -92,6 +92,7 @@ export default function WeatherMapUxOverlay() {
     let cancelled = false;
     let timer = 0;
     let observer: MutationObserver | null = null;
+    let storageHandler: (() => void) | null = null;
 
     const attach = () => {
       if (cancelled) return;
@@ -104,36 +105,40 @@ export default function WeatherMapUxOverlay() {
       }
 
       if (getComputedStyle(frame).position === "static") frame.style.position = "relative";
-      setHost(frame);
+      setHost((current) => current === frame ? current : frame);
 
       const refresh = () => {
         if (cancelled) return;
         relabelWeatherPoints(main);
-        setStatus(readMapStatus(main));
-        setSelectionLines(readSelectionLines(main));
+        const nextStatus = readMapStatus(main);
+        const nextLines = readSelectionLines(main);
+        setStatus((current) =>
+          current.mode === nextStatus.mode && current.product === nextStatus.product && current.valid === nextStatus.valid
+            ? current
+            : nextStatus,
+        );
+        setSelectionLines((current) => current.join("|") === nextLines.join("|") ? current : nextLines);
       };
 
       refresh();
       observer = new MutationObserver(refresh);
       observer.observe(main, { childList: true, subtree: true, characterData: true });
-      window.addEventListener("storage", refresh);
-
-      return () => window.removeEventListener("storage", refresh);
+      storageHandler = refresh;
+      window.addEventListener("storage", storageHandler);
     };
 
-    const detach = attach();
+    attach();
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
       observer?.disconnect();
-      detach?.();
+      if (storageHandler) window.removeEventListener("storage", storageHandler);
     };
   }, []);
 
   useEffect(() => {
-    if (selectionSignature && selectionSignature !== dismissedSignature) return;
     if (!selectionSignature) setDismissedSignature("");
-  }, [dismissedSignature, selectionSignature]);
+  }, [selectionSignature]);
 
   if (!host) return null;
 
