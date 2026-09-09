@@ -771,50 +771,20 @@ function computeCoastlinePro(
 function logicalRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, currentLegIndex: number) {
   if (!ownShip || route.length < 2) return null;
 
-  let best:
-    | {
-        index: number;
-        start: Waypoint;
-        end: Waypoint;
-        distance: number;
-        alongTrack: number;
-        legLength: number;
-        side: string;
-        projectionRatio: number;
-      }
-    | null = null;
+  const clampedIndex = Math.min(Math.max(currentLegIndex, 1), route.length - 1);
+  const currentLeg = selectedRouteLeg(route, ownShip, clampedIndex);
+  if (!currentLeg) return null;
 
-  for (let i = 1; i < route.length; i += 1) {
-    const start = route[i - 1];
-    const end = route[i];
-    const result = routeXteToSegmentNm(
-      ownShip.lat,
-      ownShip.lon,
-      start.lat,
-      start.lon,
-      end.lat,
-      end.lon,
-    );
-
-    const jumpPenalty = Math.abs(i - currentLegIndex) * 0.35;
-    const endPenalty = result.projectionRatio <= 0 || result.projectionRatio >= 1 ? 0.25 : 0;
-    const score = result.distance + jumpPenalty + endPenalty;
-
-    if (!best || score < best.distance + Math.abs(best.index - currentLegIndex) * 0.35) {
-      best = {
-        index: i,
-        start,
-        end,
-        distance: result.distance,
-        alongTrack: result.alongTrack,
-        legLength: result.legLength,
-        side: result.side,
-        projectionRatio: result.projectionRatio,
-      };
-    }
+  // Keep the current leg sticky while the vessel is still on it. AIS position
+  // jitter near a waypoint must not make the active leg bounce between segments.
+  const advanceMargin = 0.02;
+  if (currentLeg.projectionRatio <= 1 + advanceMargin || clampedIndex >= route.length - 1) {
+    return currentLeg;
   }
 
-  return best;
+  // Once clearly past the active waypoint, advance one leg only. This prevents
+  // a single AIS update from jumping across the route and eliminates oscillation.
+  return selectedRouteLeg(route, ownShip, clampedIndex + 1) || currentLeg;
 }
 
 function selectedRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, selectedLegIndex: number) {
