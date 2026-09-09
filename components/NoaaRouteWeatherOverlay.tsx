@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type Waypoint = { id?: string; name?: string; lat: number; lon: number };
@@ -27,6 +27,7 @@ type NoaaForecast = {
   note?: string | null;
 };
 type MapView = { lat: number; lon: number; zoom: number };
+type PixelOffset = { x: number; y: number };
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v3";
@@ -84,6 +85,30 @@ function screenPosition(point: NoaaPoint, view: MapView, width: number, height: 
   return { left: marker.x - center.x + width / 2, top: marker.y - center.y + height / 2 };
 }
 
+function paneTranslation(element: HTMLElement | null): PixelOffset {
+  if (!element) return { x: 0, y: 0 };
+  const transform = element.style.transform || getComputedStyle(element).transform || "";
+  const matrix3d = /matrix3d\(([^)]+)\)/.exec(transform);
+  if (matrix3d) {
+    const values = matrix3d[1].split(",").map(Number);
+    if (values.length === 16) return { x: values[12] || 0, y: values[13] || 0 };
+  }
+  const matrix = /matrix\(([^)]+)\)/.exec(transform);
+  if (matrix) {
+    const values = matrix[1].split(",").map(Number);
+    if (values.length === 6) return { x: values[4] || 0, y: values[5] || 0 };
+  }
+  const translate3d = /translate3d\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px/i.exec(transform);
+  if (translate3d) return { x: Number(translate3d[1]) || 0, y: Number(translate3d[2]) || 0 };
+  const translate = /translate\(\s*(-?[\d.]+)px(?:,|\s)\s*(-?[\d.]+)px/i.exec(transform);
+  if (translate) return { x: Number(translate[1]) || 0, y: Number(translate[2]) || 0 };
+  return { x: 0, y: 0 };
+}
+
+function sameView(a: MapView, b: MapView) {
+  return Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lon - b.lon) < 1e-7 && Math.abs(a.zoom - b.zoom) < 1e-7;
+}
+
 function validLabel(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return value;
@@ -116,6 +141,9 @@ export function NoaaRouteWeatherOverlay() {
   const [error, setError] = useState("");
   const [mapView, setMapView] = useState<MapView>({ lat: 21.3, lon: -157.9, zoom: 7 });
   const [size, setSize] = useState({ width: 1, height: 1 });
+  const [panOffset, setPanOffset] = useState<PixelOffset>({ x: 0, y: 0 });
+  const settledPaneRef = useRef<PixelOffset>({ x: 0, y: 0 });
+  const mapViewRef = useRef<MapView>({ lat: 21.3, lon: -157.9, zoom: 7 });
 
   useEffect(() => {
     let timer = 0;
@@ -130,17 +158,36 @@ export function NoaaRouteWeatherOverlay() {
 
   useEffect(() => {
     if (!host) return;
+    const pane = host.querySelector(".leaflet-map-pane") as HTMLElement | null;
+    settledPaneRef.current = paneTranslation(pane);
+    const observer = pane ? new MutationObserver(() => {
+      const current = paneTranslation(pane);
+      const settled = settledPaneRef.current;
+      setPanOffset({ x: current.x - settled.x, y: current.y - settled.y });
+    }) : null;
+    observer?.observe(pane!, { attributes: true, attributeFilter: ["style"] });
+
     const sync = () => {
       const nextRoute = readRoute();
       setRoute((current) => JSON.stringify(current) === JSON.stringify(nextRoute) ? current : nextRoute);
-      setMapView(readMapView(nextRoute));
+      const nextView = readMapView(nextRoute);
+      if (!sameView(mapViewRef.current, nextView)) {
+        mapViewRef.current = nextView;
+        setMapView(nextView);
+        settledPaneRef.current = paneTranslation(pane);
+        setPanOffset({ x: 0, y: 0 });
+      }
       const rect = host.getBoundingClientRect();
       setSize({ width: Math.max(1, rect.width), height: Math.max(1, rect.height) });
     };
     sync();
-    const timer = window.setInterval(sync, 350);
+    const timer = window.setInterval(sync, 120);
     window.addEventListener("resize", sync);
-    return () => { window.clearInterval(timer); window.removeEventListener("resize", sync); };
+    return () => {
+      observer?.disconnect();
+      window.clearInterval(timer);
+      window.removeEventListener("resize", sync);
+    };
   }, [host]);
 
   const routeSignature = useMemo(() => route.map((wp) => `${wp.lat.toFixed(5)},${wp.lon.toFixed(5)}`).join(";"), [route]);
@@ -174,7 +221,7 @@ export function NoaaRouteWeatherOverlay() {
   return createPortal(
     <>
       {visible && frame ? (
-        <div style={{ position: "absolute", inset: 0, zIndex: 754, pointerEvents: "none", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, zIndex: 754, pointerEvents: "none", overflow: "hidden", transform: `translate(${panOffset.x}px, ${panOffset.y}px)` }}>
           {frame.points.map((point, index) => {
             const pos = screenPosition(point, mapView, size.width, size.height);
             if (pos.left < -80 || pos.top < -80 || pos.left > size.width + 80 || pos.top > size.height + 80) return null;
