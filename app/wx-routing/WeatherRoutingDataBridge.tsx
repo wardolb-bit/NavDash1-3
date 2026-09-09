@@ -6,6 +6,7 @@ import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 const ROUTE_CACHE_KEY = "navdash-wx-routing-route";
 const GRIB_CACHE_KEY = "navdash-wx-routing-grib";
 const SOURCE_KEY = "navdash-wx-routing-source";
+const NOAA_ROUTE_RELOAD_KEY = "navdash-wx-routing-noaa-route-reload";
 
 function cacheJson(key: string, value: unknown) {
   try { window.sessionStorage.setItem(key, JSON.stringify(value)); } catch {}
@@ -240,14 +241,25 @@ export default function WeatherRoutingDataBridge() {
         try {
           const message = JSON.parse(event.data);
           if (message?.type !== "route-state" || !Array.isArray(message?.waypoints) || message.waypoints.length < 2) return;
-          cacheJson(ROUTE_CACHE_KEY, {
+          const routeData = {
             hasRoute: true,
             type: "route-state",
             routeName: message.routeName || "AIS Host Route",
             waypoints: message.waypoints,
             activeWaypointIndex: Number.isFinite(Number(message.activeWaypointIndex)) ? Number(message.activeWaypointIndex) : 1,
             savedAt: message.savedAt || new Date().toISOString(),
-          });
+          };
+          cacheJson(ROUTE_CACHE_KEY, routeData);
+
+          if (sourceMode() === "noaa") {
+            const signature = `${routeData.routeName}|${routeData.waypoints.length}|${routeData.savedAt}`;
+            let lastSignature = "";
+            try { lastSignature = window.sessionStorage.getItem(NOAA_ROUTE_RELOAD_KEY) || ""; } catch {}
+            if (lastSignature !== signature) {
+              try { window.sessionStorage.setItem(NOAA_ROUTE_RELOAD_KEY, signature); } catch {}
+              window.setTimeout(() => window.location.reload(), 120);
+            }
+          }
         } catch {}
       };
     } catch {}
