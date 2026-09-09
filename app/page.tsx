@@ -1,19 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-const PHOTOS = [
-  "/captain-ron/IMG_5516.jpeg",
-  "/captain-ron/IMG_5488.jpeg",
-  "/captain-ron/IMG_5460.jpeg",
-  "/captain-ron/IMG_5419.jpeg",
-  "/captain-ron/IMG_5408.jpeg",
-  "/captain-ron/IMG_5377.jpeg",
-  "/captain-ron/IMG_5346.jpeg",
-  "/captain-ron/IMG_5289.jpeg",
+
+const photos = [
+  "/wardlab/homepage/01.jpg",
+  "/wardlab/homepage/02.jpg",
+  "/wardlab/homepage/03.jpg",
+  "/wardlab/homepage/04.jpg",
+  "/wardlab/homepage/05.jpg",
+  "/wardlab/homepage/06.jpg",
+  "/wardlab/homepage/07.jpg",
+  "/wardlab/homepage/08.jpg",
 ];
 
-const QUOTES = [
+const quotes = [
   "If anything's gonna happen, it's gonna happen out there.",
   "If we get lost, we'll just pull in somewhere and ask directions.",
   "Just waiting for the green flash, boss.",
@@ -24,7 +25,7 @@ const QUOTES = [
   "We'll get there. Hell or high water.",
 ];
 
-function shuffle<T>(items: T[]) {
+function shuffled<T>(items: T[]) {
   const copy = [...items];
   for (let i = copy.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -34,66 +35,70 @@ function shuffle<T>(items: T[]) {
 }
 
 export default function WardLabHome() {
-  const [photos, setPhotos] = useState(PHOTOS);
-  const [quotes, setQuotes] = useState(QUOTES);
-  const [index, setIndex] = useState(0);
+
+  const [photoOrder, setPhotoOrder] = useState<string[]>([]);
+  const [quoteOrder, setQuoteOrder] = useState<string[]>([]);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const loaded = useRef(new Set<string>());
 
   useEffect(() => {
-    setPhotos(shuffle(PHOTOS));
-    setQuotes(shuffle(QUOTES));
-    setIndex(0);
-  }, []);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setIndex((current) => (current + 1) % PHOTOS.length);
+    // Shuffle after hydration so the server and first client render agree.
+    const order = shuffled(photos);
+    setPhotoOrder(order);
+    setQuoteOrder(shuffled(quotes));
+    setPhotoIndex(0);
+    setQuoteIndex(0);
+    const photoTimer = window.setInterval(() => {
+      if (document.hidden) return;
+      setPhotoIndex((current) => {
+        for (let step = 1; step < order.length; step += 1) {
+          const next = (current + step) % order.length;
+          if (loaded.current.has(order[next])) return next;
+        }
+        return current;
+      });
     }, 9000);
-    return () => window.clearInterval(timer);
+    const quoteTimer = window.setInterval(() => {
+      if (!document.hidden) setQuoteIndex((current) => (current + 1) % quotes.length);
+    }, 9700);
+    return () => {
+      window.clearInterval(photoTimer);
+      window.clearInterval(quoteTimer);
+    };
   }, []);
 
-  const quote = useMemo(() => quotes[index % quotes.length], [quotes, index]);
+
 
   return (
-    <main className="relative h-[100dvh] w-full overflow-hidden bg-black text-white">
-      {photos.map((src, photoIndex) => (
-        <img
-          key={src}
-          src={src}
-          alt=""
+    <main className="relative h-[100dvh] w-full overflow-hidden bg-black text-white" aria-label="WardLab landing page">
+      {photoOrder.map((photo, position) => (
+        <div
+          key={photo}
           aria-hidden="true"
-          className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-[1800ms] ease-in-out ${
-            photoIndex === index ? "opacity-100" : "opacity-0"
-          }`}
-        />
-      ))}
-
-      <div className="pointer-events-none absolute inset-0 bg-black/10" />
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-black/15" />
-
-      <div className="absolute inset-x-0 bottom-0 z-10 px-6 pb-[max(3rem,env(safe-area-inset-bottom))] sm:px-10 md:px-16 lg:px-24">
-        <div className="mx-auto max-w-5xl">
-          <p
-            key={`${index}-${quote}`}
-            aria-live="polite"
-            className="animate-[fadeIn_900ms_ease-out] text-balance text-3xl font-semibold leading-tight tracking-[-0.025em] drop-shadow-[0_3px_12px_rgba(0,0,0,0.9)] sm:text-4xl md:text-5xl lg:text-6xl"
-          >
-            “{quote}”
-          </p>
-          <div className="mt-5 text-xs font-bold uppercase tracking-[0.32em] text-white/70 sm:text-sm">
-            Captain Ron
-          </div>
+          className="absolute inset-0 transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none"
+          style={{ opacity: photoIndex === position ? 1 : 0 }}
+        >
+          <img src={photo} alt="" loading="eager" onLoad={() => loaded.current.add(photo)} className="h-full w-full object-cover" />
         </div>
+      ))}
+      <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,.32) 100%), linear-gradient(transparent 40%, rgba(0,0,0,.55))" }} />
+      <div className="absolute inset-x-0 bottom-[8vh] px-6 text-center sm:px-12">
+        <div className="mx-auto grid max-w-5xl">
+          {quoteOrder.map((quote, position) => (
+            <blockquote
+              key={quote}
+              aria-hidden={quoteIndex !== position}
+              className="col-start-1 row-start-1 self-end text-balance text-3xl font-semibold leading-tight tracking-[-0.02em] drop-shadow-[0_3px_12px_rgba(0,0,0,.9)] transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none sm:text-4xl lg:text-5xl"
+              style={{ opacity: quoteIndex === position ? 1 : 0 }}
+            >
+              “{quote}”
+            </blockquote>
+          ))}
+        </div>
+        <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.32em] text-white/60 sm:text-xs">Captain Ron</div>
       </div>
-
-      <style jsx>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          img, p { transition: none !important; animation: none !important; }
-        }
-      `}</style>
     </main>
   );
 }
