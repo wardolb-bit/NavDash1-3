@@ -25,15 +25,6 @@ function hasAmiRoute() {
   }
 }
 
-function overlapEncTile(tile: HTMLImageElement) {
-  // Leaflet can place raster tiles on fractional CSS pixels at some zoom/device
-  // scales, exposing a hairline gap between otherwise contiguous NOAA WMS tiles.
-  // NOAA's ENC tiles are the standard 256px Leaflet tile size here, so a 1px
-  // overlap hides only the duplicated neighboring edge pixel.
-  tile.style.setProperty("width", "257px", "important");
-  tile.style.setProperty("height", "257px", "important");
-}
-
 export function BridgeMapLayerControls() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [encOn, setEncOn] = useState(true);
@@ -95,13 +86,13 @@ export function BridgeMapLayerControls() {
             const sourceUrl = new URL(src);
             tile.src = `/api/noaa-charts/wms${sourceUrl.search}`;
           } catch {}
-          overlapEncTile(tile);
+          tile.style.setProperty("opacity", "1", "important");
           tile.style.setProperty("display", encOn ? "" : "none", "important");
           return;
         }
 
         if (src.includes("/api/noaa-charts/wms")) {
-          overlapEncTile(tile);
+          tile.style.setProperty("opacity", "1", "important");
           tile.style.setProperty("display", encOn ? "" : "none", "important");
         }
       });
