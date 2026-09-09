@@ -90,15 +90,16 @@ export default function WardLabHome() {
             <blockquote
               key={quote}
               aria-hidden={quoteIndex !== position}
-              className="col-start-1 row-start-1 self-end text-balance text-3xl font-semibold leading-tight tracking-[-0.02em] drop-shadow-[0_3px_12px_rgba(0,0,0,.9)] transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none sm:text-4xl lg:text-5xl"
-              style={{ opacity: quoteIndex === position ? 1 : 0 }}
+              className="col-start-1 row-start-1 self-end text-balance text-3xl font-bold text-white leading-tight tracking-[-0.02em] transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none sm:text-4xl lg:text-5xl"
+              style={{ opacity: quoteIndex === position ? 1 : 0, textShadow: "0 2px 4px rgba(0,0,0,.95), 0 4px 16px rgba(0,0,0,.85)" }}
             >
               “{quote}”
             </blockquote>
           ))}
         </div>
-        <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.32em] text-white/60 sm:text-xs">Captain Ron</div>
+        <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.32em] text-white sm:text-xs" style={{ textShadow: "0 2px 4px rgba(0,0,0,.95)" }}>Captain Ron</div>
       </div>
     </main>
   );
 }
+
