@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 
 const ENC_KEY = "navdash-main-enc-layer";
 const SEAMARKS_KEY = "navdash-main-seamarks-layer";
+const AMI_OVERLAY_STORAGE_KEY = "navdash-ami-route-forecast-v1";
 
 function readPreference(key: string, fallback: boolean) {
   try {
@@ -16,10 +17,19 @@ function readPreference(key: string, fallback: boolean) {
   }
 }
 
+function hasAmiRoute() {
+  try {
+    return Boolean(window.localStorage.getItem(AMI_OVERLAY_STORAGE_KEY));
+  } catch {
+    return false;
+  }
+}
+
 export function BridgeMapLayerControls() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [encOn, setEncOn] = useState(true);
   const [seamarksOn, setSeamarksOn] = useState(true);
+  const [amiLoaded, setAmiLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +42,7 @@ export function BridgeMapLayerControls() {
         setHost(map);
         setEncOn(readPreference(ENC_KEY, true));
         setSeamarksOn(readPreference(SEAMARKS_KEY, true));
+        setAmiLoaded(hasAmiRoute());
         return;
       }
       timer = window.setTimeout(findHost, 100);
@@ -41,6 +52,16 @@ export function BridgeMapLayerControls() {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const refreshAmi = () => setAmiLoaded(hasAmiRoute());
+    window.addEventListener("storage", refreshAmi);
+    window.addEventListener("navdash-ami-overlay-updated", refreshAmi);
+    return () => {
+      window.removeEventListener("storage", refreshAmi);
+      window.removeEventListener("navdash-ami-overlay-updated", refreshAmi);
     };
   }, []);
 
@@ -95,6 +116,14 @@ export function BridgeMapLayerControls() {
     };
   }, [host, encOn, seamarksOn]);
 
+  function clearAmiRoute() {
+    try {
+      window.localStorage.removeItem(AMI_OVERLAY_STORAGE_KEY);
+    } catch {}
+    window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: null }));
+    setAmiLoaded(false);
+  }
+
   if (!host) return null;
 
   const buttonBase: React.CSSProperties = {
@@ -145,6 +174,20 @@ export function BridgeMapLayerControls() {
         }}
       >
         SEAMARKS {seamarksOn ? "ON" : "OFF"}
+      </button>
+      <button
+        type="button"
+        disabled={!amiLoaded}
+        onClick={clearAmiRoute}
+        style={{
+          ...buttonBase,
+          cursor: amiLoaded ? "pointer" : "default",
+          opacity: amiLoaded ? 1 : 0.45,
+          color: amiLoaded ? "#f1d56b" : "#8294a5",
+          border: amiLoaded ? "1px solid rgba(241,213,107,.55)" : "1px solid rgba(148,163,184,.25)",
+        }}
+      >
+        CLEAR AMI ROUTE
       </button>
     </div>,
     host,
