@@ -39,6 +39,20 @@ function noaaLabel(value: any) {
   const minute = String(date.getUTCMinutes()).padStart(2, "0");
   return `${day} ${month} ${hour}${minute}Z`;
 }
+function compassDirection(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return "---";
+  const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  const normalized = ((value % 360) + 360) % 360;
+  return points[Math.round(normalized / 45) % 8];
+}
+function compactPointLabel(row: any) {
+  const wind = finite(row?.windKt);
+  const direction = finite(row?.windDir);
+  const seas = positiveMarineValue(row?.seasFt);
+  const windText = wind === null ? "W --" : `${compassDirection(direction)} ${Math.round(wind)}kt`;
+  const seasText = seas === null ? "S --" : `S ${seas.toFixed(1)}ft`;
+  return `${windText} · ${seasText}`;
+}
 
 function noaaRow(frame: any, point: any) {
   const source = typeof point?.source === "string" && point.source ? point.source : "NOAA / NWS";
@@ -91,11 +105,9 @@ function noaaAsGrib(noaa: any, routeData: any) {
       return point ? noaaRow(frame, point) : null;
     }).filter(Boolean);
     const first = timeline[0] || noaaRow(firstFrame, basePoint);
-    const wind = first.windKt === null ? "--" : `${Math.round(first.windKt)}kt`;
-    const seas = first.seasFt === null ? "" : ` ${Number(first.seasFt).toFixed(1)}ft`;
     return {
       lat, lon,
-      label: `N${index + 1} ${wind}${seas}`,
+      label: `NOAA WX ${index + 1}`,
       valid: first.valid,
       windKt: first.windKt,
       windDir: first.windDir,
@@ -103,7 +115,7 @@ function noaaAsGrib(noaa: any, routeData: any) {
       seasFt: first.seasFt,
       swellFt: null,
       swellPeriod: first.swellPeriod,
-      routePoint: `NOAA ${index + 1}`,
+      routePoint: compactPointLabel(first),
       timeline,
     };
   });
