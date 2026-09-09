@@ -20,19 +20,38 @@ function requestDetails(input: RequestInfo | URL, init?: RequestInit) {
 function jsonResponse(data: unknown) { return new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } }); }
 function validRoute(data: any) { return Boolean(data?.hasRoute && Array.isArray(data?.waypoints) && data.waypoints.length >= 2); }
 function finite(value: any) { const number = Number(value); return Number.isFinite(number) ? number : null; }
+function positiveMarineValue(value: any) { const number = finite(value); return number !== null && number > 0 ? number : null; }
+function noaaValid(value: any) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return typeof value === "string" ? value : "";
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  return `${year}-${month}-${day} ${hour}:00 UTC`;
+}
+function noaaLabel(value: any) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "NOAA";
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase();
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const minute = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${day} ${month} ${hour}${minute}Z`;
+}
 
 function noaaRow(frame: any, point: any) {
   const source = typeof point?.source === "string" && point.source ? point.source : "NOAA / NWS";
   return {
-    label: frame?.validAt || "NOAA",
-    valid: frame?.validAt || "",
+    label: noaaLabel(frame?.validAt),
+    valid: noaaValid(frame?.validAt),
     forecast: source,
     windKt: finite(point?.windKt),
     windDir: finite(point?.windDirectionDeg),
     gustKt: finite(point?.gustKt),
-    seasFt: finite(point?.waveHeightFt),
+    seasFt: positiveMarineValue(point?.waveHeightFt),
     swellFt: null,
-    swellPeriod: finite(point?.wavePeriodSec),
+    swellPeriod: positiveMarineValue(point?.wavePeriodSec),
     pressureHpa: finite(point?.pressureHpa),
     tempC: null,
   };
@@ -52,8 +71,10 @@ function nearestPoint(points: any[], lat: number, lon: number) {
   return best;
 }
 
-function worstNumber(rows: any[], key: string) {
-  const values = rows.map((row) => finite(row?.[key])).filter((value): value is number => value !== null);
+function worstNumber(rows: any[], key: string, positiveOnly = false) {
+  const values = rows
+    .map((row) => positiveOnly ? positiveMarineValue(row?.[key]) : finite(row?.[key]))
+    .filter((value): value is number => value !== null);
   return values.length ? Math.max(...values) : null;
 }
 
@@ -90,13 +111,13 @@ function noaaAsGrib(noaa: any, routeData: any) {
   const timeline = frames.map((frame: any) => {
     const points = Array.isArray(frame?.points) ? frame.points : [];
     return {
-      label: frame?.validAt || "NOAA",
-      valid: frame?.validAt || "",
+      label: noaaLabel(frame?.validAt),
+      valid: noaaValid(frame?.validAt),
       forecast: noaa?.product || "NOAA / NWS route forecast",
       windKt: worstNumber(points, "windKt"),
       windDir: null,
       gustKt: worstNumber(points, "gustKt"),
-      seasFt: worstNumber(points, "waveHeightFt"),
+      seasFt: worstNumber(points, "waveHeightFt", true),
       swellFt: null,
       swellPeriod: null,
       pressureHpa: null,
@@ -109,7 +130,7 @@ function noaaAsGrib(noaa: any, routeData: any) {
     const nearestWp = nearestPoint(routeWaypoints, point.lat, point.lon);
     const pointTimeline = point.timeline || [];
     const worstWindKt = Math.max(worstNumber(pointTimeline, "windKt") || 0, worstNumber(pointTimeline, "gustKt") || 0) || null;
-    const worstSeasFt = worstNumber(pointTimeline, "seasFt");
+    const worstSeasFt = worstNumber(pointTimeline, "seasFt", true);
     const worstRow = pointTimeline.reduce((worst: any, row: any) => {
       if (!worst) return row;
       const score = Math.max(row.windKt || 0, row.gustKt || 0) + (row.seasFt || 0) * 2;
@@ -125,7 +146,7 @@ function noaaAsGrib(noaa: any, routeData: any) {
       worstGustKt: worstNumber(pointTimeline, "gustKt"),
       worstSeasFt,
       worstSwellFt: null,
-      worstSwellPeriod: worstNumber(pointTimeline, "swellPeriod"),
+      worstSwellPeriod: worstNumber(pointTimeline, "swellPeriod", true),
       worstValid: worstRow?.valid || pointTimeline[0]?.valid || "",
       timeline: pointTimeline,
     };
