@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
 type MapStatus = {
   mode: "NOAA" | "GRIB";
@@ -109,6 +110,7 @@ function enableNoaaWeatherPoints(root: HTMLElement) {
 }
 
 export default function WeatherMapUxOverlay() {
+  const { nightMode } = useBridgeTheme();
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<MapStatus>({ mode: "GRIB", product: "Imported GRIB", valid: "NO FORECAST TIME" });
   const [selectionLines, setSelectionLines] = useState<string[]>([]);
@@ -175,11 +177,10 @@ export default function WeatherMapUxOverlay() {
 
   if (!host) return null;
 
-  const night = typeof document !== "undefined" && !document.documentElement.classList.contains("light");
-  const panel = night
+  const panel = nightMode
     ? "border border-cyan-300/35 bg-[#050b11]/95 text-slate-100 shadow-2xl shadow-black/50 backdrop-blur"
     : "border border-slate-300 bg-white/95 text-slate-950 shadow-xl shadow-slate-900/15 backdrop-blur";
-  const muted = night ? "text-slate-400" : "text-slate-600";
+  const muted = nightMode ? "text-slate-400" : "text-slate-600";
 
   return createPortal(
     <>
@@ -202,7 +203,7 @@ export default function WeatherMapUxOverlay() {
             <div className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-cyan-300">Selected Weather</div>
             <button
               type="button"
-              className={`border px-2 py-1 text-[0.65rem] font-black ${night ? "border-white/15 bg-white/5" : "border-slate-300 bg-slate-50"}`}
+              className={`border px-2 py-1 text-[0.65rem] font-black ${nightMode ? "border-white/15 bg-white/5" : "border-slate-300 bg-slate-50"}`}
               onClick={() => setDismissedSignature(selectionSignature)}
             >
               CLOSE
