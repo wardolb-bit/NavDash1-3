@@ -186,11 +186,25 @@ export default function WeatherMapUxOverlay() {
     const rightAside = asides[1] || null;
     if (!rightAside) return;
 
-    rightAside.style.color = nightMode ? "#dbe5ee" : "#0f172a";
-    rightAside.querySelectorAll<HTMLElement>(".font-black,.font-bold,.font-semibold").forEach((element) => {
-      const inlineColor = element.style.color;
-      if (!inlineColor) element.style.color = nightMode ? "#e2e8f0" : "#111827";
-    });
+    const applyRightColumnTheme = () => {
+      rightAside.style.color = nightMode ? "#dbe5ee" : "#0f172a";
+      rightAside.querySelectorAll<HTMLElement>(".font-black,.font-bold,.font-semibold").forEach((element) => {
+        element.style.color = nightMode ? "#e2e8f0" : "#111827";
+      });
+
+      const projectedHeading = Array.from(rightAside.querySelectorAll<HTMLElement>("div")).find(
+        (element) => cleanText(element.textContent) === "Projected Forecast",
+      );
+      const projectedCard = projectedHeading?.parentElement || null;
+      projectedCard?.querySelectorAll<HTMLElement>(".font-black,.font-bold,.font-semibold").forEach((element) => {
+        element.style.color = nightMode ? "#e2e8f0" : "#111827";
+      });
+    };
+
+    applyRightColumnTheme();
+    const observer = new MutationObserver(applyRightColumnTheme);
+    observer.observe(rightAside, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
   }, [host, nightMode]);
 
   useEffect(() => {
