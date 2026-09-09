@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { WardLabLanding } from "./WardLabLanding";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 const navGroups: NavGroup[] = [
-  { label: "Console", items: [{ label: "Main Console", href: "/" }, { label: "ECR", href: "/ecr" }] },
+  { label: "Console", items: [{ label: "Main Console", href: "/navdash" }, { label: "ECR", href: "/ecr" }] },
   { label: "AIS", items: [{ label: "AIS Targets", href: "/ais-test" }] },
   { label: "Weather", items: [{ label: "Weather", href: "/wx" }, { label: "WX Routing", href: "/wx-routing" }, { label: "Official Weather", href: "/official-weather" }] },
   { label: "MSI", items: [{ label: "EGC / MSI", href: "/msi" }] },
@@ -17,12 +18,12 @@ const navGroups: NavGroup[] = [
 ];
 
 function itemIsActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 export function NavDashNav() {
   const pathname = usePathname();
+  if (pathname === "/") return <WardLabLanding />;
   if (pathname.startsWith("/tides")) return null;
 
   const celestialActive = pathname.startsWith("/celestial");
@@ -34,7 +35,7 @@ export function NavDashNav() {
     <nav className="navdash-global-nav sticky top-0 z-[1000] border-b border-white/10 bg-[#071019]/95 text-slate-100 shadow-xl shadow-black/30 backdrop-blur-xl">
       <div className="mx-auto flex max-w-none flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center justify-between gap-3">
-          <Link href="/" className="flex min-w-0 items-center gap-3">
+          <Link href="/navdash" className="flex min-w-0 items-center gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-[#c9a227]/45 bg-[#c9a227]/15 text-lg font-black text-[#c9a227]">ND</span>
             <span className="min-w-0">
               <span className="block text-sm font-black uppercase text-[#c9a227]">NavDash 1.3</span>
