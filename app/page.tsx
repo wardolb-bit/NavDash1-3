@@ -90,14 +90,14 @@ export default function WardLabHome() {
             <blockquote
               key={quote}
               aria-hidden={quoteIndex !== position}
-              className="col-start-1 row-start-1 self-end text-balance text-3xl font-bold text-white leading-tight tracking-[-0.02em] transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none sm:text-4xl lg:text-5xl"
-              style={{ opacity: quoteIndex === position ? 1 : 0, textShadow: "0 2px 4px rgba(0,0,0,.95), 0 4px 16px rgba(0,0,0,.85)" }}
+              className="col-start-1 row-start-1 self-end text-balance text-3xl font-extrabold text-white leading-tight tracking-[-0.02em] transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none sm:text-4xl lg:text-5xl"
+              style={{ opacity: quoteIndex === position ? 1 : 0, color: "#ffffff", textShadow: "0 2px 5px rgba(0,0,0,1), 0 5px 18px rgba(0,0,0,.95), 0 0 2px rgba(255,255,255,.9)" }}
             >
               “{quote}”
             </blockquote>
           ))}
         </div>
-        <div className="mt-4 text-[10px] font-bold uppercase tracking-[0.32em] text-white sm:text-xs" style={{ textShadow: "0 2px 4px rgba(0,0,0,.95)" }}>Captain Ron</div>
+        <div className="mt-4 text-[10px] font-extrabold uppercase tracking-[0.32em] text-white sm:text-xs" style={{ color: "#ffffff", textShadow: "0 2px 5px rgba(0,0,0,1), 0 0 2px rgba(255,255,255,.85)" }}>Captain Ron</div>
       </div>
     </main>
   );
