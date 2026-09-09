@@ -86,13 +86,11 @@ export function BridgeMapLayerControls() {
             const sourceUrl = new URL(src);
             tile.src = `/api/noaa-charts/wms${sourceUrl.search}`;
           } catch {}
-          tile.style.setProperty("opacity", "1", "important");
           tile.style.setProperty("display", encOn ? "" : "none", "important");
           return;
         }
 
         if (src.includes("/api/noaa-charts/wms")) {
-          tile.style.setProperty("opacity", "1", "important");
           tile.style.setProperty("display", encOn ? "" : "none", "important");
         }
       });
