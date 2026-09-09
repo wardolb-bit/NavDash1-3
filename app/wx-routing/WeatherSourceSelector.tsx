@@ -71,7 +71,7 @@ export default function WeatherSourceSelector() {
   });
 
   return (
-    <div style={{ position: "fixed", right: 14, top: 14, zIndex: 2147483647, isolation: "isolate", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 5, padding: 5, border: nightMode ? "1px solid rgba(148,163,184,.22)" : "1px solid rgba(148,163,184,.45)", borderRadius: 6, background: nightMode ? "rgba(4,8,12,.94)" : "rgba(255,255,255,.96)", backdropFilter: "blur(6px)", boxShadow: nightMode ? "0 6px 18px rgba(0,0,0,.28)" : "0 6px 18px rgba(15,23,42,.12)" }}>
+    <div style={{ position: "fixed", right: 14, top: 62, zIndex: 2147483647, isolation: "isolate", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 5, padding: 5, border: nightMode ? "1px solid rgba(148,163,184,.22)" : "1px solid rgba(148,163,184,.45)", borderRadius: 6, background: nightMode ? "rgba(4,8,12,.94)" : "rgba(255,255,255,.96)", backdropFilter: "blur(6px)", boxShadow: nightMode ? "0 6px 18px rgba(0,0,0,.28)" : "0 6px 18px rgba(15,23,42,.12)" }}>
       <span style={{ padding: "0 5px", color: nightMode ? "#708496" : "#64748b", fontSize: 9, fontWeight: 900, letterSpacing: ".12em", pointerEvents: "none" }}>WX SOURCE</span>
       <button type="button" aria-pressed={mode === "grib"} style={button(mode === "grib")} onClick={() => choose("grib")}>GRIB</button>
       <button type="button" aria-pressed={mode === "noaa"} style={button(mode === "noaa")} onClick={() => choose("noaa")}>NOAA</button>
