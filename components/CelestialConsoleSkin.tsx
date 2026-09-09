@@ -86,7 +86,7 @@ export function CelestialConsoleSkin() {
     }
 
     const syncMainLink = () => {
-      const link = main.querySelector<HTMLAnchorElement>('header a[href="/"]');
+      const link = main.querySelector<HTMLAnchorElement>('header a[href="/"], header a[href="/navdash"]');
       if (!link) return;
       const isDay = document.documentElement.getAttribute("data-navdash-theme") === "day";
       if (isDay) {
