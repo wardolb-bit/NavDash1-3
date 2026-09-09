@@ -176,6 +176,24 @@ export default function WeatherMapUxOverlay() {
   }, [selectionSignature]);
 
   useEffect(() => {
+    const main = document.querySelector<HTMLElement>("main");
+    if (!main) return;
+
+    const grid = Array.from(main.querySelectorAll<HTMLElement>("section")).find((element) =>
+      element.className.includes("xl:grid-cols-[21rem_minmax(0,1fr)_22rem]"),
+    );
+    const asides = grid ? Array.from(grid.querySelectorAll<HTMLElement>(":scope > aside")) : [];
+    const rightAside = asides[1] || null;
+    if (!rightAside) return;
+
+    rightAside.style.color = nightMode ? "#dbe5ee" : "#0f172a";
+    rightAside.querySelectorAll<HTMLElement>(".font-black,.font-bold,.font-semibold").forEach((element) => {
+      const inlineColor = element.style.color;
+      if (!inlineColor) element.style.color = nightMode ? "#e2e8f0" : "#111827";
+    });
+  }, [host, nightMode]);
+
+  useEffect(() => {
     const topbar = document.getElementById("wxr-v2-topbar");
     if (!topbar) return;
 
