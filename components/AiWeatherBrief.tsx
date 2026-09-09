@@ -222,7 +222,7 @@ export default function AiWeatherBrief() {
   function clearChartOverlay() {
     window.localStorage.removeItem(AMI_OVERLAY_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: null }));
-    setOverlayStatus("AMI chart overlay cleared.");
+    setOverlayStatus("AMI route cleared from chart.");
   }
 
   function printBrief() {
@@ -342,7 +342,7 @@ export default function AiWeatherBrief() {
                 <button type="button" className={primaryButton} disabled={!file || loading} onClick={analyze}>
                   {loading ? "Analyzing..." : "Analyze Weather"}
                 </button>
-                <button type="button" className={secondaryButton} onClick={clearChartOverlay}>Clear Chart WX</button>
+                <button type="button" className={secondaryButton} onClick={clearChartOverlay}>Clear AMI Route</button>
               </div>
             </div>
 
