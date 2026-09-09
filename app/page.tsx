@@ -80,7 +80,7 @@ export default function WardLabHome() {
           className="absolute inset-0 transition-opacity duration-[1800ms] ease-in-out motion-reduce:transition-none"
           style={{ opacity: photoIndex === position ? 1 : 0 }}
         >
-          <img src={photo} alt="" loading="eager" onLoad={() => loaded.current.add(photo)} className="h-full w-full object-cover" />
+          <img src={photo} alt="" loading="eager" onLoad={() => loaded.current.add(photo)} className="h-full w-full object-cover object-top" />
         </div>
       ))}
       <div className="absolute inset-0" style={{ background: "radial-gradient(ellipse at center, transparent 25%, rgba(0,0,0,.32) 100%), linear-gradient(transparent 40%, rgba(0,0,0,.55))" }} />
