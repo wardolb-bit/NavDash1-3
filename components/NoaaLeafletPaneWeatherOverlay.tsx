@@ -64,7 +64,14 @@ function escapeHtml(value: string) {
 function validLabel(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return value;
-  return `${String(date.getUTCDate()).padStart(2, "0")} ${date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase()} ${String(date.getUTCHours()).padStart(2, "0")}00Z`;
+  return date.toLocaleString("en-US", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZoneName: "short",
+  }).toUpperCase();
 }
 
 function windSpeedText(point: NoaaPoint) {
