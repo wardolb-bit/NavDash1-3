@@ -13,7 +13,6 @@ import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
-import { NoaaEncDetailTuner } from "./NoaaEncDetailTuner";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
 import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
@@ -87,7 +86,6 @@ export function BridgeConsoleRouteGate() {
       <BridgeConsolePreview />
       <BridgeMapWakeup />
       <NavMapMainOverlayV2 />
-      <NoaaEncDetailTuner />
       <NoaaLeafletPaneWeatherOverlay />
       <BridgeMapLayerControls />
       <BridgeOwnShipEnhancer />
