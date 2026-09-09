@@ -28,6 +28,8 @@ type NoaaForecast = {
 };
 type MapView = { lat: number; lon: number; zoom: number };
 
+type PixelOffset = { x: number; y: number };
+
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const MAP_VIEW_STORAGE_KEY = "navdash-main-map-view-v3";
 
@@ -84,6 +86,41 @@ function layerPoint(point: NoaaPoint, view: MapView, width: number, height: numb
   return { x: marker.x - center.x + width / 2, y: marker.y - center.y + height / 2 };
 }
 
+function sameView(a: MapView, b: MapView) {
+  return Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lon - b.lon) < 1e-7 && Math.abs(a.zoom - b.zoom) < 1e-7;
+}
+
+function paneTranslation(element: HTMLElement | null): PixelOffset {
+  if (!element) return { x: 0, y: 0 };
+  const transform = element.style.transform || getComputedStyle(element).transform || "";
+  if (!transform || transform === "none") return { x: 0, y: 0 };
+
+  const matrix3d = /matrix3d\(([^)]+)\)/.exec(transform);
+  if (matrix3d) {
+    const values = matrix3d[1].split(",").map(Number);
+    if (values.length === 16) return { x: values[12] || 0, y: values[13] || 0 };
+  }
+
+  const matrix = /matrix\(([^)]+)\)/.exec(transform);
+  if (matrix) {
+    const values = matrix[1].split(",").map(Number);
+    if (values.length === 6) return { x: values[4] || 0, y: values[5] || 0 };
+  }
+
+  const translate3d = /translate3d\(\s*(-?[\d.]+)px,\s*(-?[\d.]+)px/i.exec(transform);
+  if (translate3d) return { x: Number(translate3d[1]) || 0, y: Number(translate3d[2]) || 0 };
+
+  const translate = /translate\(\s*(-?[\d.]+)px(?:,|\s)\s*(-?[\d.]+)px/i.exec(transform);
+  if (translate) return { x: Number(translate[1]) || 0, y: Number(translate[2]) || 0 };
+
+  return { x: 0, y: 0 };
+}
+
+function paneIsSettled(element: HTMLElement | null) {
+  const offset = paneTranslation(element);
+  return Math.abs(offset.x) < 0.5 && Math.abs(offset.y) < 0.5;
+}
+
 function validLabel(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return value;
@@ -106,6 +143,7 @@ function directionText(point: NoaaPoint) {
 export function NoaaLeafletPaneWeatherOverlay() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [markerPane, setMarkerPane] = useState<HTMLElement | null>(null);
+  const [mapPane, setMapPane] = useState<HTMLElement | null>(null);
   const [route, setRoute] = useState<Waypoint[]>([]);
   const [forecast, setForecast] = useState<NoaaForecast | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -117,7 +155,8 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const [error, setError] = useState("");
   const [anchorView, setAnchorView] = useState<MapView>({ lat: 21.3, lon: -157.9, zoom: 7 });
   const [size, setSize] = useState({ width: 1, height: 1 });
-  const zoomRef = useRef(7);
+  const anchorViewRef = useRef<MapView>({ lat: 21.3, lon: -157.9, zoom: 7 });
+  const pendingViewRef = useRef<MapView | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,15 +164,18 @@ export function NoaaLeafletPaneWeatherOverlay() {
     const find = () => {
       if (cancelled) return;
       const element = document.getElementById("v12-map");
-      const pane = element?.querySelector("#navmap-main-isolated-v2 .leaflet-marker-pane") as HTMLElement | null;
-      if (element && pane) {
+      const isolated = element?.querySelector("#navmap-main-isolated-v2") as HTMLElement | null;
+      const pane = isolated?.querySelector(".leaflet-marker-pane") as HTMLElement | null;
+      const movingPane = isolated?.querySelector(".leaflet-map-pane") as HTMLElement | null;
+      if (element && pane && movingPane) {
         const initialRoute = readRoute();
         const initialView = readMapView(initialRoute);
         setHost(element);
         setMarkerPane(pane);
+        setMapPane(movingPane);
         setRoute(initialRoute);
         setAnchorView(initialView);
-        zoomRef.current = initialView.zoom;
+        anchorViewRef.current = initialView;
         return;
       }
       timer = window.setTimeout(find, 100);
@@ -143,18 +185,23 @@ export function NoaaLeafletPaneWeatherOverlay() {
   }, []);
 
   useEffect(() => {
-    if (!host) return;
+    if (!host || !markerPane || !mapPane) return;
+
     const sync = () => {
       const nextRoute = readRoute();
       setRoute((current) => JSON.stringify(current) === JSON.stringify(nextRoute) ? current : nextRoute);
 
-      // While panning, Leaflet moves the entire marker pane for us. Do not also
-      // recalculate marker positions from the new map center or the markers move twice.
-      // Re-anchor only when the zoom level changes, because Leaflet rebuilds the pane scale.
       const nextView = readMapView(nextRoute);
-      if (Math.abs(nextView.zoom - zoomRef.current) > 0.001) {
-        zoomRef.current = nextView.zoom;
-        setAnchorView(nextView);
+      if (!sameView(anchorViewRef.current, nextView)) pendingViewRef.current = nextView;
+
+      // Leaflet moves the whole pane while dragging/zooming, then resets the pane and
+      // updates its pixel origin. Only replace our layer coordinates after that reset.
+      // This avoids both the double-pan and the zoom/disappear failure.
+      const pending = pendingViewRef.current;
+      if (pending && paneIsSettled(mapPane) && paneIsSettled(markerPane)) {
+        anchorViewRef.current = pending;
+        pendingViewRef.current = null;
+        setAnchorView(pending);
       }
 
       const rect = host.getBoundingClientRect();
@@ -164,13 +211,13 @@ export function NoaaLeafletPaneWeatherOverlay() {
     };
 
     sync();
-    const timer = window.setInterval(sync, 120);
+    const timer = window.setInterval(sync, 50);
     window.addEventListener("resize", sync);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("resize", sync);
     };
-  }, [host]);
+  }, [host, markerPane, mapPane]);
 
   const routeSignature = useMemo(() => route.map((wp) => `${wp.lat.toFixed(5)},${wp.lon.toFixed(5)}`).join(";"), [route]);
 
@@ -261,7 +308,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
               {forecast.note ? <div style={{ marginTop: 4, fontSize: 9, color: "#f1d56b" }}>{forecast.note}</div> : null}
             </>
           ) : loading ? <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Loading NOAA route forecast…</div> : error ? <div style={{ marginTop: 9, fontSize: 10, color: "#fca5a5" }}>{error}</div> : <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Load a route to enable NOAA weather.</div>}
-          <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(148,163,184,.16)", fontSize: 9, color: "#8294a5" }}>NOAA markers ride Leaflet's marker pane during pan and re-anchor only when zoom changes. AMI WX remains independent.</div>
+          <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(148,163,184,.16)", fontSize: 9, color: "#8294a5" }}>NOAA markers stay with Leaflet during pan and re-anchor only after the map pane fully settles. AMI WX remains independent.</div>
         </div>
       ) : null}
     </div>,
