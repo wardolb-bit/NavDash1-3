@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 type Waypoint = { id?: string; name?: string; lat: number; lon: number };
@@ -84,10 +84,6 @@ function layerPoint(point: NoaaPoint, view: MapView, width: number, height: numb
   return { x: marker.x - center.x + width / 2, y: marker.y - center.y + height / 2 };
 }
 
-function sameView(a: MapView, b: MapView) {
-  return Math.abs(a.lat - b.lat) < 1e-7 && Math.abs(a.lon - b.lon) < 1e-7 && Math.abs(a.zoom - b.zoom) < 1e-7;
-}
-
 function validLabel(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return value;
@@ -119,8 +115,9 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const [showSeas, setShowSeas] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [mapView, setMapView] = useState<MapView>({ lat: 21.3, lon: -157.9, zoom: 7 });
+  const [anchorView, setAnchorView] = useState<MapView>({ lat: 21.3, lon: -157.9, zoom: 7 });
   const [size, setSize] = useState({ width: 1, height: 1 });
+  const zoomRef = useRef(7);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,8 +127,13 @@ export function NoaaLeafletPaneWeatherOverlay() {
       const element = document.getElementById("v12-map");
       const pane = element?.querySelector("#navmap-main-isolated-v2 .leaflet-marker-pane") as HTMLElement | null;
       if (element && pane) {
+        const initialRoute = readRoute();
+        const initialView = readMapView(initialRoute);
         setHost(element);
         setMarkerPane(pane);
+        setRoute(initialRoute);
+        setAnchorView(initialView);
+        zoomRef.current = initialView.zoom;
         return;
       }
       timer = window.setTimeout(find, 100);
@@ -142,20 +144,32 @@ export function NoaaLeafletPaneWeatherOverlay() {
 
   useEffect(() => {
     if (!host) return;
-    let raf = 0;
     const sync = () => {
       const nextRoute = readRoute();
       setRoute((current) => JSON.stringify(current) === JSON.stringify(nextRoute) ? current : nextRoute);
+
+      // While panning, Leaflet moves the entire marker pane for us. Do not also
+      // recalculate marker positions from the new map center or the markers move twice.
+      // Re-anchor only when the zoom level changes, because Leaflet rebuilds the pane scale.
       const nextView = readMapView(nextRoute);
-      setMapView((current) => sameView(current, nextView) ? current : nextView);
+      if (Math.abs(nextView.zoom - zoomRef.current) > 0.001) {
+        zoomRef.current = nextView.zoom;
+        setAnchorView(nextView);
+      }
+
       const rect = host.getBoundingClientRect();
-      setSize((current) => current.width === Math.max(1, rect.width) && current.height === Math.max(1, rect.height)
-        ? current
-        : { width: Math.max(1, rect.width), height: Math.max(1, rect.height) });
-      raf = window.requestAnimationFrame(sync);
+      const width = Math.max(1, rect.width);
+      const height = Math.max(1, rect.height);
+      setSize((current) => current.width === width && current.height === height ? current : { width, height });
     };
+
     sync();
-    return () => window.cancelAnimationFrame(raf);
+    const timer = window.setInterval(sync, 120);
+    window.addEventListener("resize", sync);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("resize", sync);
+    };
   }, [host]);
 
   const routeSignature = useMemo(() => route.map((wp) => `${wp.lat.toFixed(5)},${wp.lon.toFixed(5)}`).join(";"), [route]);
@@ -192,7 +206,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const markers = visible && frame ? createPortal(
     <>
       {frame.points.map((point, index) => {
-        const pos = layerPoint(point, mapView, size.width, size.height);
+        const pos = layerPoint(point, anchorView, size.width, size.height);
         return (
           <div
             key={`${point.lat}-${point.lon}-${index}`}
@@ -247,7 +261,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
               {forecast.note ? <div style={{ marginTop: 4, fontSize: 9, color: "#f1d56b" }}>{forecast.note}</div> : null}
             </>
           ) : loading ? <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Loading NOAA route forecast…</div> : error ? <div style={{ marginTop: 9, fontSize: 10, color: "#fca5a5" }}>{error}</div> : <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Load a route to enable NOAA weather.</div>}
-          <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(148,163,184,.16)", fontSize: 9, color: "#8294a5" }}>NOAA markers are now mounted inside Leaflet's marker pane so they pan and zoom with the chart. AMI WX remains independent.</div>
+          <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(148,163,184,.16)", fontSize: 9, color: "#8294a5" }}>NOAA markers ride Leaflet's marker pane during pan and re-anchor only when zoom changes. AMI WX remains independent.</div>
         </div>
       ) : null}
     </div>,
