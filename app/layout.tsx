@@ -115,17 +115,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 }
               };
 
-              const mountNavBriefButton = () => {
-                if (document.getElementById("navdash-navbrief-clear-ami-route")) return;
+              const getNavBriefButtonRow = () => {
                 const page = document.querySelector(".navdash-navbrief-console");
-                if (!(page instanceof HTMLElement)) return;
-
+                if (!(page instanceof HTMLElement)) return null;
                 const header = page.querySelector("header");
-                if (!(header instanceof HTMLElement)) return;
+                if (!(header instanceof HTMLElement)) return null;
                 const buttonRow = Array.from(header.querySelectorAll("div")).find((el) =>
                   el.querySelector('button') && el.textContent?.includes("Refresh Inputs") && el.textContent?.includes("Print / PDF")
                 );
-                if (!(buttonRow instanceof HTMLElement)) return;
+                return buttonRow instanceof HTMLElement ? buttonRow : null;
+              };
+
+              const mountNavBriefMainButton = () => {
+                if (document.getElementById("navdash-navbrief-main")) return;
+                const buttonRow = getNavBriefButtonRow();
+                if (!buttonRow) return;
+                const button = document.createElement("button");
+                button.id = "navdash-navbrief-main";
+                button.type = "button";
+                button.textContent = "MAIN";
+                button.className = "border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] border-white/15 bg-[#101820] text-[#dbe5ee] hover:bg-[#182631]";
+                button.addEventListener("click", () => { window.location.href = "/"; });
+                buttonRow.prepend(button);
+              };
+
+              const mountNavBriefButton = () => {
+                if (document.getElementById("navdash-navbrief-clear-ami-route")) return;
+                const buttonRow = getNavBriefButtonRow();
+                if (!buttonRow) return;
 
                 const button = document.createElement("button");
                 button.id = "navdash-navbrief-clear-ami-route";
@@ -136,7 +153,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 buttonRow.appendChild(button);
               };
 
-              const mount = () => mountNavBriefButton();
+              const mount = () => {
+                mountNavBriefMainButton();
+                mountNavBriefButton();
+              };
               mount();
               const observer = new MutationObserver(() => mount());
               observer.observe(document.body, { childList: true, subtree: true });
