@@ -37,6 +37,35 @@ export function BridgeLegSequenceDisplay() {
   useEffect(() => {
     let timer = 0;
 
+    const styleId = "bridge-leg-sequence-display-style";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `
+        #bc2-leg[data-sequence-label],
+        #bc2-top-leg[data-sequence-label] {
+          color: transparent !important;
+          position: relative !important;
+        }
+        #bc2-leg[data-sequence-label]::after,
+        #bc2-top-leg[data-sequence-label]::after {
+          content: attr(data-sequence-label);
+          color: #e7c95c;
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          white-space: nowrap;
+          pointer-events: none;
+        }
+        #bc2-top-leg[data-sequence-label]::after {
+          justify-content: center;
+          color: #aebdca;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
     const sync = () => {
       const routeSection = document.getElementById("v12-section-route");
       const activeLegSource = routeSection?.nextElementSibling as HTMLElement | null;
@@ -45,11 +74,10 @@ export function BridgeLegSequenceDisplay() {
       if (!sequenceLabel) return;
 
       const railLeg = document.getElementById("bc2-leg");
-      if (railLeg && railLeg.textContent !== sequenceLabel) railLeg.textContent = sequenceLabel;
+      if (railLeg) railLeg.dataset.sequenceLabel = sequenceLabel;
 
       const topLeg = document.getElementById("bc2-top-leg");
-      const topLabel = `LEG ${sequenceLabel}`;
-      if (topLeg && topLeg.textContent !== topLabel) topLeg.textContent = topLabel;
+      if (topLeg) topLeg.dataset.sequenceLabel = `LEG ${sequenceLabel}`;
     };
 
     const schedule = () => {
@@ -66,6 +94,7 @@ export function BridgeLegSequenceDisplay() {
       window.clearTimeout(timer);
       observer.disconnect();
       window.removeEventListener("storage", schedule);
+      document.getElementById(styleId)?.remove();
     };
   }, []);
 
