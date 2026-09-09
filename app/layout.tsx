@@ -100,6 +100,79 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
 
+        <Script id="navdash-ami-clear-controls" strategy="afterInteractive">
+          {`
+            (() => {
+              const STORAGE_KEY = "navdash-ami-route-forecast-v1";
+
+              const clearAmiRoute = (button) => {
+                try { localStorage.removeItem(STORAGE_KEY); } catch {}
+                window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: null }));
+                if (button instanceof HTMLButtonElement) {
+                  const original = button.textContent || "CLEAR AMI ROUTE";
+                  button.textContent = "AMI ROUTE CLEARED";
+                  window.setTimeout(() => { button.textContent = original; }, 1200);
+                }
+              };
+
+              const makeButton = (id, className, styleText) => {
+                const button = document.createElement("button");
+                button.id = id;
+                button.type = "button";
+                button.textContent = "CLEAR AMI ROUTE";
+                if (className) button.className = className;
+                if (styleText) button.style.cssText = styleText;
+                button.addEventListener("click", () => clearAmiRoute(button));
+                return button;
+              };
+
+              const mountMainMapButton = () => {
+                if (document.getElementById("navdash-main-clear-ami-route")) return;
+                const map = document.getElementById("v12-map");
+                if (!map) return;
+                const tools = Array.from(map.children).find((el) => /z-index:\\s*760/.test(el.getAttribute("style") || ""));
+                if (!(tools instanceof HTMLElement)) return;
+                const toolbar = tools.firstElementChild;
+                if (!(toolbar instanceof HTMLElement)) return;
+                const button = makeButton(
+                  "navdash-main-clear-ami-route",
+                  "",
+                  "border:1px solid rgba(241,213,107,.45);background:rgba(7,16,25,.90);color:#f1d56b;min-height:36px;padding:7px 11px;border-radius:5px;font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;white-space:nowrap"
+                );
+                toolbar.appendChild(button);
+              };
+
+              const mountNavBriefButton = () => {
+                if (document.getElementById("navdash-navbrief-clear-ami-route")) return;
+                const page = document.querySelector(".navdash-navbrief-console");
+                if (!(page instanceof HTMLElement)) return;
+                const labels = Array.from(page.querySelectorAll("div"));
+                const label = labels.find((el) => el.textContent?.trim() === "AMI Weather PDF");
+                const panel = label?.parentElement;
+                if (!(panel instanceof HTMLElement)) return;
+                const fileInput = Array.from(panel.querySelectorAll('input[type="file"]')).find((input) => input.getAttribute("accept")?.includes("pdf"));
+                if (!(fileInput instanceof HTMLInputElement)) return;
+                const button = makeButton(
+                  "navdash-navbrief-clear-ami-route",
+                  fileInput.className,
+                  "margin-top:8px;width:100%;font-weight:900;text-transform:uppercase;letter-spacing:.08em;cursor:pointer"
+                );
+                fileInput.insertAdjacentElement("afterend", button);
+              };
+
+              const mount = () => {
+                mountMainMapButton();
+                mountNavBriefButton();
+              };
+
+              mount();
+              const observer = new MutationObserver(() => mount());
+              observer.observe(document.body, { childList: true, subtree: true });
+              window.addEventListener("popstate", mount);
+            })();
+          `}
+        </Script>
+
         <Script id="navconsole-fullscreen-manager" strategy="afterInteractive">
           {`
             (() => {
