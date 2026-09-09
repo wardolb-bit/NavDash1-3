@@ -209,50 +209,43 @@ export default function WeatherMapUxOverlay() {
   if (!host) return null;
 
   const panel = nightMode
-    ? "border border-cyan-300/35 bg-[#050b11]/95 text-slate-100 shadow-2xl shadow-black/50 backdrop-blur"
-    : "border border-slate-300 bg-white/95 text-slate-950 shadow-xl shadow-slate-900/15 backdrop-blur";
+    ? "border border-cyan-300/30 bg-[#050b11]/94 text-slate-100 shadow-xl shadow-black/40 backdrop-blur"
+    : "border border-slate-300 bg-white/95 text-slate-950 shadow-lg shadow-slate-900/10 backdrop-blur";
   const muted = nightMode ? "text-slate-400" : "text-slate-600";
 
   return createPortal(
     <>
-      <div className={`pointer-events-none absolute left-3 top-3 z-30 max-w-[72%] px-3 py-2 ${panel}`}>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.68rem] font-black uppercase tracking-[0.12em]">
-          <span className={status.mode === "NOAA" ? "text-cyan-300" : "text-amber-300"}>{status.mode} ONLY</span>
+      <div className={`pointer-events-none absolute left-3 top-3 z-30 max-w-[70%] px-2.5 py-1.5 ${panel}`}>
+        <div className="flex flex-wrap items-center gap-x-2 text-[0.62rem] font-black uppercase tracking-[0.10em]">
+          <span className={status.mode === "NOAA" ? "text-cyan-300" : "text-amber-300"}>{status.mode}</span>
           <span className={muted}>·</span>
           <span>{status.product}</span>
           <span className={muted}>·</span>
           <span>{status.valid}</span>
         </div>
-        <div className={`mt-1 text-[0.62rem] font-bold ${muted}`}>
-          Weather points: arrow = wind direction · label = wind / seas · color = exposure
-        </div>
       </div>
 
       {showSelection ? (
-        <div className={`absolute bottom-3 left-3 z-40 w-[min(22rem,calc(100%-1.5rem))] p-3 ${panel}`}>
+        <div className={`absolute bottom-3 left-3 z-40 w-[min(19rem,calc(100%-1.5rem))] p-2.5 ${panel}`}>
           <div className="flex items-center justify-between gap-3">
-            <div className="text-[0.68rem] font-black uppercase tracking-[0.16em] text-cyan-300">Selected Weather</div>
+            <div className="text-[0.64rem] font-black uppercase tracking-[0.14em] text-cyan-300">Selected Weather</div>
             <button
               type="button"
-              className={`border px-2 py-1 text-[0.65rem] font-black ${nightMode ? "border-white/15 bg-white/5" : "border-slate-300 bg-slate-50"}`}
+              className={`border px-2 py-0.5 text-[0.6rem] font-black ${nightMode ? "border-white/15 bg-white/5" : "border-slate-300 bg-slate-50"}`}
               onClick={() => setDismissedSignature(selectionSignature)}
             >
               CLOSE
             </button>
           </div>
-          <div className="mt-2 grid grid-cols-1 gap-1.5 text-xs">
-            {selectionLines.map((line, index) => (
+          <div className="mt-1.5 grid grid-cols-1 gap-1 text-[0.7rem]">
+            {selectionLines.slice(0, 7).map((line, index) => (
               <div key={`${line}-${index}`} className={index === 0 ? "font-black" : index === 1 ? muted : "font-bold"}>
                 {line}
               </div>
             ))}
           </div>
         </div>
-      ) : (
-        <div className={`pointer-events-none absolute bottom-3 right-3 z-30 px-2.5 py-1.5 text-[0.62rem] font-bold ${panel} ${muted}`}>
-          Click a weather point or colored route leg for details
-        </div>
-      )}
+      ) : null}
     </>,
     host,
   );
