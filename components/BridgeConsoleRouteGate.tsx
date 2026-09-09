@@ -10,6 +10,7 @@ import { BridgeMapWakeup } from "./BridgeMapWakeup";
 import { BridgeMapLayerControls } from "./BridgeMapLayerControls";
 import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
 import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
+import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
@@ -78,6 +79,7 @@ export function BridgeConsoleRouteGate() {
       <BridgeQuickAccess />
       <BridgeNextWaypointDistance />
       <BridgeRouteDistanceWgs84 />
+      <BridgeLegSequenceDisplay />
     </>
   );
 }
