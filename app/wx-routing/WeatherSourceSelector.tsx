@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
 const SOURCE_KEY = "navdash-wx-routing-source";
@@ -39,6 +40,7 @@ function relabelWeatherUi(mode: SourceMode) {
 export default function WeatherSourceSelector() {
   const { nightMode } = useBridgeTheme();
   const [mode, setMode] = useState<SourceMode>("grib");
+  const [host, setHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     const current = readMode();
@@ -49,6 +51,27 @@ export default function WeatherSourceSelector() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    let timer = 0;
+
+    const attach = () => {
+      if (cancelled) return;
+      const target = document.querySelector<HTMLElement>("#wxr-v2-topbar .wxr-center");
+      if (target) {
+        setHost(target);
+        return;
+      }
+      timer = window.setTimeout(attach, 100);
+    };
+
+    attach();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   const choose = (next: SourceMode) => {
     try { window.localStorage.setItem(SOURCE_KEY, next); } catch {}
     setMode(next);
@@ -56,13 +79,14 @@ export default function WeatherSourceSelector() {
   };
 
   const button = (active: boolean): React.CSSProperties => ({
-    height: 30,
-    padding: "0 10px",
-    borderRadius: 4,
+    height: 26,
+    minWidth: 52,
+    padding: "0 9px",
+    borderRadius: 3,
     border: `1px solid ${active ? (nightMode ? "#22d3ee" : "#0891b2") : (nightMode ? "rgba(148,163,184,.28)" : "rgba(100,116,139,.35)")}`,
     background: active ? (nightMode ? "rgba(34,211,238,.16)" : "#ecfeff") : (nightMode ? "#071019" : "#ffffff"),
     color: active ? (nightMode ? "#d9fbff" : "#0e7490") : (nightMode ? "#9aabba" : "#475569"),
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 900,
     letterSpacing: ".08em",
     cursor: "pointer",
@@ -70,14 +94,38 @@ export default function WeatherSourceSelector() {
     touchAction: "manipulation",
   });
 
-  return (
-    <div style={{ position: "fixed", right: 14, top: 62, zIndex: 2147483647, isolation: "isolate", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 5, padding: 5, border: nightMode ? "1px solid rgba(148,163,184,.22)" : "1px solid rgba(148,163,184,.45)", borderRadius: 6, background: nightMode ? "rgba(4,8,12,.94)" : "rgba(255,255,255,.96)", backdropFilter: "blur(6px)", boxShadow: nightMode ? "0 6px 18px rgba(0,0,0,.28)" : "0 6px 18px rgba(15,23,42,.12)" }}>
-      <span style={{ padding: "0 5px", color: nightMode ? "#708496" : "#64748b", fontSize: 9, fontWeight: 900, letterSpacing: ".12em", pointerEvents: "none" }}>WX SOURCE</span>
+  if (!host) return null;
+
+  return createPortal(
+    <div
+      data-wxr-source-selector
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        marginLeft: 4,
+        paddingLeft: 10,
+        borderLeft: nightMode ? "1px solid rgba(148,163,184,.22)" : "1px solid rgba(100,116,139,.28)",
+        pointerEvents: "auto",
+      }}
+    >
+      <span
+        style={{
+          padding: 0,
+          border: 0,
+          background: "transparent",
+          color: nightMode ? "#708496" : "#64748b",
+          fontSize: 8,
+          fontWeight: 900,
+          letterSpacing: ".12em",
+          whiteSpace: "nowrap",
+        }}
+      >
+        SOURCE
+      </span>
       <button type="button" aria-pressed={mode === "grib"} style={button(mode === "grib")} onClick={() => choose("grib")}>GRIB</button>
       <button type="button" aria-pressed={mode === "noaa"} style={button(mode === "noaa")} onClick={() => choose("noaa")}>NOAA</button>
-      <span style={{ marginLeft: 3, padding: "0 6px", color: mode === "noaa" ? (nightMode ? "#d9fbff" : "#0e7490") : (nightMode ? "#cbd5e1" : "#334155"), fontSize: 9, fontWeight: 900, letterSpacing: ".08em", whiteSpace: "nowrap", pointerEvents: "none" }}>
-        {mode === "noaa" ? "NOAA ONLY" : "GRIB ONLY"}
-      </span>
-    </div>
+    </div>,
+    host,
   );
 }
