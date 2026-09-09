@@ -32,7 +32,7 @@ export default function PositionReportNavConsole() {
   if (!target) return null;
 
   return createPortal(
-    <Link href="/" aria-label="Return to Nav Console" className="position-report-nav-console">
+    <Link href="/navdash" aria-label="Return to Nav Console" className="position-report-nav-console">
       NAV CONSOLE
     </Link>,
     target,
