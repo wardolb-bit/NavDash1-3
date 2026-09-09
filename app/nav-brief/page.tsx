@@ -110,7 +110,12 @@ function totalDistance(waypoints: Waypoint[]) { return segmentRows(waypoints).re
 function safeNumber(value: string, fallback: number) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
 function formatDateTime(date: Date | null) { return !date || !Number.isFinite(date.getTime()) ? "--" : date.toLocaleString(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 function formatUtc(value: string) { const date = new Date(value); return !Number.isFinite(date.getTime()) ? value : date.toLocaleString("en-US", { timeZone: "UTC", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) + "Z"; }
-function closestRouteDistance(mark: UserMark, route: Waypoint[]) { return route.reduce((best, wp) => Math.min(best, nmBetween(mark, wp)), Number.POSITIVE_INFINITY); }
+function closestRouteReference(mark: UserMark, route: Waypoint[]) {
+  return route.reduce((best, waypoint) => {
+    const distance = nmBetween(mark, waypoint);
+    return distance < best.distance ? { distance, waypoint } : best;
+  }, { distance: Number.POSITIVE_INFINITY, waypoint: route[0] });
+}
 function maxBy(points: AmiForecastPoint[], getter: (p: AmiForecastPoint) => number) { return points.reduce<AmiForecastPoint | null>((best, point) => !best || getter(point) > getter(best) ? point : best, null); }
 
 export default function NavBriefBuilderPage() {
@@ -136,7 +141,10 @@ export default function NavBriefBuilderPage() {
   const speed = safeNumber(plannedSpeed, 10), departureDate = departure ? new Date(departure) : null;
   const eta = departureDate ? new Date(departureDate.getTime() + distanceNm / speed * 3600000) : null;
   const origin = route?.waypoints[0], destination = route?.waypoints[route.waypoints.length - 1];
-  const relevantMarks = useMemo(() => route ? userMarks.map(mark => ({ ...mark, routeDistance: closestRouteDistance(mark, route.waypoints) })).sort((a, b) => a.routeDistance - b.routeDistance) : [], [route, userMarks]);
+  const relevantMarks = useMemo(() => route ? userMarks.map(mark => {
+    const reference = closestRouteReference(mark, route.waypoints);
+    return { ...mark, routeDistance: reference.distance, routeWaypointName: reference.waypoint?.name || reference.waypoint?.id || "Waypoint" };
+  }).sort((a, b) => a.routeDistance - b.routeDistance) : [], [route, userMarks]);
   const strongestWind = useMemo(() => ami ? maxBy(ami.forecastPoints, point => point.windSpeedKt) : null, [ami]);
   const strongestGust = useMemo(() => ami ? maxBy(ami.forecastPoints, point => point.gustKt) : null, [ami]);
   const highestSea = useMemo(() => ami ? maxBy(ami.forecastPoints, point => point.significantWaveM) : null, [ami]);
@@ -277,7 +285,7 @@ export default function NavBriefBuilderPage() {
 
           <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
             <div className={`print-sub border p-3 ${sub}`}><div className="text-[12px] font-black">WEATHER ROUTING STRATEGY</div><div className={`mt-2 text-[11px] leading-5 ${muted}`}>{ami ? <>{ami.sourceName}{ami.referenceId ? ` · REF ${ami.referenceId}` : ""} · ISSUED {formatUtc(ami.issuedAt)}{ami.warnings ? <><br/><b>Warnings:</b> {ami.warnings}</> : null}{ami.synopticDiscussion ? <><br/><b>Synoptic:</b> {ami.synopticDiscussion}</> : null}<br/>{strongestWind ? `Max wind ${strongestWind.windSpeedKt} kt at ${formatUtc(strongestWind.validAt)}. ` : ""}{strongestGust ? `Peak gust ${strongestGust.gustKt} kt. ` : ""}{highestSea ? `Max significant seas ${highestSea.significantWaveM.toFixed(1)} m at ${formatUtc(highestSea.validAt)}.` : ""}{ami.cyclone ? <><br/><b>Tropical:</b> {ami.cyclone.summary}</> : null}</> : "No AMI route forecast loaded."}</div></div>
-            <div className={`print-sub border p-3 ${sub}`}><div className="text-[12px] font-black">ROUTING DECISION POINTS</div><div className={`mt-2 text-[11px] leading-5 ${muted}`}>{relevantMarks.length ? relevantMarks.map(mark => <div key={mark.id}>• <b>{mark.name}</b> · {formatCoord(mark.lat, true)} / {formatCoord(mark.lon, false)} · {mark.routeDistance.toFixed(1)} NM to nearest route waypoint</div>) : "No user-layer marks loaded."}</div></div>
+            <div className={`print-sub border p-3 ${sub}`}><div className="text-[12px] font-black">ROUTING DECISION POINTS</div><div className={`mt-2 text-[11px] leading-5 ${muted}`}>{relevantMarks.length ? relevantMarks.map(mark => <div key={mark.id}>• <b>{mark.name}</b> · {formatCoord(mark.lat, true)} / {formatCoord(mark.lon, false)} · {mark.routeDistance.toFixed(1)} NM to {mark.routeWaypointName}</div>) : "No user-layer marks loaded."}</div></div>
           </div>
 
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
