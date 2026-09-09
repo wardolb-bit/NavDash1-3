@@ -9,6 +9,7 @@ const NOAA_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOn
 
 function normalizedQuery(searchParams: URLSearchParams) {
   return Array.from(searchParams.entries())
+    .filter(([key]) => !key.startsWith("_"))
     .sort(([aKey, aValue], [bKey, bValue]) => aKey === bKey ? aValue.localeCompare(bValue) : aKey.localeCompare(bKey))
     .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
     .join("&");
