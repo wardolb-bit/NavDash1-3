@@ -443,6 +443,8 @@ function IsolatedMainMap() {
       celestialLayerRef.current = L.layerGroup([], { pane: "navmap-main-celestial-v1" } as any).addTo(map);
       amiLayerRef.current = L.layerGroup([], { pane: "navmap-main-ami-v1" } as any).addTo(map);
       mapRef.current = map;
+      (element as any).__navdashLeafletMap = map;
+      window.dispatchEvent(new CustomEvent("navdash-leaflet-map-ready"));
 
       const drawMeasurement = (start: MeasurePoint, end: MeasurePoint, source: MeasureMode) => {
         const result = distanceAndBearing(start, end);
@@ -522,6 +524,7 @@ function IsolatedMainMap() {
           mapRef.current.off("moveend", persistView);
           mapRef.current.off("zoomend", persistView);
         }
+        if (element?.__navdashLeafletMap === mapRef.current) delete element.__navdashLeafletMap;
         mapRef.current.remove();
         mapRef.current = null;
       }
