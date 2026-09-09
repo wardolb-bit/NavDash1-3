@@ -15,6 +15,7 @@ import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
+import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
 
 /**
  * Keep the main bridge-console DOM enhancers scoped to the main Nav Console route.
@@ -60,17 +61,28 @@ export function BridgeConsoleRouteGate() {
   }, [isMainNavDashRoute]);
 
   if (pathname.startsWith("/celestial")) {
-    return <CelestialConsoleSkin />;
+    return (
+      <>
+        <NavDashMainLinkGuard />
+        <CelestialConsoleSkin />
+      </>
+    );
   }
 
   if (pathname === "/msi") {
-    return <MsiConsoleSkin />;
+    return (
+      <>
+        <NavDashMainLinkGuard />
+        <MsiConsoleSkin />
+      </>
+    );
   }
 
-  if (!isMainNavDashRoute || !mapReady) return null;
+  if (!isMainNavDashRoute || !mapReady) return <NavDashMainLinkGuard />;
 
   return (
     <>
+      <NavDashMainLinkGuard />
       <BridgeConsolePreview />
       <BridgeMapWakeup />
       <NavMapMainOverlayV2 />
