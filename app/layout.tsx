@@ -153,9 +153,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 buttonRow.appendChild(button);
               };
 
+              const renameNavBriefHeadings = () => {
+                const page = document.querySelector(".navdash-navbrief-console");
+                if (!(page instanceof HTMLElement)) return;
+                page.querySelectorAll("div").forEach((el) => {
+                  if (el.textContent === "WEATHER ROUTING STRATEGY") el.textContent = "WEATHER INFORMATION";
+                  if (el.textContent === "ROUTING DECISION POINTS") el.textContent = "ROUTE REFERENCE POINTS";
+                });
+              };
+
               const mount = () => {
                 mountNavBriefMainButton();
                 mountNavBriefButton();
+                renameNavBriefHeadings();
               };
               mount();
               const observer = new MutationObserver(() => mount());
