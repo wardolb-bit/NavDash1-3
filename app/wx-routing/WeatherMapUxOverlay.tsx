@@ -19,6 +19,12 @@ function findExact(root: ParentNode, text: string) {
   ) || null;
 }
 
+function findButton(root: ParentNode, text: string) {
+  return Array.from(root.querySelectorAll<HTMLButtonElement>("button")).find(
+    (button) => cleanText(button.textContent) === text,
+  ) || null;
+}
+
 function selectedSourceMode(): "NOAA" | "GRIB" {
   try {
     return window.localStorage.getItem("navdash-wx-routing-source") === "noaa" ? "NOAA" : "GRIB";
@@ -79,6 +85,29 @@ function relabelWeatherPoints(root: HTMLElement) {
   });
 }
 
+function enableNoaaWeatherPoints(root: HTMLElement) {
+  if (selectedSourceMode() !== "NOAA") return false;
+
+  const layersButton = findButton(root, "LAYERS");
+  if (!layersButton) return false;
+  layersButton.click();
+
+  window.requestAnimationFrame(() => {
+    const weatherText = Array.from(root.querySelectorAll<HTMLElement>("span,div")).find((element) => {
+      const text = cleanText(element.textContent);
+      return text === "Weather Points" || text === "GRIB Sample Points";
+    });
+    const row = weatherText?.closest("label") || weatherText?.parentElement?.closest("label") || null;
+    const checkbox = row?.querySelector<HTMLInputElement>('input[type="checkbox"]') || null;
+    if (checkbox && !checkbox.checked) checkbox.click();
+
+    const routeButton = findButton(root, "ROUTE");
+    routeButton?.click();
+  });
+
+  return true;
+}
+
 export default function WeatherMapUxOverlay() {
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [status, setStatus] = useState<MapStatus>({ mode: "GRIB", product: "Imported GRIB", valid: "NO FORECAST TIME" });
@@ -93,6 +122,7 @@ export default function WeatherMapUxOverlay() {
     let timer = 0;
     let observer: MutationObserver | null = null;
     let storageHandler: (() => void) | null = null;
+    let noaaPointsInitialized = false;
 
     const attach = () => {
       if (cancelled) return;
@@ -110,6 +140,9 @@ export default function WeatherMapUxOverlay() {
       const refresh = () => {
         if (cancelled) return;
         relabelWeatherPoints(main);
+        if (!noaaPointsInitialized && selectedSourceMode() === "NOAA") {
+          noaaPointsInitialized = enableNoaaWeatherPoints(main);
+        }
         const nextStatus = readMapStatus(main);
         const nextLines = readSelectionLines(main);
         setStatus((current) =>
