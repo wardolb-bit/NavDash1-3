@@ -24,7 +24,7 @@ import { MsiConsoleSkin } from "./MsiConsoleSkin";
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
   const [mapReady, setMapReady] = useState(false);
-  const isMainNavDashRoute = pathname === "/" || pathname === "/navdash";
+  const isMainNavDashRoute = pathname === "/navdash";
 
   useEffect(() => {
     setMapReady(false);

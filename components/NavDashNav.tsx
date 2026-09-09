@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { WardLabLanding } from "./WardLabLanding";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { label: string; items: NavItem[] };
@@ -23,8 +22,7 @@ function itemIsActive(pathname: string, href: string) {
 
 export function NavDashNav() {
   const pathname = usePathname();
-  if (pathname === "/") return <WardLabLanding />;
-  if (pathname.startsWith("/tides")) return null;
+  if (pathname === "/" || pathname.startsWith("/tides")) return null;
 
   const celestialActive = pathname.startsWith("/celestial");
   const activeGroup = celestialActive
