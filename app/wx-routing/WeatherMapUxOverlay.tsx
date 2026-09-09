@@ -175,6 +175,37 @@ export default function WeatherMapUxOverlay() {
     if (!selectionSignature) setDismissedSignature("");
   }, [selectionSignature]);
 
+  useEffect(() => {
+    const topbar = document.getElementById("wxr-v2-topbar");
+    if (!topbar) return;
+
+    topbar.style.background = nightMode ? "#071019" : "#ffffff";
+    topbar.style.color = nightMode ? "#e7edf3" : "#0f172a";
+    topbar.style.borderColor = nightMode ? "rgba(201,162,39,.30)" : "rgba(148,163,184,.55)";
+
+    const logo = topbar.querySelector<HTMLElement>(".wxr-logo");
+    if (logo) {
+      logo.style.background = nightMode ? "transparent" : "#ffffff";
+      logo.style.color = nightMode ? "#e7c95c" : "#8a6d0a";
+    }
+
+    const small = topbar.querySelector<HTMLElement>("small");
+    if (small) small.style.color = nightMode ? "#8294a5" : "#64748b";
+
+    topbar.querySelectorAll<HTMLElement>(".wxr-center span").forEach((element) => {
+      element.style.background = nightMode ? "#050a0f" : "#f8fafc";
+      element.style.color = nightMode ? "#aebdca" : "#334155";
+      element.style.borderColor = nightMode ? "rgba(148,163,184,.18)" : "rgba(148,163,184,.45)";
+    });
+
+    const action = topbar.querySelector<HTMLAnchorElement>(".wxr-actions a");
+    if (action) {
+      action.style.background = nightMode ? "#071019" : "#ffffff";
+      action.style.color = nightMode ? "#e7c95c" : "#8a6d0a";
+      action.style.borderColor = nightMode ? "rgba(201,162,39,.55)" : "rgba(138,109,10,.55)";
+    }
+  }, [host, nightMode]);
+
   if (!host) return null;
 
   const panel = nightMode
