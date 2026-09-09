@@ -1,0 +1,105 @@
+name: Apply active leg stability fix
+
+on:
+  push:
+    branches:
+      - fix/active-leg-flicker
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/active-leg-flicker
+      - name: Patch active leg selection
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('app/NavDashHome.tsx')
+          text = path.read_text()
+          old = '''function logicalRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, currentLegIndex: number) {
+            if (!ownShip || route.length < 2) return null;
+
+            let best:
+              | {
+                  index: number;
+                  start: Waypoint;
+                  end: Waypoint;
+                  distance: number;
+                  alongTrack: number;
+                  legLength: number;
+                  side: string;
+                  projectionRatio: number;
+                }
+              | null = null;
+
+            for (let i = 1; i < route.length; i += 1) {
+              const start = route[i - 1];
+              const end = route[i];
+              const result = routeXteToSegmentNm(
+                ownShip.lat,
+                ownShip.lon,
+                start.lat,
+                start.lon,
+                end.lat,
+                end.lon,
+              );
+
+              const jumpPenalty = Math.abs(i - currentLegIndex) * 0.35;
+              const endPenalty = result.projectionRatio <= 0 || result.projectionRatio >= 1 ? 0.25 : 0;
+              const score = result.distance + jumpPenalty + endPenalty;
+
+              if (!best || score < best.distance + Math.abs(best.index - currentLegIndex) * 0.35) {
+                best = {
+                  index: i,
+                  start,
+                  end,
+                  distance: result.distance,
+                  alongTrack: result.alongTrack,
+                  legLength: result.legLength,
+                  side: result.side,
+                  projectionRatio: result.projectionRatio,
+                };
+              }
+            }
+
+            return best;
+          }'''
+          new = '''function logicalRouteLeg(route: Waypoint[], ownShip: AisOwnShip | null, currentLegIndex: number) {
+            if (!ownShip || route.length < 2) return null;
+
+            const clampedIndex = Math.min(Math.max(currentLegIndex, 1), route.length - 1);
+            const currentLeg = selectedRouteLeg(route, ownShip, clampedIndex);
+            if (!currentLeg) return null;
+
+            // Keep the current leg sticky while the vessel is still on it. AIS position
+            // jitter near a waypoint must not make the active leg bounce between segments.
+            const advanceMargin = 0.02;
+            if (currentLeg.projectionRatio <= 1 + advanceMargin || clampedIndex >= route.length - 1) {
+              return currentLeg;
+            }
+
+            // Once clearly past the active waypoint, advance one leg only. This prevents
+            // a single AIS update from jumping across the route and eliminates oscillation.
+            return selectedRouteLeg(route, ownShip, clampedIndex + 1) || currentLeg;
+          }'''
+          if old not in text:
+              raise SystemExit('Expected logicalRouteLeg block not found; refusing to modify file')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          # Remove this one-shot workflow so the resulting branch contains only the app fix.
+          Path('.github/workflows/active-leg-flicker-fix.yml').unlink()
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/NavDashHome.tsx .github/workflows/active-leg-flicker-fix.yml
+          git commit -m "Stabilize automatic active leg selection"
+          git push origin HEAD:fix/active-leg-flicker
