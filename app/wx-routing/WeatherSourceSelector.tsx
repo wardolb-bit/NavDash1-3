@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
 const SOURCE_KEY = "navdash-wx-routing-source";
 type SourceMode = "grib" | "noaa";
@@ -36,6 +37,7 @@ function relabelWeatherUi(mode: SourceMode) {
 }
 
 export default function WeatherSourceSelector() {
+  const { nightMode } = useBridgeTheme();
   const [mode, setMode] = useState<SourceMode>("grib");
 
   useEffect(() => {
@@ -57,9 +59,9 @@ export default function WeatherSourceSelector() {
     height: 30,
     padding: "0 10px",
     borderRadius: 4,
-    border: `1px solid ${active ? "#22d3ee" : "rgba(148,163,184,.28)"}`,
-    background: active ? "rgba(34,211,238,.16)" : "#071019",
-    color: active ? "#d9fbff" : "#9aabba",
+    border: `1px solid ${active ? (nightMode ? "#22d3ee" : "#0891b2") : (nightMode ? "rgba(148,163,184,.28)" : "rgba(100,116,139,.35)")}`,
+    background: active ? (nightMode ? "rgba(34,211,238,.16)" : "#ecfeff") : (nightMode ? "#071019" : "#ffffff"),
+    color: active ? (nightMode ? "#d9fbff" : "#0e7490") : (nightMode ? "#9aabba" : "#475569"),
     fontSize: 10,
     fontWeight: 900,
     letterSpacing: ".08em",
@@ -69,11 +71,11 @@ export default function WeatherSourceSelector() {
   });
 
   return (
-    <div style={{ position: "fixed", right: 14, top: 14, zIndex: 2147483647, isolation: "isolate", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 5, padding: 5, border: "1px solid rgba(148,163,184,.22)", borderRadius: 6, background: "rgba(4,8,12,.94)", backdropFilter: "blur(6px)", boxShadow: "0 6px 18px rgba(0,0,0,.28)" }}>
-      <span style={{ padding: "0 5px", color: "#708496", fontSize: 9, fontWeight: 900, letterSpacing: ".12em", pointerEvents: "none" }}>WX SOURCE</span>
+    <div style={{ position: "fixed", right: 14, top: 14, zIndex: 2147483647, isolation: "isolate", pointerEvents: "auto", display: "flex", alignItems: "center", gap: 5, padding: 5, border: nightMode ? "1px solid rgba(148,163,184,.22)" : "1px solid rgba(148,163,184,.45)", borderRadius: 6, background: nightMode ? "rgba(4,8,12,.94)" : "rgba(255,255,255,.96)", backdropFilter: "blur(6px)", boxShadow: nightMode ? "0 6px 18px rgba(0,0,0,.28)" : "0 6px 18px rgba(15,23,42,.12)" }}>
+      <span style={{ padding: "0 5px", color: nightMode ? "#708496" : "#64748b", fontSize: 9, fontWeight: 900, letterSpacing: ".12em", pointerEvents: "none" }}>WX SOURCE</span>
       <button type="button" aria-pressed={mode === "grib"} style={button(mode === "grib")} onClick={() => choose("grib")}>GRIB</button>
       <button type="button" aria-pressed={mode === "noaa"} style={button(mode === "noaa")} onClick={() => choose("noaa")}>NOAA</button>
-      <span style={{ marginLeft: 3, padding: "0 6px", color: mode === "noaa" ? "#d9fbff" : "#cbd5e1", fontSize: 9, fontWeight: 900, letterSpacing: ".08em", whiteSpace: "nowrap", pointerEvents: "none" }}>
+      <span style={{ marginLeft: 3, padding: "0 6px", color: mode === "noaa" ? (nightMode ? "#d9fbff" : "#0e7490") : (nightMode ? "#cbd5e1" : "#334155"), fontSize: 9, fontWeight: 900, letterSpacing: ".08em", whiteSpace: "nowrap", pointerEvents: "none" }}>
         {mode === "noaa" ? "NOAA ONLY" : "GRIB ONLY"}
       </span>
     </div>
