@@ -20,7 +20,7 @@ export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
   const isMainNavDashRoute = pathname === "/bridge" || pathname === "/navdash";
 
-  let routeUi: React.ReactNode = <NavDashMainLinkGuard />;
+  let routeUi = <NavDashMainLinkGuard />;
 
   if (pathname.startsWith("/celestial")) {
     routeUi = (
