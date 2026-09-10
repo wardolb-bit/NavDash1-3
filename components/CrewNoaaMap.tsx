@@ -52,8 +52,11 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         transparent: false,
         version: "1.3.0",
         maxZoom: 15,
+        keepBuffer: 6,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
         attribution: "NOAA Office of Coast Survey ENC Online",
-      }).addTo(map);
+      } as any).addTo(map);
 
       mapRef.current = map;
       window.setTimeout(() => map.invalidateSize(), 50);
