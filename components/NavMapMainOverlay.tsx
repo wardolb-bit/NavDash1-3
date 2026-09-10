@@ -214,7 +214,7 @@ function IsolatedMainMap() {
       try {
         L.tileLayer
           .wms(
-            "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer",
+            "/api/noaa-charts/wms",
             {
               layers: "0,1,2,3,4,5,6,7,8,9,10,11,12",
               format: "image/png",
@@ -434,16 +434,14 @@ function IsolatedMainMap() {
 
   return (
     <div
+      id="navmap-main-isolated-v2"
       ref={elementRef}
-      id="navmap-main-isolated"
       style={{
         position: "absolute",
         inset: 0,
-        zIndex: 650,
-        width: "100%",
-        height: "100%",
-        minHeight: "100%",
-        background: "#0a141d",
+        zIndex: 2,
+        overflow: "hidden",
+        background: "#d9e1e6",
       }}
     />
   );
