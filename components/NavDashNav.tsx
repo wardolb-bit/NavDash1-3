@@ -74,7 +74,7 @@ export function NavDashNav() {
     };
   }, [pathname]);
 
-  if (pathname === "/" || pathname.startsWith("/tides") || pathname.startsWith("/device-access")) return null;
+  if (pathname === "/" || pathname === "/navdash" || pathname.startsWith("/tides") || pathname.startsWith("/device-access")) return null;
 
   if (pathname.startsWith("/phone") && access === "crew") {
     return (
