@@ -245,7 +245,7 @@ export default function CrewViewPage() {
 
           <div className="grid content-start gap-3">
             <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
-              <Status label="AIS" value={connection} accent={connection === "LIVE"} panel={panel} muted={muted} />
+              <Status label="GPS" value={connection} accent={connection === "LIVE"} panel={panel} muted={muted} />
               <Status label="SOG" value={fmt(ownShip?.sog, " kt")} panel={panel} muted={muted} />
               <Status label="COG" value={fmt(ownShip?.cog, "°")} panel={panel} muted={muted} />
               <Status label="Heading" value={fmt(ownShip?.heading, "°", 0)} panel={panel} muted={muted} />
