@@ -6,6 +6,8 @@ const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_DIRECT_FRAGMENT = "gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline";
 const ENC_PANE = "navdash-enc-pane";
 const ENC_TILE_STYLE_ID = "navdash-enc-tile-seam-fix";
+const ENC_BLEED_PX = 2;
+const ENC_TILE_SIZE = 512;
 
 /**
  * Keeps the current NavDash map intact while restoring the cached NOAA ENC
@@ -50,10 +52,13 @@ export function EncScaleAwareLayer() {
       if (!document.getElementById(ENC_TILE_STYLE_ID)) {
         const style = document.createElement("style");
         style.id = ENC_TILE_STYLE_ID;
+        const renderedSize = ENC_TILE_SIZE + ENC_BLEED_PX * 2;
         style.textContent = `
           .leaflet-${ENC_PANE}-pane .leaflet-tile {
-            width: 514px !important;
-            height: 514px !important;
+            width: ${renderedSize}px !important;
+            height: ${renderedSize}px !important;
+            margin-left: -${ENC_BLEED_PX}px !important;
+            margin-top: -${ENC_BLEED_PX}px !important;
           }
         `;
         document.head.appendChild(style);
@@ -71,7 +76,7 @@ export function EncScaleAwareLayer() {
         transparent: true,
         version: "1.1.1",
         opacity: 0.9,
-        tileSize: 512,
+        tileSize: ENC_TILE_SIZE,
         updateWhenZooming: false,
         keepBuffer: 2,
         pane: ENC_PANE,
