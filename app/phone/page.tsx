@@ -156,12 +156,11 @@ export default function CrewViewPage() {
   const [route, setRoute] = useState<RouteState | null>(null);
   const [connection, setConnection] = useState("CONNECTING");
   const [targets, setTargets] = useState<Record<number, AisTarget>>({});
-  const [tick, setTick] = useState(0);
   const [wx, setWx] = useState<WxData | null>(null);
   const [tides, setTides] = useState<TideData | null>(null);
   const fragments = useRef<Map<string, FragmentBuffer>>(new Map());
 
-  const targetList = useMemo(() => Object.values(targets).filter((t) => Date.now() - t.lastSeen < TARGET_STALE_MS), [targets, tick]);
+  const targetList = useMemo(() => Object.values(targets).filter((t) => Date.now() - t.lastSeen < TARGET_STALE_MS), [targets]);
   const ownShip = useMemo(() => targetList.filter((t) => t.source === "AIVDO" && t.lat !== undefined && t.lon !== undefined).sort((a, b) => b.lastSeen - a.lastSeen)[0] || null, [targetList]);
   const nav = useMemo(() => liveRoute(route, ownShip), [route, ownShip]);
   const etaHours = nav && ownShip?.sog && ownShip.sog > 0 ? nav.remaining / ownShip.sog : null;
@@ -187,8 +186,7 @@ export default function CrewViewPage() {
       const line = extractLine(parsed);
       if (!line) return;
       const d = decodeAisLine(line, fragments);
-      setTick((v) => v + 1);
-      if (!d?.mmsi) return;
+      if (!d?.mmsi || d.source !== "AIVDO") return;
       setTargets((current) => ({ ...current, [d.mmsi!]: { ...current[d.mmsi!], ...d, lastSeen: Date.now() } as AisTarget }));
     };
     return () => { closed = true; ws.close(); };
