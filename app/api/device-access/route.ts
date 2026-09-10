@@ -71,6 +71,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(result, { status: result?.ok ? 200 : 400, headers: { "Cache-Control": "no-store" } });
     }
 
+    if (action === "recover-wheelhouse") {
+      const recoveryKey = String(body?.recoveryKey || "").trim();
+      const token = String(body?.token || "").trim();
+      const name = String(body?.name || "Wheelhouse PC").trim();
+      const result = await rpc("navdash_recover_device", {
+        p_recovery_key: recoveryKey,
+        p_token: token,
+        p_name: name,
+      });
+      return NextResponse.json(result, { status: result?.ok ? 200 : 403, headers: { "Cache-Control": "no-store" } });
+    }
+
     if (action === "create-code") {
       const requesterToken = deviceToken(request);
       const role = body?.role === "crew" ? "crew" : "bridge";
