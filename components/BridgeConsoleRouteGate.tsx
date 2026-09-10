@@ -14,6 +14,7 @@ import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
 import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
+import { RouteWaypointNumberNormalizer } from "./RouteWaypointNumberNormalizer";
 
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
@@ -22,6 +23,7 @@ export function BridgeConsoleRouteGate() {
   if (pathname.startsWith("/celestial")) {
     return (
       <>
+        <RouteWaypointNumberNormalizer />
         <NavDashMainLinkGuard />
         <CelestialConsoleSkin />
       </>
@@ -31,16 +33,25 @@ export function BridgeConsoleRouteGate() {
   if (pathname === "/msi") {
     return (
       <>
+        <RouteWaypointNumberNormalizer />
         <NavDashMainLinkGuard />
         <MsiConsoleSkin />
       </>
     );
   }
 
-  if (!isMainNavDashRoute) return <NavDashMainLinkGuard />;
+  if (!isMainNavDashRoute) {
+    return (
+      <>
+        <RouteWaypointNumberNormalizer />
+        <NavDashMainLinkGuard />
+      </>
+    );
+  }
 
   return (
     <>
+      <RouteWaypointNumberNormalizer />
       <NavDashMainLinkGuard />
       <NavMapMainOverlayV2 />
       <EncScaleAwareLayer />
