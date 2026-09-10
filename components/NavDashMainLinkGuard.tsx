@@ -52,22 +52,16 @@ export function NavDashMainLinkGuard() {
       if (cancelled || syncing) return;
       syncing = true;
       try {
-        document.querySelectorAll<HTMLAnchorElement>('a[href="/"]').forEach((link) => {
-          if (isMainControl(link) || link.matches("#wxr-v2-topbar .wxr-actions a, .position-report-nav-console")) {
-            link.setAttribute("href", "/navdash");
-          }
-        });
+        document.querySelectorAll<HTMLAnchorElement>('a[href="/navdash"]').forEach((link) => link.setAttribute("href", "/"));
 
-        const globalNav = document.querySelector<HTMLElement>("body > nav.navdash-global-nav");
-        const globalNavVisible = !!globalNav && getComputedStyle(globalNav).display !== "none";
         const dedicatedMain = Array.from(document.querySelectorAll<HTMLElement>("main a, main button, #wxr-v2-topbar a, #wxr-v2-topbar button"))
           .some((element) => isMainControl(element));
 
         let fallback = document.querySelector<HTMLAnchorElement>("[data-navdash-main-fallback]");
-        if (!globalNavVisible && !dedicatedMain) {
+        if (!dedicatedMain) {
           if (!fallback) {
             fallback = document.createElement("a");
-            fallback.href = "/navdash";
+            fallback.href = "/";
             fallback.textContent = "MAIN";
             fallback.setAttribute("data-navdash-main-fallback", "true");
             fallback.setAttribute("aria-label", "Return to NavDash main console");
@@ -92,7 +86,7 @@ export function NavDashMainLinkGuard() {
 
       event.preventDefault();
       event.stopImmediatePropagation();
-      window.location.href = "/navdash";
+      window.location.href = "/";
     };
 
     sync();
