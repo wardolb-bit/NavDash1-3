@@ -15,7 +15,7 @@ const navGroups: NavGroup[] = [
   { label: "Weather", items: [{ label: "Weather", href: "/wx" }, { label: "WX Routing", href: "/wx-routing" }, { label: "Official Weather", href: "/official-weather" }] },
   { label: "MSI", items: [{ label: "EGC / MSI", href: "/msi" }] },
   { label: "Reports", items: [{ label: "Position Report", href: "/position-report" }, { label: "Nav Brief", href: "/nav-brief" }] },
-  { label: "Tools", items: [{ label: "Watch Tools", href: "/tools" }] },
+  { label: "Tools", items: [{ label: "Watch Tools", href: "/tools" }, { label: "Devices", href: "/device-access" }] },
   { label: "Mobile", items: [{ label: "Phone View", href: "/phone" }] },
 ];
 
@@ -57,7 +57,6 @@ export function NavDashNav() {
           return;
         }
 
-        window.localStorage.removeItem(TOKEN_KEY);
         setAccess("crew");
         if (!pathname.startsWith("/phone")) window.location.replace("/phone?restricted=1");
       } catch {
@@ -76,6 +75,23 @@ export function NavDashNav() {
   }, [pathname]);
 
   if (pathname === "/" || pathname.startsWith("/tides") || pathname.startsWith("/device-access")) return null;
+
+  if (pathname.startsWith("/phone") && access === "crew") {
+    return (
+      <nav className="navdash-global-nav sticky top-0 z-[1000] border-b border-white/10 bg-[#071019]/95 text-slate-100 shadow-xl shadow-black/30 backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-[#c9a227]">NavDash 1.3</div>
+            <div className="mt-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">Crew Mode</div>
+          </div>
+          <Link href="/device-access" className="rounded-xl bg-[#c9a227] px-4 py-2 text-xs font-black uppercase tracking-[0.08em] text-slate-950">
+            Pair Device
+          </Link>
+        </div>
+      </nav>
+    );
+  }
+
   if (access !== "bridge") return null;
 
   const celestialActive = pathname.startsWith("/celestial");
