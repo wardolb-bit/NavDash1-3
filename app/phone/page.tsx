@@ -225,7 +225,7 @@ export default function CrewViewPage() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div>
-              <h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Crew Vessel Status</h1>
+              <h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Crew View</h1>
               <div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>READ ONLY · LIVE SHIPBOARD INFORMATION</div>
             </div>
             <button type="button" onClick={toggleTheme} className={`shrink-0 border px-3 py-2 text-[10px] font-black uppercase ${ctl}`}>{nightMode ? "Day" : "Night"}</button>
