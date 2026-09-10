@@ -96,6 +96,7 @@ function makeRequestId() {
 export function SharedAmiForecastSync() {
   const applyingRemoteRef = useRef(false);
   const socketRef = useRef<WebSocket | null>(null);
+  const liveRouteRef = useRef<any>(null);
   const pendingRef = useRef(new Map<string, (reply: LocalStateReply | null) => void>());
   const reconnectTimerRef = useRef(0);
 
@@ -119,6 +120,13 @@ export function SharedAmiForecastSync() {
         ws.onmessage = (event) => {
           let message: any = event.data;
           try { message = JSON.parse(event.data); } catch { return; }
+          if (message?.type === "route-state") {
+            liveRouteRef.current = {
+              hasRoute: Array.isArray(message?.waypoints) && message.waypoints.length >= 2,
+              ...message,
+            };
+            return;
+          }
           if (message?.type === "shared-state-result" && typeof message.requestId === "string") {
             finishPending(message.requestId, message as LocalStateReply);
           }
@@ -169,8 +177,12 @@ export function SharedAmiForecastSync() {
 
       let localValue: unknown = bodyValue;
       if (spec.key === "route-state") {
-        if (method === "DELETE") localValue = { hasRoute: false, type: "route-state", routeName: "", waypoints: [], activeWaypointIndex: 0, savedAt: new Date().toISOString() };
-        else localValue = { hasRoute: true, ...(bodyValue || {}) };
+        if (method === "DELETE") {
+          localValue = { hasRoute: false, type: "route-state", routeName: "", waypoints: [], activeWaypointIndex: 0, savedAt: new Date().toISOString() };
+        } else {
+          localValue = { hasRoute: true, ...(bodyValue || {}) };
+        }
+        liveRouteRef.current = localValue;
       } else if (spec.key === "ami-route-forecast") {
         const forecast = method === "DELETE" ? null : bodyValue?.forecast ?? null;
         localValue = { ok: true, initialized: true, forecast, updatedAt: new Date().toISOString() };
@@ -195,6 +207,10 @@ export function SharedAmiForecastSync() {
       const method = String(init?.method || (input instanceof Request ? input.method : "GET") || "GET").toUpperCase();
       if (spec.persistent && method !== "GET") return wrapPersistentMutation(spec, method, input, init);
       if (method !== "GET") return originalFetch(input, init);
+
+      if (spec.key === "route-state" && liveRouteRef.current) {
+        return responseFromValue(liveRouteRef.current);
+      }
 
       const local = await requestWheelhouse(spec.key);
       if (local?.found) return responseFromValue(local.value);
