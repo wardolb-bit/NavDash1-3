@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 const MAIN_LABEL = /^(main|main page|main console|nav console|nav dash|console)$/i;
+const BRIDGE_MAIN_ROUTE = "/bridge";
 
 function cleanText(value: string | null | undefined) {
   return String(value || "").replace(/\s+/g, " ").trim();
@@ -40,7 +41,7 @@ export function NavDashMainLinkGuard() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (pathname === "/" || pathname === "/navdash") {
+    if (pathname === BRIDGE_MAIN_ROUTE || pathname === "/navdash") {
       document.querySelector<HTMLAnchorElement>("[data-navdash-main-fallback]")?.remove();
       return;
     }
@@ -52,7 +53,9 @@ export function NavDashMainLinkGuard() {
       if (cancelled || syncing) return;
       syncing = true;
       try {
-        document.querySelectorAll<HTMLAnchorElement>('a[href="/navdash"]').forEach((link) => link.setAttribute("href", "/"));
+        document.querySelectorAll<HTMLAnchorElement>('a[href="/navdash"], a[href="/"]').forEach((link) => {
+          if (isMainControl(link) || link.getAttribute("href") === "/navdash") link.setAttribute("href", BRIDGE_MAIN_ROUTE);
+        });
 
         const dedicatedMain = Array.from(document.querySelectorAll<HTMLElement>("main a, main button, #wxr-v2-topbar a, #wxr-v2-topbar button"))
           .some((element) => isMainControl(element));
@@ -61,10 +64,10 @@ export function NavDashMainLinkGuard() {
         if (!dedicatedMain) {
           if (!fallback) {
             fallback = document.createElement("a");
-            fallback.href = "/";
+            fallback.href = BRIDGE_MAIN_ROUTE;
             fallback.textContent = "MAIN";
             fallback.setAttribute("data-navdash-main-fallback", "true");
-            fallback.setAttribute("aria-label", "Return to NavDash main console");
+            fallback.setAttribute("aria-label", "Return to NavDash bridge console");
             document.body.appendChild(fallback);
           }
           styleFallback(fallback);
@@ -86,7 +89,7 @@ export function NavDashMainLinkGuard() {
 
       event.preventDefault();
       event.stopImmediatePropagation();
-      window.location.href = "/";
+      window.location.href = BRIDGE_MAIN_ROUTE;
     };
 
     sync();
