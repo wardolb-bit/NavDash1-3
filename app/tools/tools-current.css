@@ -99,16 +99,22 @@
 
 .navdash-tools-current main input,
 .navdash-tools-current main select,
-.navdash-tools-current main button {
+.navdash-tools-current main button,
+.navdash-tools-current main .tools-main-button {
   min-height: 34px !important;
   padding: 7px 10px !important;
   font-size: 12px !important;
   box-shadow: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-decoration: none !important;
 }
 
 .navdash-tools-current main.text-slate-100 input,
 .navdash-tools-current main.text-slate-100 select,
-.navdash-tools-current main.text-slate-100 button {
+.navdash-tools-current main.text-slate-100 button,
+.navdash-tools-current main.text-slate-100 .tools-main-button {
   background: #101820 !important;
   border-color: rgba(255, 255, 255, 0.14) !important;
   color: #dbe5ee !important;
@@ -116,7 +122,8 @@
 
 .navdash-tools-current main.text-slate-950 input,
 .navdash-tools-current main.text-slate-950 select,
-.navdash-tools-current main.text-slate-950 button {
+.navdash-tools-current main.text-slate-950 button,
+.navdash-tools-current main.text-slate-950 .tools-main-button {
   background: #ffffff !important;
   border-color: #cbd5e1 !important;
   color: #17212b !important;
