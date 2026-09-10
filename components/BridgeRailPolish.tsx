@@ -69,7 +69,7 @@ export function BridgeRailPolish() {
         strip.style.borderTopColor = day ? "rgba(15,23,42,.22)" : "rgba(148,163,184,.14)";
       }
 
-      styleStatus("bc2-status-ais", aisLive ? "AIS LIVE" : "AIS CHECK", aisLive);
+      styleStatus("bc2-status-ais", aisLive ? "GPS LIVE" : "GPS CHECK", aisLive);
       styleStatus("bc2-status-route", routeLoaded ? "ROUTE LOADED" : "NO ROUTE", routeLoaded);
     };
 
