@@ -14,49 +14,55 @@ import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
 import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
+import { SharedRouteSync } from "./SharedRouteSync";
 
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
   const isMainNavDashRoute = pathname === "/bridge" || pathname === "/navdash";
 
+  let routeUi: React.ReactNode = <NavDashMainLinkGuard />;
+
   if (pathname.startsWith("/celestial")) {
-    return (
+    routeUi = (
       <>
         <NavDashMainLinkGuard />
         <CelestialConsoleSkin />
       </>
     );
-  }
-
-  if (pathname === "/msi") {
-    return (
+  } else if (pathname === "/msi") {
+    routeUi = (
       <>
         <NavDashMainLinkGuard />
         <MsiConsoleSkin />
       </>
     );
+  } else if (isMainNavDashRoute) {
+    routeUi = (
+      <>
+        <NavDashMainLinkGuard />
+        <NavMapMainOverlayV2 />
+        <EncScaleAwareLayer />
+        <BridgeMapWakeup />
+        <NavMapZoomLimit />
+        <NoaaLeafletPaneWeatherOverlay />
+        <BridgeMapLayerControls />
+        <BridgeQuickAccess />
+        <BridgeNextWaypointDistance />
+        <BridgeRouteDistanceWgs84 />
+        <BridgeLegSequenceDisplay />
+        <style jsx global>{`
+          .leaflet-navmap-main-ami-v1-pane .leaflet-tooltip-top {
+            margin-top: -40px !important;
+          }
+        `}</style>
+      </>
+    );
   }
-
-  if (!isMainNavDashRoute) return <NavDashMainLinkGuard />;
 
   return (
     <>
-      <NavDashMainLinkGuard />
-      <NavMapMainOverlayV2 />
-      <EncScaleAwareLayer />
-      <BridgeMapWakeup />
-      <NavMapZoomLimit />
-      <NoaaLeafletPaneWeatherOverlay />
-      <BridgeMapLayerControls />
-      <BridgeQuickAccess />
-      <BridgeNextWaypointDistance />
-      <BridgeRouteDistanceWgs84 />
-      <BridgeLegSequenceDisplay />
-      <style jsx global>{`
-        .leaflet-navmap-main-ami-v1-pane .leaflet-tooltip-top {
-          margin-top: -40px !important;
-        }
-      `}</style>
+      <SharedRouteSync />
+      {routeUi}
     </>
   );
 }
