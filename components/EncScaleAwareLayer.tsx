@@ -6,9 +6,10 @@ const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_DIRECT_FRAGMENT = "gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline";
 
 /**
- * Keeps the current NavDash map intact while restoring the original cached
- * NOAA ENC service path. NOAA's Maritime Chart Service selects the best-scale
- * ENC content as the requested map scale changes.
+ * Keeps the current NavDash map intact while restoring the cached NOAA ENC
+ * service path. NOAA's Maritime Chart Service selects best-scale ENC content
+ * as the requested map scale changes. Only NOAA's normal display layers are
+ * requested; optional diagnostic/quality overlays remain off.
  */
 export function EncScaleAwareLayer() {
   useEffect(() => {
@@ -43,7 +44,7 @@ export function EncScaleAwareLayer() {
       if (existing) return;
 
       L.tileLayer.wms("/api/noaa-charts/wms", {
-        layers: "0,1,2,3,4,5,6,7,8,9,10,11,12",
+        layers: "0,1,2,3,4,5,6,7",
         format: "image/png",
         transparent: true,
         version: "1.1.1",
