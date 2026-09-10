@@ -17,6 +17,7 @@ const ENC_TILE_SIZE = 512;
  *
  * Seam fix: the proxy requests a 2 px geographic bleed on every tile edge;
  * this pane renders the returned image 2 px outward to match that bleed.
+ * Deployment trigger refreshed after Vercel plan upgrade.
  */
 export function EncScaleAwareLayer() {
   useEffect(() => {
