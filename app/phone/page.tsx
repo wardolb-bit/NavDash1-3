@@ -79,13 +79,11 @@ function segmentProjection(shipLat: number, shipLon: number, a: Waypoint, b: Way
 function liveRoute(route: RouteState | null, ship: AisTarget | null) {
   if (!route || ship?.lat === undefined || ship?.lon === undefined) return null;
 
-  let index = route.activeWaypointIndex;
-  let projection = segmentProjection(ship.lat, ship.lon, route.waypoints[index - 1], route.waypoints[index]);
-
-  while (projection.ratio >= 0.985 && index < route.waypoints.length - 1) {
-    index += 1;
-    projection = segmentProjection(ship.lat, ship.lon, route.waypoints[index - 1], route.waypoints[index]);
-  }
+  // Crew View is read-only. Follow the bridge's shared active waypoint index
+  // directly instead of recalculating/advancing it on every AIS update.
+  // This keeps Active Leg and Next Waypoint stable near waypoint boundaries.
+  const index = Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1));
+  const projection = segmentProjection(ship.lat, ship.lon, route.waypoints[index - 1], route.waypoints[index]);
 
   const legStart = route.waypoints[index - 1];
   const next = route.waypoints[index];
@@ -271,8 +269,8 @@ export default function CrewViewPage() {
               <Title text="Voyage" muted={muted} />
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <Metric label="Route" value={route?.routeName || "No route loaded"} inset={inset} muted={muted} wide />
-                <Metric label="Active Leg" value={nav ? `${nav.legStart.id} → ${nav.next.id}` : "--"} inset={inset} muted={muted} wide />
-                <Metric label="Next Waypoint" value={nav ? `${nav.next.id} · ${nav.next.name}` : "--"} inset={inset} muted={muted} wide />
+                <Metric label="Active Leg" value={nav ? `${nav.index} → ${nav.index + 1}` : "--"} inset={inset} muted={muted} wide />
+                <Metric label="Next Waypoint" value={nav ? `${nav.index + 1} · ${nav.next.name}` : "--"} inset={inset} muted={muted} wide />
                 <Metric label="Next WP" value={nav ? `${nav.nextDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
                 <Metric label="Distance To Go" value={nav ? `${nav.remaining.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
                 <Metric label="ETA" value={formatEta(etaHours)} inset={inset} muted={muted} />
