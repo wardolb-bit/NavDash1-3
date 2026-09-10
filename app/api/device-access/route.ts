@@ -32,7 +32,7 @@ async function rpc(name: string, body: Record<string, unknown>) {
 }
 
 function deviceToken(request: NextRequest) {
-  return request.cookies.get(SESSION_COOKIE)?.value?.trim() || request.headers.get("x-navdash-device-token")?.trim() || "";
+  return request.headers.get("x-navdash-device-token")?.trim() || request.cookies.get(SESSION_COOKIE)?.value?.trim() || "";
 }
 
 function withSession(response: NextResponse, token: string) {
