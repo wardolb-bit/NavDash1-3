@@ -1,7 +1,3 @@
-/* Preview-only shared NavDash theme layer.
-   This file is intentionally loaded last so shared Day/Night rules win over
-   page-local Tailwind utility colors without changing page logic. */
-
 :root,
 html[data-navdash-theme="bridge-night"] {
   --nd-bg: #071019;
@@ -36,32 +32,6 @@ html[data-navdash-theme="day"],
 html[data-navdash-theme="day"] body {
   background: var(--nd-bg) !important;
   color: var(--nd-text) !important;
-}
-
-html[data-navdash-theme="day"] .navdash-global-nav {
-  background: #ffffff !important;
-  color: var(--nd-text) !important;
-  border-color: var(--nd-border) !important;
-  box-shadow: 0 2px 12px rgba(15, 23, 42, .08) !important;
-}
-
-html[data-navdash-theme="day"] .navdash-global-nav select {
-  background: #ffffff !important;
-  color: var(--nd-text) !important;
-  border-color: var(--nd-border) !important;
-}
-
-html[data-navdash-theme="day"] .navdash-global-nav > div > div:last-child > div {
-  background: var(--nd-panel-alt) !important;
-  border-color: var(--nd-border) !important;
-}
-
-html[data-navdash-theme="day"] .navdash-global-nav a:not([class*="bg-[#c9a227]"]) {
-  color: #26343f !important;
-}
-
-html[data-navdash-theme="day"] .navdash-global-nav [class*="text-slate-400"] {
-  color: var(--nd-muted) !important;
 }
 
 html[data-navdash-theme="day"] body > main,
