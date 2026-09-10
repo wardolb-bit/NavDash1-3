@@ -2,8 +2,6 @@
 
 import { usePathname } from "next/navigation";
 import { BridgeQuickAccess } from "./BridgeQuickAccess";
-import { BridgeOwnShipEnhancer } from "./BridgeOwnShipEnhancer";
-import { BridgeRailPolish } from "./BridgeRailPolish";
 import { BridgeMapWakeup } from "./BridgeMapWakeup";
 import { BridgeMapLayerControls } from "./BridgeMapLayerControls";
 import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
@@ -48,8 +46,6 @@ export function BridgeConsoleRouteGate() {
       <NavMapZoomLimit />
       <NoaaLeafletPaneWeatherOverlay />
       <BridgeMapLayerControls />
-      <BridgeOwnShipEnhancer />
-      <BridgeRailPolish />
       <BridgeQuickAccess />
       <BridgeNextWaypointDistance />
       <BridgeRouteDistanceWgs84 />
