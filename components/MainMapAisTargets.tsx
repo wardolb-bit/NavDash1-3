@@ -13,6 +13,12 @@ type Vessel = {
   updatedAt: number;
 };
 
+type FragmentAssembly = {
+  total: number;
+  parts: string[];
+  updatedAt: number;
+};
+
 function sixBitCharToValue(char: string) {
   let value = char.charCodeAt(0) - 48;
   if (value > 40) value -= 8;
@@ -35,6 +41,43 @@ function signed(bits: string, start: number, length: number) {
   const value = parseInt(raw, 2);
   const signBit = 2 ** (length - 1);
   return value >= signBit ? value - 2 ** length : value;
+}
+
+function decodeSixBitText(bits: string, start: number, length: number) {
+  let text = "";
+  const end = Math.min(bits.length, start + length);
+  for (let offset = start; offset + 6 <= end; offset += 6) {
+    const value = unsigned(bits, offset, 6);
+    const code = value < 32 ? value + 64 : value;
+    text += String.fromCharCode(code);
+  }
+  return text.replace(/@+$/g, "").trim();
+}
+
+function decodeStaticNameFromPayload(payload: string): { mmsi: number; name: string } | null {
+  try {
+    const bits = payloadToBits(payload);
+    if (bits.length < 40) return null;
+    const type = unsigned(bits, 0, 6);
+    const mmsi = unsigned(bits, 8, 30);
+
+    if (type === 5) {
+      if (bits.length < 232) return null;
+      const name = decodeSixBitText(bits, 112, 120);
+      return name ? { mmsi, name } : null;
+    }
+
+    if (type === 24) {
+      const partNumber = unsigned(bits, 38, 2);
+      if (partNumber !== 0 || bits.length < 160) return null;
+      const name = decodeSixBitText(bits, 40, 120);
+      return name ? { mmsi, name } : null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 // Intentionally mirrors the proven Pilot-page position decoder.
@@ -91,14 +134,27 @@ function targetIconHtml(vessel: Vessel) {
   return `<div style="width:22px;height:22px;transform:rotate(${orientation}deg);transform-origin:11px 11px;filter:drop-shadow(0 0 3px rgba(56,189,248,.35))"><svg width="22" height="22" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#08131c" stroke="#38bdf8" stroke-width="1.8" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#38bdf8" stroke-width="1.4"/><circle cx="15" cy="15" r="2" fill="#38bdf8"/></svg></div>`;
 }
 
-function targetTooltip(vessel: Vessel) {
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function targetTooltip(vessel: Vessel, name?: string) {
   const sog = vessel.sog === null ? "--" : `${vessel.sog.toFixed(1)} kt`;
   const cog = vessel.cog === null ? "--" : `${vessel.cog.toFixed(1)}°`;
-  return `<strong>AIS ${vessel.mmsi}</strong><br>SOG ${sog}<br>COG ${cog}`;
+  const title = name ? escapeHtml(name) : `AIS ${vessel.mmsi}`;
+  const mmsiLine = name ? `<br>MMSI ${vessel.mmsi}` : "";
+  return `<strong>${title}</strong>${mmsiLine}<br>SOG ${sog}<br>COG ${cog}`;
 }
 
 export function MainMapAisTargets() {
   const targetsRef = useRef<Map<number, Vessel>>(new Map());
+  const namesRef = useRef<Map<number, string>>(new Map());
+  const fragmentsRef = useRef<Map<string, FragmentAssembly>>(new Map());
   const markersRef = useRef<Map<number, any>>(new Map());
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
@@ -148,6 +204,7 @@ export function MainMapAisTargets() {
           iconAnchor: [11, 11],
         });
         const position: [number, number] = [vessel.lat, vessel.lon];
+        const tooltip = targetTooltip(vessel, namesRef.current.get(vessel.mmsi));
         let marker = markersRef.current.get(vessel.mmsi);
         if (!marker) {
           marker = L.marker(position, {
@@ -155,7 +212,7 @@ export function MainMapAisTargets() {
             pane: "navmap-main-ais-targets-v1",
             interactive: true,
           }).addTo(layer);
-          marker.bindTooltip(targetTooltip(vessel), {
+          marker.bindTooltip(tooltip, {
             direction: "top",
             opacity: 0.96,
             pane: "navmap-main-ais-targets-v1",
@@ -164,12 +221,56 @@ export function MainMapAisTargets() {
         } else {
           marker.setLatLng(position);
           marker.setIcon(icon);
-          marker.setTooltipContent(targetTooltip(vessel));
+          marker.setTooltipContent(tooltip);
         }
       };
 
       if (leaflet) update(leaflet);
       else void import("leaflet").then(update);
+    };
+
+    const updateName = (mmsi: number, name: string) => {
+      const cleanName = name.replace(/\s+/g, " ").trim();
+      if (!cleanName) return;
+      if (namesRef.current.get(mmsi) === cleanName) return;
+      namesRef.current.set(mmsi, cleanName);
+      const vessel = targetsRef.current.get(mmsi);
+      if (vessel) drawTarget(vessel);
+    };
+
+    const processStaticData = (line: string) => {
+      if (!line.startsWith("!AIVDM")) return;
+      const parts = line.split(",");
+      if (parts.length < 6 || !parts[5]) return;
+
+      const total = Number(parts[1]);
+      const number = Number(parts[2]);
+      const sequence = parts[3] || "";
+      const channel = parts[4] || "";
+      const payload = parts[5];
+      if (!Number.isFinite(total) || !Number.isFinite(number) || total < 1 || number < 1 || number > total) return;
+
+      if (total === 1) {
+        const decoded = decodeStaticNameFromPayload(payload);
+        if (decoded) updateName(decoded.mmsi, decoded.name);
+        return;
+      }
+
+      const key = `${sequence}|${channel}|${total}`;
+      const current = fragmentsRef.current.get(key) || {
+        total,
+        parts: new Array(total).fill(""),
+        updatedAt: Date.now(),
+      };
+      current.parts[number - 1] = payload;
+      current.updatedAt = Date.now();
+      fragmentsRef.current.set(key, current);
+
+      if (current.parts.every(Boolean)) {
+        fragmentsRef.current.delete(key);
+        const decoded = decodeStaticNameFromPayload(current.parts.join(""));
+        if (decoded) updateName(decoded.mmsi, decoded.name);
+      }
     };
 
     const removeStaleTargets = () => {
@@ -182,6 +283,11 @@ export function MainMapAisTargets() {
           try { layerRef.current.removeLayer(marker); } catch {}
         }
         markersRef.current.delete(mmsi);
+      }
+
+      const fragmentCutoff = Date.now() - 60 * 1000;
+      for (const [key, assembly] of fragmentsRef.current) {
+        if (assembly.updatedAt < fragmentCutoff) fragmentsRef.current.delete(key);
       }
     };
 
@@ -201,7 +307,10 @@ export function MainMapAisTargets() {
           } catch {}
 
           for (const sourceLine of raw.split(/\r?\n/)) {
-            const vessel = decodeAisTarget(sourceLine.trim());
+            const line = sourceLine.trim();
+            if (!line) continue;
+            processStaticData(line);
+            const vessel = decodeAisTarget(line);
             if (!vessel) continue;
             targetsRef.current.set(vessel.mmsi, vessel);
             drawTarget(vessel);
@@ -234,6 +343,8 @@ export function MainMapAisTargets() {
       mapRef.current = null;
       markersRef.current.clear();
       targetsRef.current.clear();
+      namesRef.current.clear();
+      fragmentsRef.current.clear();
     };
   }, []);
 
