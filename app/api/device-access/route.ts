@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 const SUPABASE_URL = "https://jvisswvllnvaicdroljr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_aoiZwFyorDFcf_LyNCfhqA_acPun8X2";
+const SESSION_COOKIE = "navdash-device-token-v1";
 
 function supabaseHeaders() {
   return {
@@ -31,7 +32,19 @@ async function rpc(name: string, body: Record<string, unknown>) {
 }
 
 function deviceToken(request: NextRequest) {
-  return request.headers.get("x-navdash-device-token")?.trim() || "";
+  return request.headers.get("x-navdash-device-token")?.trim() || request.cookies.get(SESSION_COOKIE)?.value?.trim() || "";
+}
+
+function withSession(response: NextResponse, token: string) {
+  if (!token) return response;
+  response.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 90,
+  });
+  return response;
 }
 
 export async function GET(request: NextRequest) {
@@ -45,7 +58,8 @@ export async function GET(request: NextRequest) {
     }
 
     const result = await rpc("navdash_check_device", { p_token: token });
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    const response = NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    return result?.ok ? withSession(response, token) : response;
   } catch (error) {
     return NextResponse.json(
       { ok: false, role: "crew", error: error instanceof Error ? error.message : "Device access check failed." },
@@ -68,7 +82,8 @@ export async function POST(request: NextRequest) {
         p_token: token,
         p_name: name,
       });
-      return NextResponse.json(result, { status: result?.ok ? 200 : 400, headers: { "Cache-Control": "no-store" } });
+      const response = NextResponse.json(result, { status: result?.ok ? 200 : 400, headers: { "Cache-Control": "no-store" } });
+      return result?.ok ? withSession(response, token) : response;
     }
 
     if (action === "recover-wheelhouse") {
@@ -80,7 +95,8 @@ export async function POST(request: NextRequest) {
         p_token: token,
         p_name: name,
       });
-      return NextResponse.json(result, { status: result?.ok ? 200 : 403, headers: { "Cache-Control": "no-store" } });
+      const response = NextResponse.json(result, { status: result?.ok ? 200 : 403, headers: { "Cache-Control": "no-store" } });
+      return result?.ok ? withSession(response, token) : response;
     }
 
     if (action === "create-code") {
