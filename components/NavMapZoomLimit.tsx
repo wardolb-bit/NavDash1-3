@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const MAX_CHART_ZOOM = 18;
+const MAX_CHART_ZOOM = 17;
 
 type LeafletMapLike = {
   getZoom?: () => number;
