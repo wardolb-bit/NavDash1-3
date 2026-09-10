@@ -64,6 +64,7 @@ export function BridgeQuickAccess() {
       <Link href="/nav-brief" className={buttonClass}>Nav Brief</Link>
       <Link href="/official-weather" className={buttonClass}>Official WX</Link>
       <Link href="/msi" className={buttonClass}>MSI</Link>
+      <Link href="/tools" className={buttonClass}>Tools</Link>
       <Link href="/ecr" className={buttonClass}>ECR</Link>
     </>,
     target,
