@@ -4,6 +4,8 @@ import { useEffect } from "react";
 
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_DIRECT_FRAGMENT = "gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline";
+const ENC_PANE = "navdash-enc-pane";
+const ENC_TILE_STYLE_ID = "navdash-enc-tile-seam-fix";
 
 /**
  * Keeps the current NavDash map intact while restoring the cached NOAA ENC
@@ -37,6 +39,26 @@ export function EncScaleAwareLayer() {
         }
       }
 
+      // Keep ENC in its own pane so the seam fix cannot affect other tiles.
+      let encPane = map.getPane(ENC_PANE);
+      if (!encPane) {
+        encPane = map.createPane(ENC_PANE);
+        encPane.style.zIndex = "260";
+        encPane.style.pointerEvents = "none";
+      }
+
+      if (!document.getElementById(ENC_TILE_STYLE_ID)) {
+        const style = document.createElement("style");
+        style.id = ENC_TILE_STYLE_ID;
+        style.textContent = `
+          .leaflet-${ENC_PANE}-pane .leaflet-tile {
+            width: 513px !important;
+            height: 513px !important;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+
       // Avoid adding a second cached ENC layer if this effect is re-run.
       const existing = Object.values(map._layers || {}).find((layer: any) =>
         String(layer?._url || "").includes("/api/noaa-charts/wms"),
@@ -52,6 +74,7 @@ export function EncScaleAwareLayer() {
         tileSize: 512,
         updateWhenZooming: false,
         keepBuffer: 2,
+        pane: ENC_PANE,
         attribution: "NOAA Office of Coast Survey ENC Online",
       } as any).addTo(map);
     };
