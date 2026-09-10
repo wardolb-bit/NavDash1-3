@@ -17,7 +17,7 @@ import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
 
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
-  const isMainNavDashRoute = pathname === "/" || pathname === "/navdash";
+  const isMainNavDashRoute = pathname === "/bridge" || pathname === "/navdash";
 
   if (pathname.startsWith("/celestial")) {
     return (
