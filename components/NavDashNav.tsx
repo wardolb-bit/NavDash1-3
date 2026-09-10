@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
 
 type NavItem = { label: string; href: string };
 type NavGroup = { label: string; items: NavItem[] };
+
+const TOKEN_KEY = "navdash-device-token-v1";
 
 const navGroups: NavGroup[] = [
   { label: "Console", items: [{ label: "Main Console", href: "/navdash" }, { label: "ECR", href: "/ecr" }] },
@@ -22,7 +25,58 @@ function itemIsActive(pathname: string, href: string) {
 
 export function NavDashNav() {
   const pathname = usePathname();
-  if (pathname === "/" || pathname.startsWith("/tides")) return null;
+  const [access, setAccess] = useState<"checking" | "bridge" | "crew">("checking");
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (pathname === "/" || pathname.startsWith("/tides") || pathname.startsWith("/device-access")) {
+      setAccess("crew");
+      return;
+    }
+
+    const check = async () => {
+      const token = window.localStorage.getItem(TOKEN_KEY)?.trim() || "";
+
+      if (!token) {
+        if (!cancelled) setAccess("crew");
+        if (!pathname.startsWith("/phone")) window.location.replace("/phone?restricted=1");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/device-access", {
+          cache: "no-store",
+          headers: { "x-navdash-device-token": token },
+        });
+        const result = await response.json();
+        if (cancelled) return;
+
+        if (response.ok && result?.ok && result?.role === "bridge") {
+          setAccess("bridge");
+          return;
+        }
+
+        window.localStorage.removeItem(TOKEN_KEY);
+        setAccess("crew");
+        if (!pathname.startsWith("/phone")) window.location.replace("/phone?restricted=1");
+      } catch {
+        if (cancelled) return;
+        setAccess("crew");
+        if (!pathname.startsWith("/phone")) window.location.replace("/phone?restricted=1");
+      }
+    };
+
+    setAccess("checking");
+    void check();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname]);
+
+  if (pathname === "/" || pathname.startsWith("/tides") || pathname.startsWith("/device-access")) return null;
+  if (access !== "bridge") return null;
 
   const celestialActive = pathname.startsWith("/celestial");
   const activeGroup = celestialActive
