@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useBridgeTheme } from "../lib/useBridgeTheme";
 
 function important(el: HTMLElement | null, prop: string, value: string) {
   if (!el) return;
@@ -216,6 +217,7 @@ function compactWxLayout(shell: HTMLElement, header: HTMLElement) {
 
 export function WxRoutingBridgeSkin() {
   const pathname = usePathname();
+  const { dayMode } = useBridgeTheme();
 
   useEffect(() => {
     if (pathname !== "/wx-routing") return;
@@ -239,8 +241,8 @@ export function WxRoutingBridgeSkin() {
       const globalNav = document.querySelector<HTMLElement>("body > nav");
       if (globalNav) important(globalNav, "display", "none");
 
-      important(main, "background", "#04080c");
-      important(main, "color", "#dbe5ee");
+      important(main, "background", dayMode ? "#eef2f5" : "#04080c");
+      important(main, "color", dayMode ? "#17212b" : "#dbe5ee");
       important(shell, "padding", "5px");
       important(shell, "gap", "4px");
 
@@ -256,38 +258,38 @@ export function WxRoutingBridgeSkin() {
         shell.insertBefore(topbar, header);
       }
 
-      topbar.style.cssText = "height:42px;display:grid;grid-template-columns:250px 1fr 160px;align-items:center;padding:0 10px;border:1px solid rgba(201,162,39,.30);background:#071019;color:#e7edf3;font:700 11px system-ui;letter-spacing:.08em";
+      topbar.style.cssText = `height:42px;display:grid;grid-template-columns:250px 1fr 160px;align-items:center;padding:0 10px;border:1px solid ${dayMode ? "#cbd5e1" : "rgba(201,162,39,.30)"};background:${dayMode ? "#f5f7f9" : "#071019"};color:${dayMode ? "#17212b" : "#e7edf3"};font:700 11px system-ui;letter-spacing:.08em`;
       const brand = topbar.querySelector<HTMLElement>(".wxr-brand");
       if (brand) brand.style.cssText = "display:flex;align-items:center;gap:8px";
       const logo = topbar.querySelector<HTMLElement>(".wxr-logo");
-      if (logo) logo.style.cssText = "display:grid;place-items:center;width:26px;height:26px;border:1px solid #c9a227;color:#e7c95c;font-size:14px;font-weight:900";
+      if (logo) logo.style.cssText = "display:grid;place-items:center;width:26px;height:26px;border:1px solid #c9a227;color:#9a7916;font-size:14px;font-weight:900";
       const stack = topbar.querySelector<HTMLElement>(".wxr-brand span:last-child");
       if (stack) stack.style.cssText = "display:flex;flex-direction:column;line-height:1";
       const small = topbar.querySelector<HTMLElement>("small");
-      if (small) small.style.cssText = "margin-top:3px;font-size:7px;color:#8294a5;letter-spacing:.13em";
+      if (small) small.style.cssText = `margin-top:3px;font-size:7px;color:${dayMode ? "#64748b" : "#8294a5"};letter-spacing:.13em`;
       const center = topbar.querySelector<HTMLElement>(".wxr-center");
       if (center) center.style.cssText = "display:flex;justify-content:center;gap:6px";
       topbar.querySelectorAll<HTMLElement>(".wxr-center span").forEach((el) => {
-        el.style.cssText = "padding:4px 8px;border:1px solid rgba(148,163,184,.18);background:#050a0f;color:#aebdca;font-size:8px";
+        el.style.cssText = `padding:4px 8px;border:1px solid ${dayMode ? "#cbd5e1" : "rgba(148,163,184,.18)"};background:${dayMode ? "#ffffff" : "#050a0f"};color:${dayMode ? "#475569" : "#aebdca"};font-size:8px`;
       });
       const dot = topbar.querySelector<HTMLElement>(".wxr-live i");
       if (dot) dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;background:#22d3ee;margin-right:6px;box-shadow:0 0 8px rgba(34,211,238,.55)";
       const action = topbar.querySelector<HTMLAnchorElement>(".wxr-actions a");
-      if (action) action.style.cssText = "display:inline-flex;height:28px;min-width:100px;align-items:center;justify-content:center;border:1px solid rgba(201,162,39,.55);background:#071019;color:#e7c95c;text-decoration:none;font:900 8px system-ui;letter-spacing:.10em";
+      if (action) action.style.cssText = `display:inline-flex;height:28px;min-width:100px;align-items:center;justify-content:center;border:1px solid rgba(201,162,39,.55);background:${dayMode ? "#ffffff" : "#071019"};color:${dayMode ? "#7c6214" : "#e7c95c"};text-decoration:none;font:900 8px system-ui;letter-spacing:.10em`;
       const actions = topbar.querySelector<HTMLElement>(".wxr-actions");
       if (actions) actions.style.cssText = "display:flex;justify-content:flex-end";
 
       important(header, "padding", "4px 7px");
       important(header, "margin", "0");
       important(header, "border-radius", "0");
-      important(header, "border", "1px solid rgba(148,163,184,.14)");
-      important(header, "background", "#071019");
+      important(header, "border", dayMode ? "1px solid #cbd5e1" : "1px solid rgba(148,163,184,.14)");
+      important(header, "background", dayMode ? "#f5f7f9" : "#071019");
       important(header, "box-shadow", "none");
 
       const heading = header.querySelector<HTMLElement>("h1");
       if (heading) {
         heading.textContent = "WX ROUTING";
-        heading.style.cssText = "margin:0;color:#edf4fa;font-size:17px;font-weight:900;letter-spacing:.08em";
+        heading.style.cssText = `margin:0;color:${dayMode ? "#17212b" : "#edf4fa"};font-size:17px;font-weight:900;letter-spacing:.08em`;
       }
       const kicker = header.querySelector<HTMLElement>("div > div");
       if (kicker) kicker.style.cssText = "color:#c9a227;font-size:7px;font-weight:900;letter-spacing:.15em;text-transform:uppercase";
@@ -345,7 +347,7 @@ export function WxRoutingBridgeSkin() {
       observer?.disconnect();
       document.getElementById("wxr-v2-topbar")?.remove();
     };
-  }, [pathname]);
+  }, [pathname, dayMode]);
 
   return null;
 }
