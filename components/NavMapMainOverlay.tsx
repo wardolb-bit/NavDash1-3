@@ -205,22 +205,31 @@ function IsolatedMainMap() {
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
+        keepBuffer: 6,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
       }).addTo(map);
 
       L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
         maxZoom: 18,
+        keepBuffer: 6,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
       }).addTo(map);
 
       try {
         L.tileLayer
           .wms(
-            "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer",
+            "/api/noaa-charts/wms",
             {
               layers: "0,1,2,3,4,5,6,7,8,9,10,11,12",
               format: "image/png",
               transparent: true,
-              version: "1.1.1",
+              version: "1.3.0",
               opacity: 0.85,
+              keepBuffer: 6,
+              updateWhenIdle: false,
+              updateWhenZooming: false,
             } as any,
           )
           .addTo(map);
