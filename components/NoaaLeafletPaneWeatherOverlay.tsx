@@ -229,7 +229,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
   return createPortal(
     <>
       <div style={{ position: "absolute", zIndex: 770, top: 58, right: 10, width: panelOpen ? 318 : "auto", pointerEvents: "auto", fontFamily: "system-ui,sans-serif" }}>
-        <button type="button" onClick={() => setPanelOpen((v) => !v)} style={{ float: "right", minHeight: 34, padding: "7px 11px", border: "1px solid rgba(167,243,208,.55)", borderRadius: 5, background: "rgba(5,12,18,.94)", color: "#d1fae5", fontSize: 10, fontWeight: 900, letterSpacing: ".11em", cursor: "pointer" }}>WX LAYERS · PREVIEW</button>
+        <button type="button" onClick={() => setPanelOpen((v) => !v)} style={{ float: "right", minHeight: 34, padding: "7px 11px", border: "1px solid rgba(167,243,208,.55)", borderRadius: 5, background: "rgba(5,12,18,.94)", color: "#d1fae5", fontSize: 10, fontWeight: 900, letterSpacing: ".11em", cursor: "pointer" }}>WX LAYERS</button>
         {panelOpen ? (
           <div style={{ clear: "both", marginTop: 40, border: "1px solid rgba(167,243,208,.38)", borderRadius: 7, background: "rgba(5,12,18,.95)", color: "#d7e7ee", padding: 10, boxShadow: "0 8px 24px rgba(0,0,0,.32)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
