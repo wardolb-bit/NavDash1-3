@@ -6,29 +6,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const NOAA_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer";
-const NOAA_VISIBLE_LAYERS_WITH_OVERSCALE = "1,2,3,4,5,6,7,12";
-const NOAA_DETAIL_DISPLAY_PARAMS = JSON.stringify({
-  ECDISParameters: {
-    DynamicParameters: {
-      ParameterGroup: [
-        {
-          name: "DatasetDisplayRange",
-          Parameter: [
-            { name: "minZoom", value: 0.03 },
-            { name: "maxZoom", value: 1.2 },
-          ],
-        },
-      ],
-    },
-  },
-});
-
-function tunedParams(searchParams: URLSearchParams) {
-  const params = new URLSearchParams(searchParams);
-  params.set("layers", NOAA_VISIBLE_LAYERS_WITH_OVERSCALE);
-  params.set("display_params", NOAA_DETAIL_DISPLAY_PARAMS);
-  return params;
-}
 
 function normalizedQuery(searchParams: URLSearchParams) {
   return Array.from(searchParams.entries())
@@ -46,15 +23,14 @@ function requestValue(searchParams: URLSearchParams, name: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const incomingParams = request.nextUrl.searchParams;
-  const operation = requestValue(incomingParams, "request");
-  const service = requestValue(incomingParams, "service");
+  const params = request.nextUrl.searchParams;
+  const operation = requestValue(params, "request");
+  const service = requestValue(params, "service");
 
   if ((operation && operation.toLowerCase() !== "getmap") || (service && service.toLowerCase() !== "wms")) {
     return NextResponse.json({ error: "Only NOAA ENC WMS GetMap requests are supported." }, { status: 400 });
   }
 
-  const params = tunedParams(incomingParams);
   const query = normalizedQuery(params);
   if (!query) return NextResponse.json({ error: "Missing WMS query parameters." }, { status: 400 });
 
