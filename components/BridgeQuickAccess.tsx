@@ -7,7 +7,7 @@ import { createPortal } from "react-dom";
 
 export function BridgeQuickAccess() {
   const pathname = usePathname();
-  const isMainNavDashRoute = pathname === "/" || pathname === "/navdash";
+  const isMainNavDashRoute = pathname === "/bridge" || pathname === "/navdash";
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const [dayMode, setDayMode] = useState(false);
 
