@@ -1,540 +1,297 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
+import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
-type RouteState = {
-  routeName: string;
-  waypoints: Waypoint[];
-  activeWaypointIndex: number;
+type Waypoint = { id: string; name: string; lat: number; lon: number };
+type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
+type AisTarget = { mmsi: number; source: "AIVDO" | "AIVDM"; type: number; lat?: number; lon?: number; sog?: number | null; cog?: number | null; heading?: number | null; lastSeen: number };
+type FragmentBuffer = { total: number; parts: string[]; fillBits: number; firstSeen: number };
+type WxData = {
+  ok?: boolean;
+  nws?: { shortForecast?: string; windSpeedText?: string; windDirection?: string; forecastWindKt?: number | null; alerts?: Array<{ event: string; severity?: string }> };
+  ndbc?: { station?: string; windKt?: number | null; gustKt?: number | null; waveFt?: number | null };
+  pacific?: { summaryText?: string; parsed?: { maxWindKt?: number | null; maxSeasFt?: number | null; warnings?: string[] } };
 };
-
-type Waypoint = {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-};
-
-type AisTarget = {
-  mmsi: number;
-  source: "AIVDO" | "AIVDM";
-  type: number;
-  lat?: number;
-  lon?: number;
-  sog?: number | null;
-  cog?: number | null;
-  heading?: number | null;
-  vesselName?: string;
-  lastSeen: number;
-};
-
-type FragmentBuffer = {
-  total: number;
-  parts: string[];
-  fillBits: number;
-  firstSeen: number;
-};
+type TideData = { ok?: boolean; station?: { name?: string }; highLow?: Array<{ time: string; valueFt: number; type?: string }> };
 
 const TARGET_STALE_MS = 10 * 60 * 1000;
 const FRAGMENT_TTL_MS = 15 * 1000;
 
-function wsUrl() {
-  return getAisWebSocketUrl();
+function toRad(v: number) { return (v * Math.PI) / 180; }
+function distanceNm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const r = 3440.065;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-
-function aisPayloadToBits(payload: string) {
-  let bits = "";
-  for (const ch of payload) {
-    let value = ch.charCodeAt(0) - 48;
-    if (value > 40) value -= 8;
-    bits += value.toString(2).padStart(6, "0");
-  }
-  return bits;
-}
-
-function readUnsigned(bits: string, start: number, length: number) {
-  const chunk = bits.slice(start, start + length);
-  if (chunk.length < length) return null;
-  return parseInt(chunk, 2);
-}
-
-function readSigned(bits: string, start: number, length: number) {
-  const chunk = bits.slice(start, start + length);
-  if (chunk.length < length) return null;
-  const unsigned = parseInt(chunk, 2);
-  return chunk[0] === "1" ? unsigned - 2 ** length : unsigned;
-}
-
-function readText(bits: string, start: number, length: number) {
-  const alphabet = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?";
-  let text = "";
-  for (let offset = start; offset < start + length; offset += 6) {
-    const value = readUnsigned(bits, offset, 6);
-    if (value === null) break;
-    text += alphabet[value] || " ";
-  }
-  return text.replace(/@/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function normalizeSpeed(value: number | null) {
-  if (value === null || value === 1023) return null;
-  return value / 10;
-}
-
-function normalizeCourse(value: number | null) {
-  if (value === null || value === 3600) return null;
-  return value / 10;
-}
-
-function normalizeHeading(value: number | null) {
-  if (value === null || value === 511) return null;
-  return value;
-}
-
-function parseAisSentence(line: string) {
-  const trimmed = line.trim();
-  if (!trimmed.startsWith("!AIVDM") && !trimmed.startsWith("!AIVDO") && !trimmed.startsWith("$AIVDM") && !trimmed.startsWith("$AIVDO")) return null;
-
-  const parts = trimmed.split("*")[0].split(",");
-  if (parts.length < 7) return null;
-
-  const total = Number(parts[1]);
-  const fragment = Number(parts[2]);
-  const payload = parts[5] || "";
-  const fillBits = Number(parts[6] || 0);
-  if (!Number.isFinite(total) || !Number.isFinite(fragment) || !payload) return null;
-
-  return {
-    source: trimmed.includes("AIVDO") ? "AIVDO" as const : "AIVDM" as const,
-    total,
-    fragment,
-    sequence: parts[3] || "",
-    channel: parts[4] || "",
-    payload,
-    fillBits: Number.isFinite(fillBits) ? fillBits : 0,
-  };
-}
-
-function decodePayload(payload: string, fillBits: number, source: "AIVDO" | "AIVDM"): Partial<AisTarget> | null {
-  const rawBits = aisPayloadToBits(payload);
-  const bits = fillBits > 0 ? rawBits.slice(0, -fillBits) : rawBits;
-  const type = readUnsigned(bits, 0, 6);
-  const mmsi = readUnsigned(bits, 8, 30);
-  if (type === null || mmsi === null) return null;
-
-  const base = { type, source, mmsi };
-
-  if ([1, 2, 3].includes(type)) {
-    const sogRaw = readUnsigned(bits, 50, 10);
-    const lonRaw = readSigned(bits, 61, 28);
-    const latRaw = readSigned(bits, 89, 27);
-    const cogRaw = readUnsigned(bits, 116, 12);
-    const headingRaw = readUnsigned(bits, 128, 9);
-    if (latRaw === null || lonRaw === null) return base;
-
-    const lat = latRaw / 600000;
-    const lon = lonRaw / 600000;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return base;
-
-    return {
-      ...base,
-      lat,
-      lon,
-      sog: normalizeSpeed(sogRaw),
-      cog: normalizeCourse(cogRaw),
-      heading: normalizeHeading(headingRaw),
-    };
-  }
-
-  if ([18, 19].includes(type)) {
-    const sogRaw = readUnsigned(bits, 46, 10);
-    const lonRaw = readSigned(bits, 57, 28);
-    const latRaw = readSigned(bits, 85, 27);
-    const cogRaw = readUnsigned(bits, 112, 12);
-    const headingRaw = readUnsigned(bits, 124, 9);
-    if (latRaw === null || lonRaw === null) return base;
-
-    const lat = latRaw / 600000;
-    const lon = lonRaw / 600000;
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return base;
-
-    return {
-      ...base,
-      lat,
-      lon,
-      sog: normalizeSpeed(sogRaw),
-      cog: normalizeCourse(cogRaw),
-      heading: normalizeHeading(headingRaw),
-      vesselName: type === 19 ? readText(bits, 143, 120) : undefined,
-    };
-  }
-
-  if (type === 5 && bits.length >= 424) {
-    return {
-      ...base,
-      vesselName: readText(bits, 112, 120),
-    };
-  }
-
-  if (type === 24 && bits.length >= 160) {
-    const partNumber = readUnsigned(bits, 38, 2);
-    if (partNumber === 0) return { ...base, vesselName: readText(bits, 40, 120) };
-  }
-
-  return base;
-}
-
-function decodeAisLine(line: string, fragments: React.MutableRefObject<Map<string, FragmentBuffer>>) {
-  const parsed = parseAisSentence(line);
-  if (!parsed) return null;
-
-  const now = Date.now();
-  for (const [key, fragment] of Array.from(fragments.current.entries())) {
-    if (now - fragment.firstSeen > FRAGMENT_TTL_MS) fragments.current.delete(key);
-  }
-
-  if (parsed.total <= 1) return decodePayload(parsed.payload, parsed.fillBits, parsed.source);
-
-  const key = `${parsed.source}-${parsed.sequence || "no-seq"}-${parsed.channel}`;
-  const existing = fragments.current.get(key) || {
-    total: parsed.total,
-    parts: [],
-    fillBits: parsed.fillBits,
-    firstSeen: now,
-  };
-
-  existing.parts[parsed.fragment - 1] = parsed.payload;
-  existing.fillBits = parsed.fillBits;
-  fragments.current.set(key, existing);
-
-  if (existing.parts.filter(Boolean).length !== existing.total) return null;
-  fragments.current.delete(key);
-  return decodePayload(existing.parts.join(""), existing.fillBits, parsed.source);
-}
-
-function extractNmeaLine(message: any) {
-  if (typeof message === "string") return message.trim();
-  if (typeof message?.line === "string") return message.line.trim();
-  if (typeof message?.sentence === "string") return message.sentence.trim();
-  if (typeof message?.nmea === "string") return message.nmea.trim();
-  return "";
-}
-
-function formatNumber(value?: number | null, suffix = "") {
-  if (value === undefined || value === null || !Number.isFinite(value)) return "--";
-  return `${value.toFixed(1)}${suffix}`;
-}
-
 function formatLatLon(value?: number, isLat = true) {
   if (value === undefined || !Number.isFinite(value)) return "--";
   const abs = Math.abs(value);
   const deg = Math.floor(abs);
   const min = (abs - deg) * 60;
   const hemi = isLat ? (value >= 0 ? "N" : "S") : value >= 0 ? "E" : "W";
-  return `${String(deg).padStart(isLat ? 2 : 3, "0")} ${min.toFixed(3)}' ${hemi}`;
+  return `${String(deg).padStart(isLat ? 2 : 3, "0")}° ${min.toFixed(3)}' ${hemi}`;
 }
-
+function fmt(value?: number | null, suffix = "", digits = 1) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return "--";
+  return `${value.toFixed(digits)}${suffix}`;
+}
 function ageText(lastSeen?: number) {
   if (!lastSeen) return "--";
-  const seconds = Math.max(0, Math.round((Date.now() - lastSeen) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  return `${Math.round(seconds / 60)}m`;
+  const s = Math.max(0, Math.round((Date.now() - lastSeen) / 1000));
+  return s < 60 ? `${s}s` : `${Math.round(s / 60)}m`;
 }
-
-function toRadians(value: number) {
-  return (value * Math.PI) / 180;
+function formatEta(hours?: number | null) {
+  if (hours === undefined || hours === null || !Number.isFinite(hours) || hours < 0) return "--";
+  const d = new Date(Date.now() + hours * 3600000);
+  return d.toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
-
-function distanceNm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const radiusNm = 3440.065;
-  const dLat = toRadians(lat2 - lat1);
-  const dLon = toRadians(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
-  return radiusNm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function routePointToXY(lat: number, lon: number, refLat: number, refLon: number) {
-  const x = (lon - refLon) * 60 * Math.cos(toRadians(refLat));
-  const y = (lat - refLat) * 60;
-  return { x, y };
-}
-
-function distancePointToSegmentNm(
-  shipLat: number,
-  shipLon: number,
-  startLat: number,
-  startLon: number,
-  endLat: number,
-  endLon: number,
-) {
-  const refLat = (shipLat + startLat + endLat) / 3;
-  const refLon = (shipLon + startLon + endLon) / 3;
-  const ship = routePointToXY(shipLat, shipLon, refLat, refLon);
-  const start = routePointToXY(startLat, startLon, refLat, refLon);
-  const end = routePointToXY(endLat, endLon, refLat, refLon);
-
-  const vx = end.x - start.x;
-  const vy = end.y - start.y;
-  const wx = ship.x - start.x;
-  const wy = ship.y - start.y;
-  const legLengthSquared = vx * vx + vy * vy;
-
-  if (legLengthSquared <= 0) {
-    return {
-      distance: distanceNm(shipLat, shipLon, startLat, startLon),
-      projectionRatio: 0,
-    };
-  }
-
-  const rawRatio = (wx * vx + wy * vy) / legLengthSquared;
-  const projectionRatio = Math.max(0, Math.min(1, rawRatio));
-  const closestX = start.x + projectionRatio * vx;
-  const closestY = start.y + projectionRatio * vy;
-  const dx = ship.x - closestX;
-  const dy = ship.y - closestY;
-
-  return {
-    distance: Math.sqrt(dx * dx + dy * dy),
-    projectionRatio,
-  };
-}
-
-function liveRouteLeg(route: RouteState | null, ownShip: AisTarget | null) {
-  if (!route || !ownShip?.lat || !ownShip?.lon || route.waypoints.length < 2) return null;
-
-  const savedIndex = Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1));
-  let best: { index: number; start: Waypoint; end: Waypoint; score: number } | null = null;
-
-  for (let index = 1; index < route.waypoints.length; index += 1) {
-    const start = route.waypoints[index - 1];
-    const end = route.waypoints[index];
-    const result = distancePointToSegmentNm(ownShip.lat, ownShip.lon, start.lat, start.lon, end.lat, end.lon);
-    const jumpPenalty = Math.abs(index - savedIndex) * 0.35;
-    const endPenalty = result.projectionRatio <= 0 || result.projectionRatio >= 1 ? 0.25 : 0;
-    const score = result.distance + jumpPenalty + endPenalty;
-
-    if (!best || score < best.score) best = { index, start, end, score };
-  }
-
-  return best;
-}
-
 function normalizeRoute(data: any): RouteState | null {
-  const waypoints = Array.isArray(data?.waypoints) ? data.waypoints : [];
+  const raw = Array.isArray(data?.waypoints) ? data.waypoints : [];
+  const waypoints = raw.map((wp: any, i: number) => ({
+    id: String(wp?.id || `WP${String(i + 1).padStart(2, "0")}`),
+    name: String(wp?.name || `Waypoint ${i + 1}`),
+    lat: Number(wp?.lat ?? wp?.latitude),
+    lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+  })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (waypoints.length < 2) return null;
   return {
-    routeName: String(data.routeName || "Shared Route"),
+    routeName: String(data?.routeName || "Shared Route"),
     waypoints,
-    activeWaypointIndex: Number.isFinite(Number(data.activeWaypointIndex)) ? Number(data.activeWaypointIndex) : 1,
+    activeWaypointIndex: Math.max(1, Math.min(Number(data?.activeWaypointIndex) || 1, waypoints.length - 1)),
   };
 }
+function pointToXY(lat: number, lon: number, refLat: number, refLon: number) {
+  return { x: (lon - refLon) * 60 * Math.cos(toRad(refLat)), y: (lat - refLat) * 60 };
+}
+function segmentProjection(shipLat: number, shipLon: number, a: Waypoint, b: Waypoint) {
+  const refLat = (shipLat + a.lat + b.lat) / 3;
+  const refLon = (shipLon + a.lon + b.lon) / 3;
+  const p = pointToXY(shipLat, shipLon, refLat, refLon);
+  const s = pointToXY(a.lat, a.lon, refLat, refLon);
+  const e = pointToXY(b.lat, b.lon, refLat, refLon);
+  const vx = e.x - s.x, vy = e.y - s.y, wx = p.x - s.x, wy = p.y - s.y;
+  const len2 = vx * vx + vy * vy;
+  const ratio = len2 > 0 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2)) : 0;
+  const dx = p.x - (s.x + ratio * vx), dy = p.y - (s.y + ratio * vy);
+  return { ratio, xte: Math.sqrt(dx * dx + dy * dy) };
+}
+function liveRoute(route: RouteState | null, ship: AisTarget | null) {
+  if (!route || ship?.lat === undefined || ship?.lon === undefined) return null;
+  let best: { index: number; ratio: number; xte: number } | null = null;
+  for (let i = 1; i < route.waypoints.length; i++) {
+    const p = segmentProjection(ship.lat, ship.lon, route.waypoints[i - 1], route.waypoints[i]);
+    const score = p.xte + Math.abs(i - route.activeWaypointIndex) * 0.35;
+    if (!best || score < best.xte + Math.abs(best.index - route.activeWaypointIndex) * 0.35) best = { index: i, ratio: p.ratio, xte: p.xte };
+  }
+  if (!best) return null;
+  const next = route.waypoints[best.index];
+  const legStart = route.waypoints[best.index - 1];
+  const legLength = distanceNm(legStart.lat, legStart.lon, next.lat, next.lon);
+  let remaining = legLength * (1 - best.ratio);
+  for (let i = best.index; i < route.waypoints.length - 1; i++) remaining += distanceNm(route.waypoints[i].lat, route.waypoints[i].lon, route.waypoints[i + 1].lat, route.waypoints[i + 1].lon);
+  let total = 0;
+  for (let i = 0; i < route.waypoints.length - 1; i++) total += distanceNm(route.waypoints[i].lat, route.waypoints[i].lon, route.waypoints[i + 1].lat, route.waypoints[i + 1].lon);
+  const nextDistance = distanceNm(ship.lat, ship.lon, next.lat, next.lon);
+  const progress = total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0;
+  return { ...best, next, legStart, remaining, total, nextDistance, progress };
+}
+function aisPayloadToBits(payload: string) {
+  let bits = "";
+  for (const ch of payload) { let v = ch.charCodeAt(0) - 48; if (v > 40) v -= 8; bits += v.toString(2).padStart(6, "0"); }
+  return bits;
+}
+function readUnsigned(bits: string, start: number, len: number) { const c = bits.slice(start, start + len); return c.length < len ? null : parseInt(c, 2); }
+function readSigned(bits: string, start: number, len: number) { const c = bits.slice(start, start + len); if (c.length < len) return null; const u = parseInt(c, 2); return c[0] === "1" ? u - 2 ** len : u; }
+function parseAisLine(line: string) {
+  const t = line.trim();
+  if (!/^[!$]AIVD[MO]/.test(t)) return null;
+  const p = t.split("*")[0].split(","); if (p.length < 7) return null;
+  return { source: t.includes("AIVDO") ? "AIVDO" as const : "AIVDM" as const, total: Number(p[1]), fragment: Number(p[2]), sequence: p[3] || "", channel: p[4] || "", payload: p[5] || "", fillBits: Number(p[6] || 0) };
+}
+function decodePayload(payload: string, fillBits: number, source: "AIVDO" | "AIVDM") {
+  const raw = aisPayloadToBits(payload); const bits = fillBits > 0 ? raw.slice(0, -fillBits) : raw;
+  const type = readUnsigned(bits, 0, 6), mmsi = readUnsigned(bits, 8, 30); if (type === null || mmsi === null) return null;
+  let sogRaw: number | null = null, lonRaw: number | null = null, latRaw: number | null = null, cogRaw: number | null = null, hdgRaw: number | null = null;
+  if ([1, 2, 3].includes(type)) { sogRaw = readUnsigned(bits, 50, 10); lonRaw = readSigned(bits, 61, 28); latRaw = readSigned(bits, 89, 27); cogRaw = readUnsigned(bits, 116, 12); hdgRaw = readUnsigned(bits, 128, 9); }
+  else if ([18, 19].includes(type)) { sogRaw = readUnsigned(bits, 46, 10); lonRaw = readSigned(bits, 57, 28); latRaw = readSigned(bits, 85, 27); cogRaw = readUnsigned(bits, 112, 12); hdgRaw = readUnsigned(bits, 124, 9); }
+  else return { type, source, mmsi };
+  if (latRaw === null || lonRaw === null) return { type, source, mmsi };
+  const lat = latRaw / 600000, lon = lonRaw / 600000; if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return { type, source, mmsi };
+  return { type, source, mmsi, lat, lon, sog: sogRaw === 1023 ? null : (sogRaw ?? 0) / 10, cog: cogRaw === 3600 ? null : (cogRaw ?? 0) / 10, heading: hdgRaw === 511 ? null : hdgRaw };
+}
+function decodeAisLine(line: string, fragments: React.MutableRefObject<Map<string, FragmentBuffer>>) {
+  const p = parseAisLine(line); if (!p || !p.payload) return null;
+  const now = Date.now(); for (const [k, f] of fragments.current) if (now - f.firstSeen > FRAGMENT_TTL_MS) fragments.current.delete(k);
+  if (p.total <= 1) return decodePayload(p.payload, p.fillBits, p.source);
+  const key = `${p.source}-${p.sequence || "no-seq"}-${p.channel}`;
+  const f = fragments.current.get(key) || { total: p.total, parts: [], fillBits: p.fillBits, firstSeen: now };
+  f.parts[p.fragment - 1] = p.payload; f.fillBits = p.fillBits; fragments.current.set(key, f);
+  if (f.parts.filter(Boolean).length !== f.total) return null;
+  fragments.current.delete(key); return decodePayload(f.parts.join(""), f.fillBits, p.source);
+}
+function extractLine(message: any) {
+  if (typeof message === "string") return message.trim();
+  return String(message?.line || message?.sentence || message?.nmea || "").trim();
+}
 
-export default function PhonePage() {
+export default function CrewViewPage() {
+  const { nightMode, toggleTheme } = useBridgeTheme();
   const [route, setRoute] = useState<RouteState | null>(null);
-  const [routeStatus, setRouteStatus] = useState("No route loaded");
-  const [connection, setConnection] = useState("Connecting");
+  const [connection, setConnection] = useState("CONNECTING");
   const [targets, setTargets] = useState<Record<number, AisTarget>>({});
-  const [messageCount, setMessageCount] = useState(0);
-  const [activeTab, setActiveTab] = useState<"status" | "ais">("status");
+  const [tick, setTick] = useState(0);
+  const [wx, setWx] = useState<WxData | null>(null);
+  const [tides, setTides] = useState<TideData | null>(null);
   const fragments = useRef<Map<string, FragmentBuffer>>(new Map());
 
-  const targetList = useMemo(
-    () =>
-      Object.values(targets)
-        .filter((target) => Date.now() - target.lastSeen < TARGET_STALE_MS)
-        .sort((a, b) => b.lastSeen - a.lastSeen),
-    [targets, messageCount],
-  );
-
-  const ownShip = useMemo(
-    () => targetList.filter((target) => target.source === "AIVDO" && target.lat !== undefined && target.lon !== undefined)[0] || null,
-    [targetList],
-  );
-
-  const activeLeg = useMemo(() => {
-    if (!route || route.waypoints.length < 2) return "--";
-    const leg = liveRouteLeg(route, ownShip);
-    const endIndex = leg?.index ?? Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1));
-    return `${route.waypoints[endIndex - 1].id} to ${route.waypoints[endIndex].id}`;
-  }, [route, ownShip]);
+  const targetList = useMemo(() => Object.values(targets).filter(t => Date.now() - t.lastSeen < TARGET_STALE_MS), [targets, tick]);
+  const ownShip = useMemo(() => targetList.filter(t => t.source === "AIVDO" && t.lat !== undefined && t.lon !== undefined).sort((a, b) => b.lastSeen - a.lastSeen)[0] || null, [targetList]);
+  const nav = useMemo(() => liveRoute(route, ownShip), [route, ownShip]);
+  const etaHours = nav && ownShip?.sog && ownShip.sog > 0 ? nav.remaining / ownShip.sog : null;
 
   useEffect(() => {
-    fetch("/api/route-state", { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((data) => {
-        const normalized = normalizeRoute(data);
-        setRoute(normalized);
-        setRouteStatus(normalized ? normalized.routeName : "No route loaded");
-      })
-      .catch(() => setRouteStatus("Route unavailable"));
-
-    let closed = false;
-    const ws = new WebSocket(wsUrl());
-    ws.onopen = () => setConnection("Connected");
-    ws.onerror = () => setConnection("AIS error");
-    ws.onclose = () => {
-      if (!closed) setConnection("Disconnected");
-    };
-    ws.onmessage = (event) => {
-      let parsed: any = event.data;
-      try {
-        parsed = JSON.parse(event.data);
-      } catch {
-        // Plain NMEA is expected.
-      }
-
-      if (parsed?.type === "route-state") {
-        const normalized = normalizeRoute(parsed);
-        setRoute(normalized);
-        setRouteStatus(normalized ? normalized.routeName : "No route loaded");
-        return;
-      }
-
-      const line = extractNmeaLine(parsed);
-      if (!line) return;
-      const decoded = decodeAisLine(line, fragments);
-      setMessageCount((count) => count + 1);
-      if (!decoded?.mmsi) return;
-
-      setTargets((current) => {
-        const prior = current[decoded.mmsi!];
-        return {
-          ...current,
-          [decoded.mmsi!]: {
-            ...prior,
-            ...decoded,
-            vesselName: decoded.vesselName || prior?.vesselName,
-            lat: decoded.lat ?? prior?.lat,
-            lon: decoded.lon ?? prior?.lon,
-            sog: decoded.sog ?? prior?.sog,
-            cog: decoded.cog ?? prior?.cog,
-            heading: decoded.heading ?? prior?.heading,
-            lastSeen: Date.now(),
-          } as AisTarget,
-        };
-      });
-    };
-
-    return () => {
-      closed = true;
-      ws.close();
-    };
+    const loadRoute = () => fetch("/api/route-state", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(d => setRoute(normalizeRoute(d))).catch(() => setRoute(null));
+    loadRoute(); const id = window.setInterval(loadRoute, 30000); return () => window.clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    let closed = false;
+    const ws = new WebSocket(getAisWebSocketUrl());
+    ws.onopen = () => setConnection("LIVE");
+    ws.onerror = () => setConnection("ERROR");
+    ws.onclose = () => { if (!closed) setConnection("OFFLINE"); };
+    ws.onmessage = event => {
+      let parsed: any = event.data; try { parsed = JSON.parse(event.data); } catch {}
+      const line = extractLine(parsed); if (!line) return;
+      const d = decodeAisLine(line, fragments); setTick(v => v + 1); if (!d?.mmsi) return;
+      setTargets(current => ({ ...current, [d.mmsi!]: { ...current[d.mmsi!], ...d, lastSeen: Date.now() } as AisTarget }));
+    };
+    return () => { closed = true; ws.close(); };
+  }, []);
+
+  useEffect(() => {
+    if (ownShip?.lat === undefined || ownShip?.lon === undefined) return;
+    let cancelled = false;
+    const load = async () => {
+      const lat = ownShip.lat!, lon = ownShip.lon!;
+      try { const r = await fetch(`/api/wx?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}`, { cache: "no-store" }); if (r.ok && !cancelled) setWx(await r.json()); } catch {}
+      try { const r = await fetch(`/api/tides?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&hours=48`, { cache: "no-store" }); if (r.ok && !cancelled) setTides(await r.json()); } catch {}
+    };
+    load(); const id = window.setInterval(load, 10 * 60 * 1000); return () => { cancelled = true; window.clearInterval(id); };
+  }, [ownShip?.lat === undefined ? "none" : `${ownShip.lat.toFixed(2)},${ownShip.lon?.toFixed(2)}`]);
+
+  const day = !nightMode;
+  const page = day ? "bg-[#eef2f5] text-[#17212b]" : "bg-[#05090e] text-[#dbe5ee]";
+  const panel = day ? "border-slate-300 bg-white" : "border-white/10 bg-[#08111a]";
+  const inset = day ? "border-slate-300 bg-[#f5f7f9]" : "border-white/10 bg-[#050a0f]";
+  const muted = day ? "text-slate-600" : "text-[#8294a5]";
+  const ctl = day ? "border-slate-300 bg-white text-slate-900" : "border-white/15 bg-[#101820] text-[#dbe5ee]";
+  const nextTides = tides?.highLow?.slice(0, 2) || [];
+  const wxWind = wx?.ndbc?.windKt ?? wx?.nws?.forecastWindKt ?? wx?.pacific?.parsed?.maxWindKt;
+  const wxSeas = wx?.ndbc?.waveFt ?? wx?.pacific?.parsed?.maxSeasFt;
+  const wxText = wx?.nws?.shortForecast || wx?.pacific?.summaryText || "Weather data pending";
+  const warnings = [...(wx?.nws?.alerts || []).map(a => a.event), ...(wx?.pacific?.parsed?.warnings || [])];
+
   return (
-    <main className="min-h-screen bg-[#071019] text-slate-100">
-      <div className="mx-auto flex min-h-screen max-w-[560px] flex-col px-4 pb-24 pt-[max(16px,env(safe-area-inset-top))]">
-        <header className="mb-4">
+    <main className={`min-h-screen ${page}`}>
+      <style jsx global>{`body:has(.crew-view) .navdash-global-nav{display:none!important}.crew-view *{border-radius:0!important}`}</style>
+      <div className="crew-view mx-auto max-w-5xl p-3 sm:p-4">
+        <header className={`mb-3 border p-3 ${panel}`}>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[11px] font-black uppercase tracking-[0.32em] text-[#c9a227]">NavDash 1.3</div>
-              <h1 className="mt-1 text-2xl font-black leading-tight text-white">Watch Pocket View</h1>
+              <div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div>
+              <h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Crew Vessel Status</h1>
+              <div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>READ ONLY · LIVE SHIPBOARD INFORMATION</div>
             </div>
-            <Link href="/" className="rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-black text-slate-100">
-              Console
-            </Link>
+            <button type="button" onClick={toggleTheme} className={`shrink-0 border px-3 py-2 text-[10px] font-black uppercase ${ctl}`}>{nightMode ? "Day" : "Night"}</button>
           </div>
         </header>
 
-        <section className="mb-3 grid grid-cols-2 gap-2">
-          <PhoneStat label="AIS" value={connection} />
-          <PhoneStat label="Route" value={route ? "Loaded" : "None"} />
+        <section className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Status label="AIS" value={connection} accent={connection === "LIVE"} panel={panel} muted={muted} />
+          <Status label="SOG" value={fmt(ownShip?.sog, " kt")} panel={panel} muted={muted} />
+          <Status label="COG" value={fmt(ownShip?.cog, "°")} panel={panel} muted={muted} />
+          <Status label="Heading" value={fmt(ownShip?.heading, "°", 0)} panel={panel} muted={muted} />
         </section>
 
-        <nav className="sticky top-0 z-10 mb-3 grid grid-cols-2 gap-2 bg-[#071019]/95 py-2 backdrop-blur">
-          {[
-            ["status", "Status"],
-            ["ais", "AIS"],
-          ].map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setActiveTab(key as "status" | "ais")}
-              className={activeTab === key ? "rounded-xl bg-[#c9a227] px-3 py-3 text-sm font-black text-[#111827]" : "rounded-xl border border-white/10 bg-white/10 px-3 py-3 text-sm font-black text-slate-100"}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        <section className={`mb-3 border p-4 ${panel}`}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <Title text="Own Ship" muted={muted} />
+            <div className={`text-[10px] font-bold uppercase ${muted}`}>Age {ageText(ownShip?.lastSeen)}</div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Metric label="Latitude" value={formatLatLon(ownShip?.lat, true)} inset={inset} muted={muted} />
+            <Metric label="Longitude" value={formatLatLon(ownShip?.lon, false)} inset={inset} muted={muted} />
+          </div>
+        </section>
 
-        {activeTab === "status" && (
-          <section className="grid gap-3">
-            <PhoneCard title="Own Ship">
-              <div className="grid grid-cols-2 gap-3">
-                <Metric label="Position" value={`${formatLatLon(ownShip?.lat, true)} / ${formatLatLon(ownShip?.lon, false)}`} wide />
-                <Metric label="SOG" value={formatNumber(ownShip?.sog, " kt")} />
-                <Metric label="COG" value={formatNumber(ownShip?.cog, " deg")} />
-                <Metric label="Heading" value={formatNumber(ownShip?.heading, " deg")} />
-                <Metric label="Age" value={ageText(ownShip?.lastSeen)} />
-              </div>
-            </PhoneCard>
+        <section className={`mb-3 border p-4 ${panel}`}>
+          <Title text="Voyage" muted={muted} />
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Route" value={route?.routeName || "No route loaded"} inset={inset} muted={muted} wide />
+            <Metric label="Next Waypoint" value={nav ? `${nav.next.id} · ${nav.next.name}` : "--"} inset={inset} muted={muted} wide />
+            <Metric label="Next WP" value={nav ? `${nav.nextDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
+            <Metric label="Distance To Go" value={nav ? `${nav.remaining.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
+            <Metric label="ETA" value={formatEta(etaHours)} inset={inset} muted={muted} />
+            <Metric label="Cross Track" value={nav ? `${nav.xte.toFixed(2)} nm` : "--"} inset={inset} muted={muted} />
+          </div>
+          <div className={`mt-3 border p-3 ${inset}`}>
+            <div className="mb-2 flex justify-between text-[10px] font-black uppercase tracking-[.12em]"><span className={muted}>Route Progress</span><span>{nav ? `${nav.progress.toFixed(0)}%` : "--"}</span></div>
+            <div className={day ? "h-2 bg-slate-200" : "h-2 bg-black/40"}><div className="h-2 bg-[#c9a227]" style={{ width: `${nav?.progress || 0}%` }} /></div>
+          </div>
+        </section>
 
-            <PhoneCard title="Route">
-              <div className="grid gap-3">
-                <Metric label="Route" value={routeStatus} wide />
-                <Metric label="Active Leg" value={activeLeg} wide />
-              </div>
-            </PhoneCard>
+        <section className={`mb-3 border p-4 ${panel}`}>
+          <Title text="Route Overview" muted={muted} />
+          <div className={`mt-3 border p-2 ${inset}`}><RouteSketch route={route} ship={ownShip} /></div>
+        </section>
+
+        <div className="grid gap-3 lg:grid-cols-2">
+          <section className={`border p-4 ${panel}`}>
+            <Title text="Weather" muted={muted} />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Metric label="Wind" value={fmt(wxWind, " kt")} inset={inset} muted={muted} />
+              <Metric label="Seas" value={fmt(wxSeas, " ft")} inset={inset} muted={muted} />
+            </div>
+            <div className={`mt-2 border p-3 text-sm leading-5 ${inset}`}>{wxText}</div>
+            {warnings.length > 0 && <div className="mt-2 border border-amber-500/50 bg-amber-500/10 p-3 text-xs font-black uppercase text-amber-500">{warnings.slice(0, 3).join(" · ")}</div>}
           </section>
-        )}
 
-        {activeTab === "ais" && (
-          <section className="grid gap-3">
-            <PhoneCard title="AIS Targets">
-              <div className="grid gap-2">
-                {targetList.filter((target) => target.source === "AIVDM").slice(0, 30).map((target) => (
-                  <article key={target.mmsi} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-black text-white">{target.vesselName || target.mmsi}</div>
-                        <div className="mt-1 text-xs font-bold text-slate-400">MMSI {target.mmsi}</div>
-                      </div>
-                      <div className="text-right font-mono text-xs text-slate-300">{ageText(target.lastSeen)}</div>
-                    </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2">
-                      <Metric label="SOG" value={formatNumber(target.sog, " kt")} />
-                      <Metric label="COG" value={formatNumber(target.cog, " deg")} />
-                      <Metric label="HDG" value={formatNumber(target.heading, " deg")} />
-                    </div>
-                  </article>
-                ))}
-                {!targetList.filter((target) => target.source === "AIVDM").length && <div className="rounded-xl border border-white/10 bg-black/20 p-5 text-center text-sm text-slate-400">Waiting for AIS targets.</div>}
-              </div>
-            </PhoneCard>
+          <section className={`border p-4 ${panel}`}>
+            <Title text="Tides" muted={muted} />
+            <div className={`mt-2 text-xs ${muted}`}>{tides?.station?.name || "Nearest station pending"}</div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {nextTides.length ? nextTides.map((t, i) => <Metric key={`${t.time}-${i}`} label={t.type || "Prediction"} value={`${new Date(t.time).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })} · ${Number(t.valueFt).toFixed(1)} ft`} inset={inset} muted={muted} />) : <div className={`col-span-2 border p-3 text-sm ${inset} ${muted}`}>Tide data pending</div>}
+            </div>
           </section>
-        )}
+        </div>
+
+        <footer className={`mt-3 border p-3 text-center text-[10px] font-bold uppercase tracking-[.1em] ${panel} ${muted}`}>Crew display only · Navigation and voyage decisions remain with the bridge team</footer>
       </div>
     </main>
   );
 }
 
-function PhoneStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3">
-      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</div>
-      <div className="mt-1 truncate text-sm font-black text-white">{value}</div>
-    </div>
-  );
+function Title({ text, muted }: { text: string; muted: string }) { return <div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>{text}</div>; }
+function Status({ label, value, panel, muted, accent = false }: { label: string; value: string; panel: string; muted: string; accent?: boolean }) {
+  return <div className={`border p-3 ${panel}`}><div className={`text-[9px] font-black uppercase tracking-[.14em] ${muted}`}>{label}</div><div className={`mt-1 font-mono text-lg font-black ${accent ? "text-emerald-500" : ""}`}>{value}</div></div>;
 }
-
-function PhoneCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 shadow-xl shadow-black/25">
-      <div className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-slate-400">{title}</div>
-      {children}
-    </section>
-  );
+function Metric({ label, value, inset, muted, wide = false }: { label: string; value: string; inset: string; muted: string; wide?: boolean }) {
+  return <div className={`border p-3 ${inset} ${wide ? "sm:col-span-2" : ""}`}><div className={`text-[9px] font-black uppercase tracking-[.14em] ${muted}`}>{label}</div><div className="mt-1 break-words font-mono text-sm font-black">{value}</div></div>;
 }
-
-function Metric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={wide ? "col-span-2 rounded-xl border border-white/10 bg-black/20 p-3" : "rounded-xl border border-white/10 bg-black/20 p-3"}>
-      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">{label}</div>
-      <div className="mt-1 break-words font-mono text-sm font-black text-slate-100">{value}</div>
-    </div>
-  );
+function RouteSketch({ route, ship }: { route: RouteState | null; ship: AisTarget | null }) {
+  if (!route) return <div className="grid h-48 place-items-center text-sm text-slate-500">No route loaded</div>;
+  const pts = [...route.waypoints];
+  if (ship?.lat !== undefined && ship?.lon !== undefined) pts.push({ id: "SHIP", name: "Ship", lat: ship.lat, lon: ship.lon });
+  const minLat = Math.min(...pts.map(p => p.lat)), maxLat = Math.max(...pts.map(p => p.lat));
+  const minLon = Math.min(...pts.map(p => p.lon)), maxLon = Math.max(...pts.map(p => p.lon));
+  const latSpan = Math.max(0.02, maxLat - minLat), lonSpan = Math.max(0.02, maxLon - minLon);
+  const xy = (lat: number, lon: number) => ({ x: 18 + ((lon - minLon) / lonSpan) * 324, y: 182 - ((lat - minLat) / latSpan) * 164 });
+  const line = route.waypoints.map(p => { const q = xy(p.lat, p.lon); return `${q.x},${q.y}`; }).join(" ");
+  const shipXY = ship?.lat !== undefined && ship?.lon !== undefined ? xy(ship.lat, ship.lon) : null;
+  return <svg viewBox="0 0 360 200" className="h-48 w-full" role="img" aria-label="Route overview"><polyline points={line} fill="none" stroke="#c9a227" strokeWidth="2" />{route.waypoints.map((p, i) => { const q = xy(p.lat, p.lon); return <g key={`${p.id}-${i}`}><circle cx={q.x} cy={q.y} r="3" fill="#c9a227"/><text x={q.x + 5} y={q.y - 5} fontSize="7" fill="currentColor">{p.id}</text></g>; })}{shipXY && <g><circle cx={shipXY.x} cy={shipXY.y} r="6" fill="#38bdf8"/><circle cx={shipXY.x} cy={shipXY.y} r="10" fill="none" stroke="#38bdf8" strokeWidth="1"/></g>}</svg>;
 }
