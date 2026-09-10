@@ -52,6 +52,11 @@ export function BridgeConsoleRouteGate() {
       <BridgeNextWaypointDistance />
       <BridgeRouteDistanceWgs84 />
       <BridgeLegSequenceDisplay />
+      <style jsx global>{`
+        .leaflet-navmap-main-ami-v1-pane .leaflet-tooltip-top {
+          margin-top: -40px !important;
+        }
+      `}</style>
     </>
   );
 }
