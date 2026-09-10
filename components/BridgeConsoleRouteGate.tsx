@@ -26,7 +26,7 @@ import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
   const [mapReady, setMapReady] = useState(false);
-  const isMainNavDashRoute = pathname === "/navdash";
+  const isMainNavDashRoute = pathname === "/" || pathname === "/navdash";
 
   useEffect(() => {
     setMapReady(false);
