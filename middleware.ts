@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const SUPABASE_URL = "https://jvisswvllnvaicdroljr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_aoiZwFyorDFcf_LyNCfhqA_acPun8X2";
 const SESSION_COOKIE = "navdash-device-token-v1";
+const DEFAULT_SHIP_IPS = ["74.244.38.243"];
 
 function requestIp(request: NextRequest) {
   return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
@@ -12,11 +13,12 @@ function isShipNetwork(request: NextRequest) {
   const ip = requestIp(request);
   if (!ip) return false;
 
-  const allowed = (process.env.NAVDASH_SHIP_IPS || "")
+  const configured = (process.env.NAVDASH_SHIP_IPS || "")
     .split(",")
     .map((value) => value.trim())
     .filter(Boolean);
 
+  const allowed = configured.length ? configured : DEFAULT_SHIP_IPS;
   return allowed.includes(ip);
 }
 
