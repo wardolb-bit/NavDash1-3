@@ -8,6 +8,7 @@ import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
 import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
+import { EncScaleAwareLayer } from "./EncScaleAwareLayer";
 import { NavMapZoomLimit } from "./NavMapZoomLimit";
 import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
@@ -42,6 +43,7 @@ export function BridgeConsoleRouteGate() {
     <>
       <NavDashMainLinkGuard />
       <NavMapMainOverlayV2 />
+      <EncScaleAwareLayer />
       <BridgeMapWakeup />
       <NavMapZoomLimit />
       <NoaaLeafletPaneWeatherOverlay />
