@@ -51,8 +51,8 @@ function formatEta(hours?: number | null) {
 function normalizeRoute(data: any): RouteState | null {
   const raw = Array.isArray(data?.waypoints) ? data.waypoints : [];
   const waypoints = raw.map((wp: any, i: number) => ({
-    id: String(wp?.id || `WP${String(i + 1).padStart(2, "0")}`),
-    name: String(wp?.name || `Waypoint ${i + 1}`),
+    id: `WP${String(i + 1).padStart(2, "0")}`,
+    name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `Waypoint ${i + 1}`,
     lat: Number(wp?.lat ?? wp?.latitude),
     lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
   })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
@@ -165,6 +165,7 @@ export default function CrewViewPage() {
   const nav = useMemo(() => liveRoute(route, ownShip), [route, ownShip]);
   const etaHours = nav && ownShip?.sog && ownShip.sog > 0 ? nav.remaining / ownShip.sog : null;
   const routeActiveIndex = route ? Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1)) : null;
+  const routePreviousWaypoint = routeActiveIndex !== null && route ? route.waypoints[routeActiveIndex - 1] : null;
   const routeNextWaypoint = routeActiveIndex !== null && route ? route.waypoints[routeActiveIndex] : null;
 
   useEffect(() => {
@@ -266,8 +267,8 @@ export default function CrewViewPage() {
               <Title text="Voyage" muted={muted} />
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
                 <Metric label="Route" value={route?.routeName || "No route loaded"} inset={inset} muted={muted} wide />
-                <Metric label="Active Leg" value={routeActiveIndex !== null ? `${routeActiveIndex} → ${routeActiveIndex + 1}` : "--"} inset={inset} muted={muted} wide />
-                <Metric label="Next Waypoint" value={routeActiveIndex !== null && routeNextWaypoint ? `${routeActiveIndex + 1} · ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide />
+                <Metric label="Active Leg" value={routePreviousWaypoint && routeNextWaypoint ? `${routePreviousWaypoint.name} → ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide />
+                <Metric label="Next Waypoint" value={routeActiveIndex !== null && routeNextWaypoint ? `${routeNextWaypoint.id} · ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide />
                 <Metric label="Next WP" value={nav ? `${nav.nextDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
                 <Metric label="Distance To Go" value={nav ? `${nav.remaining.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
                 <Metric label="ETA" value={formatEta(etaHours)} inset={inset} muted={muted} />
