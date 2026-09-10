@@ -10,7 +10,7 @@ type NavGroup = { label: string; items: NavItem[] };
 const TOKEN_KEY = "navdash-device-token-v1";
 
 const navGroups: NavGroup[] = [
-  { label: "Console", items: [{ label: "Main Console", href: "/navdash" }, { label: "ECR", href: "/ecr" }] },
+  { label: "Console", items: [{ label: "Main Console", href: "/navdash" }] },
   { label: "AIS", items: [{ label: "AIS Targets", href: "/ais-test" }] },
   { label: "Weather", items: [{ label: "Weather", href: "/wx" }, { label: "WX Routing", href: "/wx-routing" }, { label: "Official Weather", href: "/official-weather" }] },
   { label: "MSI", items: [{ label: "EGC / MSI", href: "/msi" }] },
