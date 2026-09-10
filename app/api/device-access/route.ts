@@ -35,6 +35,22 @@ function deviceToken(request: NextRequest) {
   return request.headers.get("x-navdash-device-token")?.trim() || request.cookies.get(SESSION_COOKIE)?.value?.trim() || "";
 }
 
+function requestIp(request: NextRequest) {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+}
+
+function shipIps() {
+  return (process.env.NAVDASH_SHIP_IPS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function isShipRequest(request: NextRequest) {
+  const ip = requestIp(request);
+  return Boolean(ip && shipIps().includes(ip));
+}
+
 function withSession(response: NextResponse, token: string) {
   if (!token) return response;
   response.cookies.set(SESSION_COOKIE, token, {
@@ -51,6 +67,13 @@ export async function GET(request: NextRequest) {
   try {
     const token = deviceToken(request);
     const action = request.nextUrl.searchParams.get("action");
+
+    if (!action && isShipRequest(request)) {
+      return NextResponse.json(
+        { ok: true, role: "bridge", name: "Ship Network", source: "ship-ip" },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
 
     if (action === "list") {
       const devices = await rpc("navdash_list_devices", { p_requester_token: token });
