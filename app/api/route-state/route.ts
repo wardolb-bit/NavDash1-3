@@ -40,13 +40,14 @@ function normalizeRoutePayload(payload: any): RouteState | null {
       const lon = Number(wp?.lon ?? wp?.lng ?? wp?.longitude);
 
       return {
-        id: typeof wp?.id === "string" && wp.id.trim() ? wp.id : `WP${String(index + 1).padStart(2, "0")}`,
+        id: `WP${String(index + 1).padStart(2, "0")}`,
         name: typeof wp?.name === "string" && wp.name.trim() ? wp.name : `Waypoint ${index + 1}`,
         lat,
         lon,
       };
     })
-    .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+    .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon))
+    .map((wp: Waypoint, index: number) => ({ ...wp, id: `WP${String(index + 1).padStart(2, "0")}` }));
 
   if (waypoints.length < 2) return null;
 
