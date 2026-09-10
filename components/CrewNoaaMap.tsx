@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
-type OwnShip = { lat?: number; lon?: number; cog?: number | null } | null;
+type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: number | null } | null;
 
 export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | null; ship: OwnShip; nightMode: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -109,26 +109,20 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
 
       if (ship?.lat !== undefined && ship?.lon !== undefined) {
         const shipGroup = L.layerGroup();
-        L.circleMarker([ship.lat, ship.lon], {
-          radius: 8,
-          weight: 3,
-          color: "#38bdf8",
-          fillColor: "#38bdf8",
-          fillOpacity: 0.55,
-        }).bindTooltip("M/V MB480", { permanent: false, direction: "top" }).addTo(shipGroup);
+        const orientation = ship.heading !== undefined && ship.heading !== null && Number.isFinite(ship.heading)
+          ? ship.heading
+          : (ship.cog !== undefined && ship.cog !== null && Number.isFinite(ship.cog) ? ship.cog : 0);
 
-        if (ship.cog !== undefined && ship.cog !== null && Number.isFinite(ship.cog)) {
-          const lengthNm = 3;
-          const brng = ship.cog * Math.PI / 180;
-          const latRad = ship.lat * Math.PI / 180;
-          const dLat = (lengthNm / 60) * Math.cos(brng);
-          const dLon = (lengthNm / (60 * Math.max(0.2, Math.cos(latRad)))) * Math.sin(brng);
-          L.polyline([[ship.lat, ship.lon], [ship.lat + dLat, ship.lon + dLon]], {
-            color: "#38bdf8",
-            weight: 2,
-            dashArray: "6 6",
-          }).addTo(shipGroup);
-        }
+        const icon = L.divIcon({
+          className: "navmap-main-ownship-icon",
+          html: `<div style="width:30px;height:30px;transform:rotate(${orientation}deg);transform-origin:15px 15px;filter:drop-shadow(0 0 5px rgba(34,211,238,.35))"><svg width="30" height="30" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#071019" stroke="#22d3ee" stroke-width="2.2" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#f1d56b" stroke-width="1.5"/><circle cx="15" cy="15" r="2.4" fill="#22d3ee"/></svg></div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 15],
+        });
+
+        L.marker([ship.lat, ship.lon], { icon, interactive: false })
+          .bindTooltip("M/V MB480", { permanent: false, direction: "top" })
+          .addTo(shipGroup);
 
         shipGroup.addTo(map);
         shipLayerRef.current = shipGroup;
@@ -151,7 +145,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
 
     void redraw();
     return () => { cancelled = true; };
-  }, [route, ship?.lat, ship?.lon, ship?.cog, nightMode]);
+  }, [route, ship?.lat, ship?.lon, ship?.cog, ship?.heading, nightMode]);
 
   useEffect(() => {
     return () => {
