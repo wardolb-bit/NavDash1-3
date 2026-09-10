@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
 
   const utcDay = new Date().toISOString().slice(0, 10);
   const digest = createHash("sha256").update(query).digest("hex");
-  const cacheKey = `noaa/wms/${utcDay}/${digest}.png`;
+  const cacheKey = `noaa/wms-v2/${utcDay}/${digest}.png`;
 
   try {
     const cached = await getR2Object(cacheKey);
