@@ -52,8 +52,8 @@ export function EncScaleAwareLayer() {
         style.id = ENC_TILE_STYLE_ID;
         style.textContent = `
           .leaflet-${ENC_PANE}-pane .leaflet-tile {
-            width: 513px !important;
-            height: 513px !important;
+            width: 514px !important;
+            height: 514px !important;
           }
         `;
         document.head.appendChild(style);
