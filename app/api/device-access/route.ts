@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 const SUPABASE_URL = "https://jvisswvllnvaicdroljr.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_aoiZwFyorDFcf_LyNCfhqA_acPun8X2";
 const SESSION_COOKIE = "navdash-device-token-v1";
+const DEFAULT_SHIP_IPS = ["74.244.38.243"];
 
 function supabaseHeaders() {
   return {
@@ -35,6 +36,23 @@ function deviceToken(request: NextRequest) {
   return request.headers.get("x-navdash-device-token")?.trim() || request.cookies.get(SESSION_COOKIE)?.value?.trim() || "";
 }
 
+function requestIp(request: NextRequest) {
+  return request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+}
+
+function isShipNetwork(request: NextRequest) {
+  const ip = requestIp(request);
+  if (!ip) return false;
+
+  const configured = (process.env.NAVDASH_SHIP_IPS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const allowed = configured.length ? configured : DEFAULT_SHIP_IPS;
+  return allowed.includes(ip);
+}
+
 function withSession(response: NextResponse, token: string) {
   if (!token) return response;
   response.cookies.set(SESSION_COOKIE, token, {
@@ -61,6 +79,13 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
     return result?.ok ? withSession(response, token) : response;
   } catch (error) {
+    if (isShipNetwork(request)) {
+      return NextResponse.json(
+        { ok: true, role: "bridge", name: "Ship Network Emergency Access", emergencyBypass: true },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+
     return NextResponse.json(
       { ok: false, role: "crew", error: error instanceof Error ? error.message : "Device access check failed." },
       { status: 502, headers: { "Cache-Control": "no-store" } },
