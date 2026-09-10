@@ -14,6 +14,9 @@ const ENC_TILE_SIZE = 512;
  * service path. NOAA's Maritime Chart Service selects best-scale ENC content
  * as the requested map scale changes. Optional diagnostic/quality overlays
  * remain off to avoid the large U/triangle symbology.
+ *
+ * Seam fix: the proxy requests a 2 px geographic bleed on every tile edge;
+ * this pane renders the returned image 2 px outward to match that bleed.
  */
 export function EncScaleAwareLayer() {
   useEffect(() => {
