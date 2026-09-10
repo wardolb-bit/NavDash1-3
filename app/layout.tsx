@@ -4,7 +4,6 @@ import './day-fixes.css';
 import './global-theme.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { NavDashAccessGuard } from '../components/NavDashAccessGuard';
 import { BridgeConsoleRouteGate } from '../components/BridgeConsoleRouteGate';
 import { WxRoutingBridgeSkin } from '../components/WxRoutingBridgeSkin';
 import { CelestialConsoleSkin } from '../components/CelestialConsoleSkin';
@@ -221,7 +220,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
 
-        <NavDashAccessGuard />
         {children}
         <BridgeConsoleRouteGate />
         <WxRoutingBridgeSkin />
