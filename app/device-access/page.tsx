@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
 const TOKEN_KEY = "navdash-device-token-v1";
@@ -50,32 +50,27 @@ export default function DeviceAccessPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useMemo(() => {
-    if (typeof window === "undefined") return "";
-    return window.localStorage.getItem(TOKEN_KEY)?.trim() || "";
-  }, []);
-
   const load = async () => {
     const stored = window.localStorage.getItem(TOKEN_KEY)?.trim() || "";
-    if (!stored) {
-      setStatus({ ok: false, role: "crew" });
-      setDevices([]);
-      return;
-    }
 
     try {
-      const response = await fetch("/api/device-access", {
-        cache: "no-store",
-        headers: { "x-navdash-device-token": stored },
-      });
-      const result = await response.json();
-      setStatus(result);
+      // Always let the secure HttpOnly session cookie identify this browser first.
+      let response = await fetch("/api/device-access", { cache: "no-store" });
+      let result = await response.json();
 
-      if (response.ok && result?.ok && result?.role === "bridge") {
-        const listResponse = await fetch("/api/device-access?action=list", {
+      // Fall back to the legacy local token only when the cookie does not prove Bridge access.
+      if (!(response.ok && result?.ok && result?.role === "bridge") && stored) {
+        response = await fetch("/api/device-access", {
           cache: "no-store",
           headers: { "x-navdash-device-token": stored },
         });
+        result = await response.json();
+      }
+
+      setStatus(result);
+
+      if (response.ok && result?.ok && result?.role === "bridge") {
+        const listResponse = await fetch("/api/device-access?action=list", { cache: "no-store" });
         const listResult = await listResponse.json();
         setDevices(Array.isArray(listResult?.devices) ? listResult.devices : []);
       } else {
@@ -121,7 +116,6 @@ export default function DeviceAccessPage() {
   }
 
   async function createCode() {
-    const stored = window.localStorage.getItem(TOKEN_KEY)?.trim() || "";
     setBusy(true);
     setMessage("");
     setGeneratedCode("");
@@ -129,10 +123,7 @@ export default function DeviceAccessPage() {
     try {
       const response = await fetch("/api/device-access", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-navdash-device-token": stored,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create-code",
           role: generatedRole,
@@ -151,18 +142,14 @@ export default function DeviceAccessPage() {
   }
 
   async function revokeDevice(deviceId: string) {
-    const stored = window.localStorage.getItem(TOKEN_KEY)?.trim() || "";
-    if (!stored || !window.confirm("Revoke this device?")) return;
+    if (!window.confirm("Revoke this device?")) return;
     setBusy(true);
     setMessage("");
 
     try {
       const response = await fetch("/api/device-access", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-navdash-device-token": stored,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "revoke", deviceId }),
       });
       const result = await response.json();
