@@ -12,6 +12,7 @@ import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
 import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
+import { NavMapZoomLimit } from "./NavMapZoomLimit";
 import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
@@ -86,6 +87,7 @@ export function BridgeConsoleRouteGate() {
       <BridgeConsolePreview />
       <BridgeMapWakeup />
       <NavMapMainOverlayV2 />
+      <NavMapZoomLimit />
       <NoaaLeafletPaneWeatherOverlay />
       <BridgeMapLayerControls />
       <BridgeOwnShipEnhancer />
