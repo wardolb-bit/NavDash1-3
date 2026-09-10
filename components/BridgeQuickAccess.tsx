@@ -65,7 +65,7 @@ export function BridgeQuickAccess() {
       <Link href="/official-weather" className={buttonClass}>Official WX</Link>
       <Link href="/msi" className={buttonClass}>MSI</Link>
       <Link href="/tools" className={buttonClass}>Tools</Link>
-      <Link href="/ecr" className={buttonClass}>ECR</Link>
+      <Link href="/device-access" className={buttonClass}>Devices</Link>
     </>,
     target,
   );
