@@ -128,3 +128,45 @@ html[data-navdash-theme="day"] #bc2-status-ais,
 html[data-navdash-theme="day"] #bc2-status-route {
   color: #067647 !important;
 }
+
+@media (max-width: 700px) {
+  .crew-view {
+    padding: 8px !important;
+  }
+
+  .crew-view > header {
+    margin-bottom: 8px !important;
+    padding: 10px !important;
+  }
+
+  .crew-view > header > div {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: start !important;
+    gap: 10px !important;
+  }
+
+  .crew-view > header > div > div:first-child {
+    min-width: 0 !important;
+  }
+
+  .crew-view > header h1 {
+    margin-top: 4px !important;
+    font-size: 1.2rem !important;
+    line-height: 1.1 !important;
+    letter-spacing: .06em !important;
+  }
+
+  .crew-view > header button {
+    width: auto !important;
+    min-width: 72px !important;
+    max-width: 96px !important;
+    height: 38px !important;
+    min-height: 38px !important;
+    padding: 0 12px !important;
+    align-self: start !important;
+    justify-self: end !important;
+    white-space: nowrap !important;
+    flex: 0 0 auto !important;
+  }
+}
