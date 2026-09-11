@@ -18,7 +18,7 @@ import { SharedRouteSync } from "./SharedRouteSync";
 
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
-  const isMainNavDashRoute = pathname === "/bridge" || pathname === "/navdash";
+  const isMainNavDashRoute = pathname === "/bridge" || pathname === "/mobile";
 
   let routeUi = <NavDashMainLinkGuard />;
 
