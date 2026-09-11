@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useBridgeTheme } from "../lib/useBridgeTheme";
 
 /**
  * Forces every Celestial workstation mode onto the same compact bridge-console
@@ -9,6 +10,7 @@ import { usePathname } from "next/navigation";
  */
 export function CelestialConsoleSkin() {
   const pathname = usePathname();
+  const { nightMode, toggleTheme } = useBridgeTheme();
 
   useEffect(() => {
     if (!pathname.startsWith("/celestial")) return;
@@ -81,13 +83,23 @@ export function CelestialConsoleSkin() {
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {
           color:#000000 !important;
         }
+        html[data-navdash-theme="day"] .bc-celestial-console #celestial-theme-toggle,
+        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/bridge"],
+        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/"],
+        html[data-navdash-theme="day"] .bc-celestial-console header a[href="/navdash"] {
+          background:#ffffff !important;
+          background-color:#ffffff !important;
+          color:#000000 !important;
+          border-color:rgba(15,23,42,.28) !important;
+        }
       `;
       document.head.appendChild(style);
     }
 
-    const syncMainLink = () => {
-      const link = main.querySelector<HTMLAnchorElement>('header a[href="/"], header a[href="/navdash"]');
+    const syncHeaderControls = () => {
+      const link = main.querySelector<HTMLAnchorElement>('header a[href="/"], header a[href="/navdash"], header a[href="/bridge"]');
       if (!link) return;
+
       const isDay = document.documentElement.getAttribute("data-navdash-theme") === "day";
       if (isDay) {
         link.style.setProperty("background", "#ffffff", "important");
@@ -100,19 +112,31 @@ export function CelestialConsoleSkin() {
         link.style.removeProperty("color");
         link.style.removeProperty("border-color");
       }
+
+      let themeButton = document.getElementById("celestial-theme-toggle") as HTMLButtonElement | null;
+      if (!themeButton) {
+        themeButton = document.createElement("button");
+        themeButton.id = "celestial-theme-toggle";
+        themeButton.type = "button";
+        themeButton.className = link.className;
+        link.parentElement?.insertBefore(themeButton, link);
+      }
+      themeButton.textContent = isDay ? "NIGHT MODE" : "DAY MODE";
+      themeButton.onclick = toggleTheme;
     };
 
-    syncMainLink();
-    const observer = new MutationObserver(syncMainLink);
+    syncHeaderControls();
+    const observer = new MutationObserver(syncHeaderControls);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-navdash-theme"] });
-    const timer = window.setTimeout(syncMainLink, 250);
+    const timer = window.setTimeout(syncHeaderControls, 250);
 
     return () => {
       observer.disconnect();
       window.clearTimeout(timer);
+      document.getElementById("celestial-theme-toggle")?.remove();
       main.classList.remove("bc-celestial-console");
     };
-  }, [pathname]);
+  }, [pathname, nightMode, toggleTheme]);
 
   return null;
 }
