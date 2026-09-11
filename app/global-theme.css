@@ -129,6 +129,47 @@ html[data-navdash-theme="day"] #bc2-status-route {
   color: #067647 !important;
 }
 
+/* Bridge map menus follow the Day / Bridge Night theme. */
+html[data-navdash-theme="day"] #bc-map-layer-controls,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 760"] > div,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:760"] > div,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > div,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > div {
+  background: rgba(255,255,255,.96) !important;
+  background-color: rgba(255,255,255,.96) !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+  box-shadow: 0 6px 18px rgba(15,23,42,.12) !important;
+  backdrop-filter: blur(6px) !important;
+}
+
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 760"] > div:first-child label,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:760"] > div:first-child label,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > button,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > button {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+  box-shadow: none !important;
+}
+
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > div strong,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > div strong,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 760"] > div:nth-child(3) span:first-child,
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:760"] > div:nth-child(3) span:first-child {
+  color: var(--nd-teal) !important;
+}
+
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > div [style*="#94a3b8"],
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > div [style*="#94a3b8"],
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > div [style*="#8294a5"],
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > div [style*="#8294a5"],
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 760"] > div [style*="#94a3b8"],
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:760"] > div [style*="#94a3b8"] {
+  color: var(--nd-muted) !important;
+}
+
 @media (max-width: 700px) {
   .crew-view {
     padding: 8px !important;
