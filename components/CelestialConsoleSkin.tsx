@@ -83,6 +83,19 @@ export function CelestialConsoleSkin() {
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {
           color:#000000 !important;
         }
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#e7c95c]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#f3dfa0]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#f1d56b]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-amber"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-yellow"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-wardGold"] {
+          color:#17212b !important;
+        }
+        html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#e7c95c"],
+        html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#f3dfa0"],
+        html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#f1d56b"] {
+          fill:#17212b !important;
+        }
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-theme-toggle,
         html[data-navdash-theme="day"] .bc-celestial-console header a[href="/bridge"],
         html[data-navdash-theme="day"] .bc-celestial-console header a[href="/"],
