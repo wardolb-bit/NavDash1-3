@@ -127,7 +127,13 @@ export function MainMapDisplayControls() {
         await ensureVectorLayer(map);
         map.eachLayer((layer: any) => {
           const markerElement = layer?.getElement?.() as HTMLElement | null;
-          if (!markerElement?.querySelector?.(".navmap-main-ais-target-icon")) return;
+          const isAisTarget = Boolean(
+            markerElement && (
+              markerElement.matches?.(".navmap-main-ais-target-icon") ||
+              markerElement.querySelector?.(".navmap-main-ais-target-icon")
+            )
+          );
+          if (!isAisTarget) return;
           if ((layer as any).__navdashVectorClickBound) return;
           (layer as any).__navdashVectorClickBound = true;
           layer.on("click", () => {
