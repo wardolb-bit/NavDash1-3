@@ -3,8 +3,22 @@
 import { useEffect, useRef } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
+const AIS_NAME_CACHE_KEY = "navdash-ais-name-cache-v1";
+const LIVE_TARGET_MAX_AGE_MS = 30 * 60 * 1000;
+const OWN_SHIP_MAX_AGE_MS = 2 * 60 * 1000;
+const NAME_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 type Vessel = {
   mmsi: number;
+  lat: number;
+  lon: number;
+  sog: number | null;
+  cog: number | null;
+  heading: number | null;
+  updatedAt: number;
+};
+
+type OwnShip = {
   lat: number;
   lon: number;
   sog: number | null;
@@ -17,6 +31,14 @@ type FragmentAssembly = {
   total: number;
   parts: string[];
   updatedAt: number;
+};
+
+type CachedName = { name: string; updatedAt: number };
+
+type AisSnapshotTarget = Partial<Vessel> & {
+  mmsi?: number | string;
+  name?: string | null;
+  lastSeen?: number | string;
 };
 
 function sixBitCharToValue(char: string) {
@@ -80,10 +102,9 @@ function decodeStaticNameFromPayload(payload: string): { mmsi: number; name: str
   }
 }
 
-// Intentionally mirrors the proven Pilot-page position decoder.
-function decodeAisTarget(line: string): Vessel | null {
+function decodePosition(line: string, ownShip: boolean): Vessel | OwnShip | null {
   try {
-    if (!line.startsWith("!AIVDM")) return null;
+    if (ownShip ? !/^[$!]AIVDO/.test(line) : !line.startsWith("!AIVDM")) return null;
     const parts = line.split(",");
     if (Number(parts[1]) !== 1 || !parts[5]) return null;
 
@@ -106,7 +127,7 @@ function decodeAisTarget(line: string): Vessel | null {
       sog = sogRaw >= 1023 ? null : sogRaw / 10;
       cog = cogRaw >= 3600 ? null : cogRaw / 10;
       heading = headingRaw === 511 ? null : headingRaw;
-    } else if (type === 18) {
+    } else if (!ownShip && type === 18) {
       const sogRaw = unsigned(bits, 46, 10);
       lon = signed(bits, 57, 28) / 600000;
       lat = signed(bits, 85, 27) / 600000;
@@ -123,10 +144,75 @@ function decodeAisTarget(line: string): Vessel | null {
     if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
     if (Math.abs(lat) < 0.000001 && Math.abs(lon) < 0.000001) return null;
 
-    return { mmsi, lat, lon, sog, cog, heading, updatedAt: Date.now() };
+    const common = { lat, lon, sog, cog, heading, updatedAt: Date.now() };
+    return ownShip ? common : { mmsi, ...common };
   } catch {
     return null;
   }
+}
+
+function normalizeTime(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value < 10_000_000_000 ? value * 1000 : value;
+  if (typeof value === "string") {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric < 10_000_000_000 ? numeric * 1000 : numeric;
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return Date.now();
+}
+
+function normalizeSnapshotTarget(value: AisSnapshotTarget): Vessel | null {
+  const mmsi = Number(value?.mmsi);
+  const lat = Number(value?.lat);
+  const lon = Number(value?.lon);
+  if (!Number.isFinite(mmsi) || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+  const numberOrNull = (input: unknown) => {
+    const number = Number(input);
+    return Number.isFinite(number) ? number : null;
+  };
+  return {
+    mmsi,
+    lat,
+    lon,
+    sog: numberOrNull(value.sog),
+    cog: numberOrNull(value.cog),
+    heading: numberOrNull(value.heading),
+    updatedAt: normalizeTime(value.updatedAt ?? value.lastSeen),
+  };
+}
+
+function velocity(sog: number | null, cog: number | null) {
+  if (sog === null || !Number.isFinite(sog)) return null;
+  if (sog <= 0.2) return { east: 0, north: 0 };
+  if (cog === null || !Number.isFinite(cog)) return null;
+  const radians = cog * Math.PI / 180;
+  return { east: sog * Math.sin(radians), north: sog * Math.cos(radians) };
+}
+
+function cpaTcpa(own: OwnShip | null, target: Vessel) {
+  if (!own || Date.now() - own.updatedAt > OWN_SHIP_MAX_AGE_MS) return null;
+  if (Date.now() - target.updatedAt > LIVE_TARGET_MAX_AGE_MS) return null;
+  const ownVelocity = velocity(own.sog, own.cog);
+  const targetVelocity = velocity(target.sog, target.cog);
+  if (!ownVelocity || !targetVelocity) return null;
+
+  const meanLat = (own.lat + target.lat) * 0.5 * Math.PI / 180;
+  const east = (target.lon - own.lon) * 60 * Math.cos(meanLat);
+  const north = (target.lat - own.lat) * 60;
+  const relativeEast = targetVelocity.east - ownVelocity.east;
+  const relativeNorth = targetVelocity.north - ownVelocity.north;
+  const relativeSpeedSquared = relativeEast ** 2 + relativeNorth ** 2;
+  if (relativeSpeedSquared < 0.0001) return null;
+
+  const tcpaHours = -((east * relativeEast) + (north * relativeNorth)) / relativeSpeedSquared;
+  if (!Number.isFinite(tcpaHours) || tcpaHours < 0) return null;
+  const cpaEast = east + relativeEast * tcpaHours;
+  const cpaNorth = north + relativeNorth * tcpaHours;
+  const cpaNm = Math.hypot(cpaEast, cpaNorth);
+  if (!Number.isFinite(cpaNm)) return null;
+  return { cpaNm, tcpaMinutes: tcpaHours * 60 };
 }
 
 function targetIconHtml(vessel: Vessel) {
@@ -143,17 +229,48 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function targetTooltip(vessel: Vessel, name?: string) {
+function targetTooltip(vessel: Vessel, name: string | undefined, ownShip: OwnShip | null) {
   const sog = vessel.sog === null ? "--" : `${vessel.sog.toFixed(1)} kt`;
   const cog = vessel.cog === null ? "--" : `${vessel.cog.toFixed(1)}°`;
   const title = name ? escapeHtml(name) : `AIS ${vessel.mmsi}`;
   const mmsiLine = name ? `<br>MMSI ${vessel.mmsi}` : "";
-  return `<strong>${title}</strong>${mmsiLine}<br>SOG ${sog}<br>COG ${cog}`;
+  const approach = cpaTcpa(ownShip, vessel);
+  const cpaLine = approach ? `<br>CPA ${approach.cpaNm.toFixed(2)} NM` : `<br>CPA --`;
+  const tcpaLine = approach ? `<br>TCPA ${approach.tcpaMinutes < 60 ? `${Math.round(approach.tcpaMinutes)} min` : `${(approach.tcpaMinutes / 60).toFixed(1)} hr`}` : `<br>TCPA --`;
+  return `<strong>${title}</strong>${mmsiLine}<br>SOG ${sog}<br>COG ${cog}${cpaLine}${tcpaLine}`;
+}
+
+function readNameCache() {
+  const result = new Map<number, CachedName>();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(AIS_NAME_CACHE_KEY) || "{}");
+    const cutoff = Date.now() - NAME_CACHE_MAX_AGE_MS;
+    for (const [key, value] of Object.entries(parsed || {})) {
+      const mmsi = Number(key);
+      const entry = value as CachedName;
+      if (!Number.isFinite(mmsi) || !entry?.name || normalizeTime(entry.updatedAt) < cutoff) continue;
+      result.set(mmsi, { name: String(entry.name), updatedAt: normalizeTime(entry.updatedAt) });
+    }
+  } catch {}
+  return result;
+}
+
+function writeNameCache(cache: Map<number, CachedName>) {
+  try {
+    const object: Record<string, CachedName> = {};
+    const cutoff = Date.now() - NAME_CACHE_MAX_AGE_MS;
+    for (const [mmsi, entry] of cache) {
+      if (entry.updatedAt >= cutoff) object[String(mmsi)] = entry;
+    }
+    window.localStorage.setItem(AIS_NAME_CACHE_KEY, JSON.stringify(object));
+  } catch {}
 }
 
 export function MainMapAisTargets() {
   const targetsRef = useRef<Map<number, Vessel>>(new Map());
   const namesRef = useRef<Map<number, string>>(new Map());
+  const nameCacheRef = useRef<Map<number, CachedName>>(new Map());
+  const ownShipRef = useRef<OwnShip | null>(null);
   const fragmentsRef = useRef<Map<string, FragmentAssembly>>(new Map());
   const markersRef = useRef<Map<number, any>>(new Map());
   const mapRef = useRef<any>(null);
@@ -164,6 +281,10 @@ export function MainMapAisTargets() {
     let socket: WebSocket | null = null;
     let reconnectTimer = 0;
     let ageTimer = 0;
+    let redrawTimer = 0;
+
+    nameCacheRef.current = readNameCache();
+    for (const [mmsi, entry] of nameCacheRef.current) namesRef.current.set(mmsi, entry.name);
 
     const ensureLayer = async () => {
       if (disposed) return;
@@ -186,9 +307,7 @@ export function MainMapAisTargets() {
       }
       layerRef.current = L.layerGroup([], { pane: "navmap-main-ais-targets-v1" } as any).addTo(map);
 
-      for (const vessel of targetsRef.current.values()) {
-        drawTarget(vessel, L);
-      }
+      for (const vessel of targetsRef.current.values()) drawTarget(vessel, L);
     };
 
     const drawTarget = (vessel: Vessel, leaflet?: any) => {
@@ -197,6 +316,7 @@ export function MainMapAisTargets() {
       if (!map || !layer) return;
 
       const update = (L: any) => {
+        if (disposed || !layerRef.current) return;
         const icon = L.divIcon({
           className: "navmap-main-ais-target-icon",
           html: targetIconHtml(vessel),
@@ -204,14 +324,14 @@ export function MainMapAisTargets() {
           iconAnchor: [11, 11],
         });
         const position: [number, number] = [vessel.lat, vessel.lon];
-        const tooltip = targetTooltip(vessel, namesRef.current.get(vessel.mmsi));
+        const tooltip = targetTooltip(vessel, namesRef.current.get(vessel.mmsi), ownShipRef.current);
         let marker = markersRef.current.get(vessel.mmsi);
         if (!marker) {
           marker = L.marker(position, {
             icon,
             pane: "navmap-main-ais-targets-v1",
             interactive: true,
-          }).addTo(layer);
+          }).addTo(layerRef.current);
           marker.bindTooltip(tooltip, {
             direction: "top",
             opacity: 0.96,
@@ -229,11 +349,19 @@ export function MainMapAisTargets() {
       else void import("leaflet").then(update);
     };
 
-    const updateName = (mmsi: number, name: string) => {
+    const scheduleRedraw = () => {
+      window.clearTimeout(redrawTimer);
+      redrawTimer = window.setTimeout(() => {
+        for (const vessel of targetsRef.current.values()) drawTarget(vessel);
+      }, 400);
+    };
+
+    const updateName = (mmsi: number, name: string, updatedAt = Date.now()) => {
       const cleanName = name.replace(/\s+/g, " ").trim();
       if (!cleanName) return;
-      if (namesRef.current.get(mmsi) === cleanName) return;
       namesRef.current.set(mmsi, cleanName);
+      nameCacheRef.current.set(mmsi, { name: cleanName, updatedAt });
+      writeNameCache(nameCacheRef.current);
       const vessel = targetsRef.current.get(mmsi);
       if (vessel) drawTarget(vessel);
     };
@@ -273,8 +401,40 @@ export function MainMapAisTargets() {
       }
     };
 
+    const applySnapshotTarget = (item: AisSnapshotTarget) => {
+      const vessel = normalizeSnapshotTarget(item);
+      if (!vessel || Date.now() - vessel.updatedAt > LIVE_TARGET_MAX_AGE_MS) return;
+      targetsRef.current.set(vessel.mmsi, vessel);
+      if (typeof item.name === "string" && item.name.trim()) updateName(vessel.mmsi, item.name, vessel.updatedAt);
+      drawTarget(vessel);
+    };
+
+    const applySnapshot = (message: any) => {
+      const targets = Array.isArray(message?.targets) ? message.targets : Array.isArray(message?.vessels) ? message.vessels : [];
+      for (const item of targets) applySnapshotTarget(item);
+
+      const identities = Array.isArray(message?.identities) ? message.identities : [];
+      for (const identity of identities) {
+        const mmsi = Number(identity?.mmsi);
+        if (Number.isFinite(mmsi) && typeof identity?.name === "string") updateName(mmsi, identity.name, normalizeTime(identity.updatedAt ?? identity.lastSeen));
+      }
+
+      const own = message?.ownShip || message?.ownship;
+      if (own && Number.isFinite(Number(own.lat)) && Number.isFinite(Number(own.lon))) {
+        ownShipRef.current = {
+          lat: Number(own.lat),
+          lon: Number(own.lon),
+          sog: Number.isFinite(Number(own.sog)) ? Number(own.sog) : null,
+          cog: Number.isFinite(Number(own.cog)) ? Number(own.cog) : null,
+          heading: Number.isFinite(Number(own.heading)) ? Number(own.heading) : null,
+          updatedAt: normalizeTime(own.updatedAt ?? own.lastSeen),
+        };
+        scheduleRedraw();
+      }
+    };
+
     const removeStaleTargets = () => {
-      const cutoff = Date.now() - 10 * 60 * 1000;
+      const cutoff = Date.now() - LIVE_TARGET_MAX_AGE_MS;
       for (const [mmsi, vessel] of targetsRef.current) {
         if (vessel.updatedAt >= cutoff) continue;
         targetsRef.current.delete(mmsi);
@@ -299,18 +459,57 @@ export function MainMapAisTargets() {
       if (disposed) return;
       try {
         socket = new WebSocket(getAisWebSocketUrl());
+        socket.onopen = () => {
+          try { socket?.send(JSON.stringify({ type: "ais-target-snapshot-request" })); } catch {}
+        };
         socket.onmessage = (event) => {
           let raw = String(event.data || "");
-          try {
-            const json = JSON.parse(raw);
-            raw = typeof json === "string" ? json : json?.sentence || json?.nmea || json?.raw || json?.line || raw;
-          } catch {}
+          let json: any = null;
+          try { json = JSON.parse(raw); } catch {}
 
+          if (json?.type === "ais-target-snapshot") {
+            applySnapshot(json);
+            return;
+          }
+          if (json?.type === "ais-target-update" || json?.type === "ais-target") {
+            applySnapshotTarget(json.target || json.vessel || json);
+            return;
+          }
+          if (json?.type === "ais-identity-update") {
+            const mmsi = Number(json.mmsi);
+            if (Number.isFinite(mmsi) && typeof json.name === "string") updateName(mmsi, json.name, normalizeTime(json.updatedAt ?? json.lastSeen));
+            return;
+          }
+          if (json?.type === "ownship-state" || json?.type === "own-ship-state") {
+            const own = json.ownShip || json.ownship || json;
+            if (Number.isFinite(Number(own.lat)) && Number.isFinite(Number(own.lon))) {
+              ownShipRef.current = {
+                lat: Number(own.lat),
+                lon: Number(own.lon),
+                sog: Number.isFinite(Number(own.sog)) ? Number(own.sog) : null,
+                cog: Number.isFinite(Number(own.cog)) ? Number(own.cog) : null,
+                heading: Number.isFinite(Number(own.heading)) ? Number(own.heading) : null,
+                updatedAt: normalizeTime(own.updatedAt ?? own.lastSeen),
+              };
+              scheduleRedraw();
+            }
+            return;
+          }
+
+          raw = typeof json === "string" ? json : json?.sentence || json?.nmea || json?.raw || json?.line || raw;
           for (const sourceLine of raw.split(/\r?\n/)) {
             const line = sourceLine.trim();
             if (!line) continue;
+
+            const ownShip = decodePosition(line, true) as OwnShip | null;
+            if (ownShip) {
+              ownShipRef.current = ownShip;
+              scheduleRedraw();
+              continue;
+            }
+
             processStaticData(line);
-            const vessel = decodeAisTarget(line);
+            const vessel = decodePosition(line, false) as Vessel | null;
             if (!vessel) continue;
             targetsRef.current.set(vessel.mmsi, vessel);
             drawTarget(vessel);
@@ -331,6 +530,7 @@ export function MainMapAisTargets() {
       disposed = true;
       window.removeEventListener("navdash-leaflet-map-ready", onMapReady);
       window.clearTimeout(reconnectTimer);
+      window.clearTimeout(redrawTimer);
       window.clearInterval(ageTimer);
       if (socket) {
         socket.onclose = null;
@@ -344,6 +544,8 @@ export function MainMapAisTargets() {
       markersRef.current.clear();
       targetsRef.current.clear();
       namesRef.current.clear();
+      nameCacheRef.current.clear();
+      ownShipRef.current = null;
       fragmentsRef.current.clear();
     };
   }, []);
