@@ -83,6 +83,17 @@ export function CelestialConsoleSkin() {
         html[data-navdash-theme="day"] .bc-celestial-console #celestial-sunmoon-banner-slot [class*="text-"] {
           color:#000000 !important;
         }
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#708496]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#8294a5]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#aebdca]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#c7d2dc]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#dbe5ee]"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-slate"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-gray"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-zinc"],
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="text-neutral"] {
+          color:#17212b !important;
+        }
         html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#e7c95c]"],
         html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#f3dfa0]"],
         html[data-navdash-theme="day"] .bc-celestial-console [class*="text-[#f1d56b]"],
@@ -91,6 +102,9 @@ export function CelestialConsoleSkin() {
         html[data-navdash-theme="day"] .bc-celestial-console [class*="text-wardGold"] {
           color:#17212b !important;
         }
+        html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#708496"],
+        html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#8294a5"],
+        html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#aebdca"],
         html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#e7c95c"],
         html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#f3dfa0"],
         html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#f1d56b"] {
