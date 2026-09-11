@@ -178,6 +178,35 @@ html[data-navdash-theme="day"] #v12-map > div[style*="z-index:760"] > div [style
   color: var(--nd-muted) !important;
 }
 
+/* Day-mode weather details: readable notices and native light sliders. */
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > div [style*="#f1d56b"],
+html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > div [style*="#f1d56b"] {
+  color: #8a5a00 !important;
+}
+
+html[data-navdash-theme="day"] #v12-map input[type="range"] {
+  background: transparent !important;
+  color-scheme: light;
+}
+
+html[data-navdash-theme="day"] #v12-map input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: #d7dee5 !important;
+  border: 1px solid rgba(15,23,42,.18);
+  border-radius: 999px;
+}
+
+html[data-navdash-theme="day"] #v12-map input[type="range"]::-webkit-slider-thumb {
+  margin-top: -5px;
+}
+
+html[data-navdash-theme="day"] #v12-map input[type="range"]::-moz-range-track {
+  height: 4px;
+  background: #d7dee5 !important;
+  border: 1px solid rgba(15,23,42,.18);
+  border-radius: 999px;
+}
+
 @media (max-width: 700px) {
   .crew-view {
     padding: 8px !important;
