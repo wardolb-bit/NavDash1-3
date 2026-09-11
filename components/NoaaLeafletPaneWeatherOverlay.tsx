@@ -98,7 +98,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const [forecast, setForecast] = useState<NoaaForecast | null>(null);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [visible, setVisible] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(true);
+  const [panelOpen, setPanelOpen] = useState(false);
   const [showWind, setShowWind] = useState(true);
   const [showSeas, setShowSeas] = useState(true);
   const [loading, setLoading] = useState(false);
