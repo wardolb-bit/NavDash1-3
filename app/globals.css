@@ -143,6 +143,20 @@ main.min-h-screen[class*="circle_at_12"] .bg-red-500 { background-color: rgb(239
   letter-spacing: .08em;
 }
 
+/* The first tool button is the open/close toggle; label it by its actual action when expanded. */
+#v12-map > div[style*="z-index: 760"][data-map-tools-open="true"] > div:first-child button:first-child,
+#v12-map > div[style*="z-index:760"][data-map-tools-open="true"] > div:first-child button:first-child {
+  font-size: 0 !important;
+}
+
+#v12-map > div[style*="z-index: 760"][data-map-tools-open="true"] > div:first-child button:first-child::after,
+#v12-map > div[style*="z-index:760"][data-map-tools-open="true"] > div:first-child button:first-child::after {
+  content: "COLLAPSE";
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+
 /* Range/bearing label placement is controlled by the map behavior script. */
 .navmap-measure-label { margin: 0 !important; }
 
