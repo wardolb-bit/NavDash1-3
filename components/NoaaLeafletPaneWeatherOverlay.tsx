@@ -320,6 +320,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
                 <input type="checkbox" checked={visible} disabled={!forecast || !frame?.points?.length} onChange={(e) => setVisible(e.target.checked)} /> DISPLAY
               </label>
             </div>
+            {route.length < 2 ? <div style={{ marginTop: 4, textAlign: "right", fontSize: 9, fontWeight: 800, letterSpacing: ".05em", color: "#f1d56b" }}>.RTZ MUST BE LOADED</div> : null}
             <div style={{ marginTop: 8, display: "flex", gap: 12, fontSize: 10 }}>
               <label><input type="checkbox" checked={showWind} onChange={(e) => setShowWind(e.target.checked)} /> WIND</label>
               <label><input type="checkbox" checked={showSeas} onChange={(e) => setShowSeas(e.target.checked)} /> SEAS</label>
