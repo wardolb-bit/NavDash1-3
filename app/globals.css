@@ -66,9 +66,9 @@ body::before { content: none !important; display: none !important; }
 }
 
 .navdash-v12-day #bc-v2-instruments .bc2-pos strong { color: #006f78 !important; }
-.navdash-v12-day #bc-v2-instruments .bc2-rail-title span,
+.navdash-v12-day #bc-v2-instruments .bc2-rail-title span { color: #52606d !important; }
 .navdash-v12-day #bc-v2-instruments .bc2-rail-title b,
-.navdash-v12-day #bc-v2-instruments .bc2-leg strong { color: #7a5b00 !important; }
+.navdash-v12-day #bc-v2-instruments .bc2-leg strong { color: #1f3a56 !important; }
 
 .navdash-v12-day #bc-v2-instruments ~ *,
 .navdash-v12-day #bc-v2-instruments ~ * *,
