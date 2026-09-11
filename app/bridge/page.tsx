@@ -1,6 +1,7 @@
 import NavDashConsole from "../NavDashConsole";
 import { MainMapAisTargets } from "../../components/MainMapAisTargets";
 import { MobileBridgeRedirect } from "../../components/MobileBridgeRedirect";
+import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";
 
 export default function BridgePage() {
   return (
@@ -8,6 +9,7 @@ export default function BridgePage() {
       <MobileBridgeRedirect />
       <NavDashConsole />
       <MainMapAisTargets />
+      <AisMapReadyRetry />
     </>
   );
 }
