@@ -161,7 +161,7 @@ export default function TidesPage() {
           </div>
         </div>
         <div className="no-print flex flex-wrap gap-1.5">
-          <Link href="/navdash" className={`inline-flex h-8 items-center border px-3 text-[10px] font-black uppercase tracking-[.08em] ${control}`}>Main</Link>
+          <Link href="/bridge" className={`inline-flex h-8 items-center border px-3 text-[10px] font-black uppercase tracking-[.08em] ${control}`}>Main</Link>
           <button onClick={toggleTheme} className={`h-8 border px-3 text-[10px] font-black uppercase tracking-[.08em] ${control}`}>{dayMode ? "Bridge Night" : "Day Mode"}</button>
           <button onClick={() => window.print()} className="h-8 border border-[#c9a227]/60 bg-[#c9a227] px-3 text-[10px] font-black uppercase tracking-[.08em] text-[#111827]">Print</button>
         </div>
