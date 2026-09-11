@@ -154,6 +154,14 @@ html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > button {
   box-shadow: none !important;
 }
 
+html[data-navdash-theme="bridge-night"] #v12-map > div[style*="z-index: 760"]:not([data-map-tools-open="true"]) > div:first-child button:first-child,
+html[data-navdash-theme="bridge-night"] #v12-map > div[style*="z-index:760"]:not([data-map-tools-open="true"]) > div:first-child button:first-child {
+  background: var(--nd-control-bg) !important;
+  background-color: var(--nd-control-bg) !important;
+  color: var(--nd-control-text) !important;
+  border-color: rgba(241,213,107,.45) !important;
+}
+
 html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 770"] > div strong,
 html[data-navdash-theme="day"] #v12-map > div[style*="z-index:770"] > div strong,
 html[data-navdash-theme="day"] #v12-map > div[style*="z-index: 760"] > div:nth-child(3) span:first-child,
