@@ -56,13 +56,6 @@ export function BridgeConsoleRouteGate() {
           .leaflet-navmap-main-ami-v1-pane .leaflet-tooltip-top {
             margin-top: -40px !important;
           }
-          .navdash-v12-day .bc2-rail-title > span:first-child {
-            color: #52606d !important;
-          }
-          .navdash-v12-day #bc2-route,
-          .navdash-v12-day #bc2-leg {
-            color: #1f3a56 !important;
-          }
         `}</style>
       </>
     );
