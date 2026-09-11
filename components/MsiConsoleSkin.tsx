@@ -37,6 +37,7 @@ export function MsiConsoleSkin() {
         html[data-navdash-theme="day"] .bc-msi-console { background:#eef2f5 !important; color:#17212b !important; }
         html[data-navdash-theme="day"] .bc-msi-console section,
         html[data-navdash-theme="day"] .bc-msi-console article { background:#ffffff !important; border-color:rgba(15,23,42,.18) !important; color:#17212b !important; }
+        html[data-navdash-theme="day"] .bc-msi-console section:first-child button { color:#000000 !important; border-color:#000000 !important; }
         html[data-navdash-theme="day"] .bc-msi-console pre { background:#f7f9fb !important; color:#17212b !important; border-color:rgba(15,23,42,.18) !important; }
         html[data-navdash-theme="day"] .bc-msi-console input,
         html[data-navdash-theme="day"] .bc-msi-console select { background:#ffffff !important; color:#17212b !important; border-color:rgba(15,23,42,.22) !important; }
