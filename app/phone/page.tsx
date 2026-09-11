@@ -300,7 +300,7 @@ export default function CrewViewPage() {
           </div>
         </div>
 
-        <footer className={`mt-3 border p-3 text-center text-[10px] font-bold uppercase tracking-[.1em] ${panel} ${muted}`}>Crew display only · Navigation and voyage decisions remain with the bridge team</footer>
+        <footer className={`mt-3 border p-3 text-center text-[10px] font-bold uppercase tracking-[.1em] ${panel} ${muted}`}></footer>
       </div>
     </main>
   );
