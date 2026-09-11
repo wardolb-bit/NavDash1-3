@@ -8,7 +8,7 @@
   display: flex !important;
   flex: 1 1 auto !important;
   flex-wrap: nowrap !important;
-  justify-content: flex-start !important;
+  justify-content: space-between !important;
   align-items: center !important;
   gap: 5px !important;
   overflow-x: auto !important;
@@ -41,6 +41,7 @@
   line-height: 1 !important;
   white-space: nowrap !important;
   box-shadow: none !important;
+  text-transform: uppercase !important;
 }
 
 .navdash-v12-day > header > :first-child > :last-child > button,
@@ -76,12 +77,4 @@
   background: #ffffff !important;
   background-color: #ffffff !important;
   border-color: rgba(15,23,42,.22) !important;
-}
-
-.navdash-v12-day #bc2-status-ais {
-  color: #067647 !important;
-}
-
-.navdash-v12-day #bc2-status-route {
-  color: #067647 !important;
 }
