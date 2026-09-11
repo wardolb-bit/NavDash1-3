@@ -1,1 +1,1 @@
-export { default } from "../NavDashConsole";
+export { default } from "../bridge/page";
