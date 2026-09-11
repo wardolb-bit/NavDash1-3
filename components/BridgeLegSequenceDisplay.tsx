@@ -63,7 +63,7 @@ export function BridgeLegSequenceDisplay() {
           color: #aebdca;
         }
         .navdash-v12-day #bc2-leg[data-sequence-label]::after {
-          color: #7a5b00;
+          color: #1f3a56;
         }
         .navdash-v12-day #bc2-top-leg[data-sequence-label]::after {
           color: #334155;
