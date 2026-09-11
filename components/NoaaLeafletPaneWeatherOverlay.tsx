@@ -107,6 +107,24 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const layerRef = useRef<any>(null);
 
   useEffect(() => {
+    if (!host) return;
+    const syncAmiRouteWxBox = () => {
+      const label = Array.from(host.querySelectorAll("span")).find((element) => element.textContent?.trim() === "AMI ROUTE WX");
+      const box = label?.parentElement?.parentElement as HTMLElement | null;
+      if (box) box.style.display = panelOpen ? "" : "none";
+    };
+    syncAmiRouteWxBox();
+    const observer = new MutationObserver(syncAmiRouteWxBox);
+    observer.observe(host, { childList: true, subtree: true });
+    return () => {
+      observer.disconnect();
+      const label = Array.from(host.querySelectorAll("span")).find((element) => element.textContent?.trim() === "AMI ROUTE WX");
+      const box = label?.parentElement?.parentElement as HTMLElement | null;
+      if (box) box.style.display = "";
+    };
+  }, [host, panelOpen]);
+
+  useEffect(() => {
     let cancelled = false;
     let timer = 0;
     const find = () => {
