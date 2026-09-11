@@ -41,7 +41,7 @@ export function NavDashMainLinkGuard() {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (pathname === BRIDGE_MAIN_ROUTE || pathname === "/navdash") {
+    if (pathname === BRIDGE_MAIN_ROUTE || pathname === "/navdash" || pathname === "/phone") {
       document.querySelector<HTMLAnchorElement>("[data-navdash-main-fallback]")?.remove();
       return;
     }
