@@ -13,6 +13,7 @@ import { NavMapZoomLimit } from "./NavMapZoomLimit";
 import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
 import { MsiConsoleSkin } from "./MsiConsoleSkin";
+import { OfficialWeatherConsoleSkin } from "./OfficialWeatherConsoleSkin";
 import { NavDashMainLinkGuard } from "./NavDashMainLinkGuard";
 import { SharedRouteSync } from "./SharedRouteSync";
 
@@ -34,6 +35,13 @@ export function BridgeConsoleRouteGate() {
       <>
         <NavDashMainLinkGuard />
         <MsiConsoleSkin />
+      </>
+    );
+  } else if (pathname === "/official-weather") {
+    routeUi = (
+      <>
+        <NavDashMainLinkGuard />
+        <OfficialWeatherConsoleSkin />
       </>
     );
   } else if (isMainNavDashRoute) {
