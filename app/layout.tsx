@@ -134,7 +134,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 button.type = "button";
                 button.textContent = "MAIN";
                 button.className = "border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] border-white/15 bg-[#101820] text-[#dbe5ee] hover:bg-[#182631]";
-                button.addEventListener("click", () => { window.location.href = "/"; });
+                button.addEventListener("click", () => { window.location.href = "/bridge"; });
                 buttonRow.prepend(button);
               };
 
