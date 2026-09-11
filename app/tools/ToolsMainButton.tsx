@@ -36,7 +36,7 @@ export default function ToolsMainButton() {
   if (!target) return null;
 
   return createPortal(
-    <Link href="/navdash" className="tools-main-button border px-4 py-3 text-xl font-bold">
+    <Link href="/bridge" className="tools-main-button border px-4 py-3 text-xl font-bold">
       Main
     </Link>,
     target,
