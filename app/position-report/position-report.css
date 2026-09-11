@@ -129,6 +129,58 @@ html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen > header [c
   color:#000000 !important;
 }
 
+/* Header toolbar polish: match the rest of NavDash's compact all-caps controls. */
+main > div.relative.z-10.min-h-screen > header button,
+.position-report-nav-console {
+  text-transform:uppercase !important;
+}
+
+/* Replace the old live-position badge presentation with the standard NavDash GPS status box. */
+main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"] {
+  display:inline-flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  gap:6px !important;
+  background:#050a0f !important;
+  border-color:rgba(148,163,184,.18) !important;
+  color:transparent !important;
+  font-size:0 !important;
+}
+main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"]::before {
+  content:"";
+  display:inline-block;
+  width:6px;
+  height:6px;
+  flex:none;
+  border-radius:999px;
+  background:#f59e0b;
+}
+main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"]::after {
+  content:"GPS CHECK";
+  color:#aebdca;
+  font:900 9px/1 system-ui, sans-serif;
+  letter-spacing:.08em;
+}
+main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"][class*="bg-emerald"]::before {
+  background:#34d399;
+}
+main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"][class*="bg-emerald"]::after {
+  content:"GPS LIVE";
+}
+
+html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"] {
+  background:#ffffff !important;
+  border-color:#cbd5e1 !important;
+}
+html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen > header [class*="w-[190px]"]::after {
+  color:#17212b;
+}
+
+/* Page title must remain black in Day mode despite the night console override above. */
+html[data-navdash-theme="day"] main > div.relative.z-10.min-h-screen > header h1 {
+  color:#000000 !important;
+}
+
 @media (max-width:1000px) {
   main > div.relative.z-10.min-h-screen > .grid.w-full.grid-cols-2 { grid-template-columns:1fr !important; }
 }
