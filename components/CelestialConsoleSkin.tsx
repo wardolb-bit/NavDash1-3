@@ -102,6 +102,16 @@ export function CelestialConsoleSkin() {
         html[data-navdash-theme="day"] .bc-celestial-console [class*="text-wardGold"] {
           color:#17212b !important;
         }
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="bg-[#050a0f]"] {
+          background:#ffffff !important;
+          background-color:#ffffff !important;
+          color:#17212b !important;
+          border-color:rgba(15,23,42,.28) !important;
+        }
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="bg-[#050a0f]"] b,
+        html[data-navdash-theme="day"] .bc-celestial-console [class*="bg-[#050a0f]"] span {
+          color:#17212b !important;
+        }
         html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#708496"],
         html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#8294a5"],
         html[data-navdash-theme="day"] .bc-celestial-console svg text[fill="#aebdca"],
