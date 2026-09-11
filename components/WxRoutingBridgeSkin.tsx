@@ -253,7 +253,7 @@ export function WxRoutingBridgeSkin() {
         topbar.innerHTML = `
           <div class="wxr-brand"><span class="wxr-logo">N</span><span><b>NAVDASH</b><small>M/V MB480 · WEATHER ROUTING</small></span></div>
           <div class="wxr-center"><span class="wxr-live"><i></i>WX ROUTING</span></div>
-          <div class="wxr-actions"><a href="/">NAV CONSOLE</a></div>
+          <div class="wxr-actions"><a href="/bridge">MAIN</a></div>
         `;
         shell.insertBefore(topbar, header);
       }
@@ -275,7 +275,7 @@ export function WxRoutingBridgeSkin() {
       const dot = topbar.querySelector<HTMLElement>(".wxr-live i");
       if (dot) dot.style.cssText = "display:inline-block;width:6px;height:6px;border-radius:50%;background:#22d3ee;margin-right:6px;box-shadow:0 0 8px rgba(34,211,238,.55)";
       const action = topbar.querySelector<HTMLAnchorElement>(".wxr-actions a");
-      if (action) action.style.cssText = `display:inline-flex;height:28px;min-width:100px;align-items:center;justify-content:center;border:1px solid rgba(201,162,39,.55);background:${dayMode ? "#ffffff" : "#071019"};color:${dayMode ? "#7c6214" : "#e7c95c"};text-decoration:none;font:900 8px system-ui;letter-spacing:.10em`;
+      if (action) action.style.cssText = `display:inline-flex;height:28px;min-width:100px;align-items:center;justify-content:center;border:1px solid rgba(201,162,39,.55);background:${dayMode ? "#ffffff" : "#071019"};color:${dayMode ? "#000000" : "#e7c95c"};text-decoration:none;font:900 8px system-ui;letter-spacing:.10em;text-transform:uppercase`;
       const actions = topbar.querySelector<HTMLElement>(".wxr-actions");
       if (actions) actions.style.cssText = "display:flex;justify-content:flex-end";
 
@@ -294,13 +294,14 @@ export function WxRoutingBridgeSkin() {
       const kicker = header.querySelector<HTMLElement>("div > div");
       if (kicker) kicker.style.cssText = "color:#c9a227;font-size:7px;font-weight:900;letter-spacing:.15em;text-transform:uppercase";
 
-      header.querySelectorAll<HTMLElement>("button,label").forEach((el) => {
+      header.querySelectorAll<HTMLElement>("button,label,a").forEach((el) => {
         important(el, "border-radius", "3px");
         important(el, "height", "28px");
         important(el, "padding", "0 8px");
         important(el, "font-size", "8px");
         important(el, "font-weight", "900");
         important(el, "letter-spacing", ".05em");
+        important(el, "text-transform", "uppercase");
         important(el, "box-shadow", "none");
       });
 
