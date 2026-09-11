@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const SUPABASE_URL = "https://jvisswvllnvaicdroljr.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_aoiZwFyorDFcf_LyNCfhqA_acPun8X2";
+const SUPABASE_URL = "https://uujlsvgromzapubtinfg.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_f9vBEVE5oMGl1GeLTVUFVg_7a48xwEe";
 const TABLE_URL = `${SUPABASE_URL}/rest/v1/navdash_route_state`;
 
 type Waypoint = {
