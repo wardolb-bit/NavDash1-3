@@ -384,7 +384,7 @@ export default function NavDashConsole() {
 
           <aside className="min-w-[330px] max-[900px]:min-w-0">
             <section id="bc-v2-instruments" className={`flex min-h-[650px] h-full flex-col border ${panel}`}>
-              <div className="bc2-rail-title border-b border-white/10 p-3.5"><span className="block text-[8px] font-black tracking-[.16em] text-wardGold">VOYAGE</span><b id="bc2-route" className="mt-2 block truncate text-lg font-black text-wardGold">{routeName}</b><small id="bc2-dest" className="mt-1.5 block truncate text-[11px] text-slate-400">{destination?.name || "--"}</small></div>
+              <div className="bc2-rail-title border-b border-white/10 p-3.5"><span className={`block text-[8px] font-black tracking-[.16em] ${day ? "text-[#52606d]" : "text-wardGold"}`}>VOYAGE</span><b id="bc2-route" className={`mt-2 block truncate text-lg font-black ${day ? "text-[#1f3a56]" : "text-wardGold"}`}>{routeName}</b><small id="bc2-dest" className="mt-1.5 block truncate text-[11px] text-slate-400">{destination?.name || "--"}</small></div>
               <div className="bc2-pos border-b border-white/10 p-3.5"><label className="block text-[8px] font-black tracking-[.16em] text-slate-500">OWN SHIP</label><strong id="bc2-lat" className="mt-1 block whitespace-nowrap text-[23px] font-black text-cyan-400">{ownShip ? `LAT ${ddm(ownShip.lat, true)}` : "--"}</strong><strong id="bc2-lon" className="block whitespace-nowrap text-[23px] font-black text-cyan-400">{ownShip ? `LON ${ddm(ownShip.lon, false)}` : "--"}</strong></div>
               <div className="bc2-big-grid grid grid-cols-2 border-b border-white/10">
                 <div className="border-b border-r border-white/10 p-3"><label>COG</label><strong id="bc2-cog">{ownShip ? `${ownShip.cog.toFixed(1)}°` : "--"}</strong></div>
@@ -392,7 +392,7 @@ export default function NavDashConsole() {
                 <div className="border-r border-white/10 p-3"><label>HDG</label><strong id="bc2-hdg">{ownShip?.heading == null ? "--" : `${ownShip.heading.toFixed(0)}°`}</strong></div>
                 <div className="p-3"><label>XTE</label><strong id="bc2-xte">{metrics ? `${metrics.xte.toFixed(2)} NM ${metrics.side}` : "--"}</strong></div>
               </div>
-              <div className="bc2-leg border-b border-white/10 p-3.5"><label>ACTIVE LEG</label><strong id="bc2-leg" className="block text-2xl font-black text-wardGold">{legText}</strong><small id="bc2-legname" className="hidden">{start && next ? `${start.name} → ${next.name}` : "--"}</small></div>
+              <div className="bc2-leg border-b border-white/10 p-3.5"><label>ACTIVE LEG</label><strong id="bc2-leg" className={`block text-2xl font-black ${day ? "text-[#1f3a56]" : "text-wardGold"}`}>{legText}</strong><small id="bc2-legname" className="hidden">{start && next ? `${start.name} → ${next.name}` : "--"}</small></div>
               <div className="bc2-small-grid grid grid-cols-2 border-b border-white/10">
                 <div className="border-b border-r border-white/10 p-3"><label>DTG</label><strong id="bc2-dtg">{dtg === null ? "--" : `${dtg.toFixed(0)} NM`}</strong></div>
                 <div className="border-b border-white/10 p-3"><label>ETA</label><strong id="bc2-eta">{etaText(etaHours, destination)}</strong></div>
