@@ -92,21 +92,54 @@ async function activeWeatherAlerts(samples: ReturnType<typeof sampleRoute>): Pro
   return findings.slice(0, 20);
 }
 
-async function pointForecast(point: Waypoint, label: string): Promise<Finding | null> {
+function forecastPeriodsForTime(periods: any[], when: Date) {
+  const target = when.getTime();
+  const containingIndex = periods.findIndex((p: any) => {
+    const start = Date.parse(String(p?.startTime || ""));
+    const end = Date.parse(String(p?.endTime || ""));
+    return Number.isFinite(start) && Number.isFinite(end) && target >= start && target < end;
+  });
+
+  if (containingIndex >= 0) return periods.slice(containingIndex, containingIndex + 2);
+
+  const firstFutureIndex = periods.findIndex((p: any) => {
+    const start = Date.parse(String(p?.startTime || ""));
+    return Number.isFinite(start) && start >= target;
+  });
+  if (firstFutureIndex >= 0) return periods.slice(firstFutureIndex, firstFutureIndex + 2);
+
+  return [];
+}
+
+async function pointForecast(point: Waypoint, label: string, when: Date): Promise<Finding | null> {
   try {
     const pointUrl = `https://api.weather.gov/points/${point.lat.toFixed(4)},${point.lon.toFixed(4)}`;
     const meta = await jsonFetch(pointUrl, { headers: NWS_HEADERS });
     const forecastUrl = meta?.properties?.forecast;
     if (!forecastUrl) return null;
     const forecast = await jsonFetch(forecastUrl, { headers: NWS_HEADERS });
-    const periods = Array.isArray(forecast?.properties?.periods) ? forecast.properties.periods.slice(0, 2) : [];
+    const allPeriods = Array.isArray(forecast?.properties?.periods) ? forecast.properties.periods : [];
+    const periods = forecastPeriodsForTime(allPeriods, when);
     if (!periods.length) return null;
-    const text = periods.map((p: any) => `${p.name}: ${p.detailedForecast}`).join(" ").replace(/\s+/g, " ").trim();
+
+    const text = periods
+      .map((p: any) => `${p.name}: ${p.detailedForecast}`)
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const validLabel = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(when);
+
     return {
       id: `forecast-${label.toLowerCase()}`,
       category: "WEATHER",
       severity: "INFO",
-      title: `${label} forecast`,
+      title: `${label} forecast for ${validLabel}`,
       detail: text,
       sourceName: "NOAA / National Weather Service",
       sourceUrl: forecastUrl,
@@ -179,8 +212,8 @@ export async function POST(request: NextRequest) {
 
     const [alerts, depForecast, arrForecast, stations] = await Promise.all([
       activeWeatherAlerts(samples),
-      pointForecast(route[0], "Departure"),
-      pointForecast(route[route.length - 1], "Arrival"),
+      pointForecast(route[0], "Departure", departure),
+      pointForecast(route[route.length - 1], "Arrival", arrival),
       tideStations().catch(() => []),
     ]);
 
