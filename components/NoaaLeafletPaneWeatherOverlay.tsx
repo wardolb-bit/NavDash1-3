@@ -26,8 +26,13 @@ type NoaaForecast = {
   frames: NoaaFrame[];
   note?: string | null;
 };
+type AmiOverlay = {
+  sourceName?: string;
+  forecastPoints?: Array<{ validAt?: string }>;
+};
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
+const AMI_OVERLAY_STORAGE_KEY = "navdash-ami-route-forecast-v1";
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_PANE = "navmap-main-noaa-wx-v1";
 const NOAA_TOOLTIP_PANE = "navmap-main-noaa-wx-tooltip-v1";
@@ -49,6 +54,17 @@ function readRoute() {
     if (raw) return normalizeRoute(JSON.parse(raw));
   } catch {}
   return [] as Waypoint[];
+}
+
+function readAmiOverlay(): AmiOverlay | null {
+  try {
+    const raw = window.localStorage.getItem(AMI_OVERLAY_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.forecastPoints) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function longitudeNearReference(lon: number, referenceLon: number) {
@@ -103,26 +119,52 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const [showSeas, setShowSeas] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [amiOverlay, setAmiOverlay] = useState<AmiOverlay | null>(null);
+  const [amiVisible, setAmiVisible] = useState(true);
+  const [amiSelectedIndex, setAmiSelectedIndex] = useState(0);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
 
   useEffect(() => {
     if (!host) return;
-    const syncAmiRouteWxBox = () => {
-      const label = Array.from(host.querySelectorAll("span")).find((element) => element.textContent?.trim() === "AMI ROUTE WX");
-      const box = label?.parentElement?.parentElement as HTMLElement | null;
-      if (box) box.style.display = panelOpen ? "" : "none";
+
+    const syncAmiControls = () => {
+      setAmiOverlay(readAmiOverlay());
+
+      const amiLabel = Array.from(host.querySelectorAll("label")).find((element) => element.textContent?.trim() === "AMI WX") as HTMLLabelElement | undefined;
+      if (amiLabel) {
+        amiLabel.style.display = "none";
+        const checkbox = amiLabel.querySelector<HTMLInputElement>('input[type="checkbox"]');
+        if (checkbox) setAmiVisible(checkbox.checked);
+      }
+
+      const amiBoxLabel = Array.from(host.querySelectorAll("span")).find((element) => element.textContent?.trim() === "AMI ROUTE WX");
+      const amiBox = amiBoxLabel?.parentElement?.parentElement as HTMLElement | null;
+      if (amiBox) amiBox.style.display = "none";
+
+      const slider = host.querySelector<HTMLInputElement>('input[aria-label="AMI forecast time"]');
+      if (slider) setAmiSelectedIndex(Number(slider.value) || 0);
     };
-    syncAmiRouteWxBox();
-    const observer = new MutationObserver(syncAmiRouteWxBox);
+
+    syncAmiControls();
+    const observer = new MutationObserver(syncAmiControls);
     observer.observe(host, { childList: true, subtree: true });
+    host.addEventListener("change", syncAmiControls, true);
+    window.addEventListener("storage", syncAmiControls);
+    window.addEventListener("navdash-ami-overlay-updated", syncAmiControls);
+
     return () => {
       observer.disconnect();
-      const label = Array.from(host.querySelectorAll("span")).find((element) => element.textContent?.trim() === "AMI ROUTE WX");
-      const box = label?.parentElement?.parentElement as HTMLElement | null;
-      if (box) box.style.display = "";
+      host.removeEventListener("change", syncAmiControls, true);
+      window.removeEventListener("storage", syncAmiControls);
+      window.removeEventListener("navdash-ami-overlay-updated", syncAmiControls);
+      const amiLabel = Array.from(host.querySelectorAll("label")).find((element) => element.textContent?.trim() === "AMI WX") as HTMLLabelElement | undefined;
+      if (amiLabel) amiLabel.style.display = "";
+      const amiBoxLabel = Array.from(host.querySelectorAll("span")).find((element) => element.textContent?.trim() === "AMI ROUTE WX");
+      const amiBox = amiBoxLabel?.parentElement?.parentElement as HTMLElement | null;
+      if (amiBox) amiBox.style.display = "";
     };
-  }, [host, panelOpen]);
+  }, [host]);
 
   useEffect(() => {
     let cancelled = false;
@@ -186,6 +228,28 @@ export function NoaaLeafletPaneWeatherOverlay() {
   }, [routeSignature]);
 
   const frame = forecast?.frames?.[Math.min(selectedIndex, Math.max(0, (forecast?.frames?.length || 1) - 1))] || null;
+  const amiPoints = amiOverlay?.forecastPoints || [];
+  const amiPoint = amiPoints[Math.min(amiSelectedIndex, Math.max(0, amiPoints.length - 1))] || null;
+
+  function setAmiDisplay(next: boolean) {
+    setAmiVisible(next);
+    if (!host) return;
+    const amiLabel = Array.from(host.querySelectorAll("label")).find((element) => element.textContent?.trim() === "AMI WX") as HTMLLabelElement | undefined;
+    const checkbox = amiLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (checkbox && checkbox.checked !== next) checkbox.click();
+  }
+
+  function setAmiForecastIndex(next: number) {
+    setAmiSelectedIndex(next);
+    if (!host) return;
+    const slider = host.querySelector<HTMLInputElement>('input[aria-label="AMI forecast time"]');
+    if (!slider) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (setter) setter.call(slider, String(next));
+    else slider.value = String(next);
+    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    slider.dispatchEvent(new Event("change", { bubbles: true }));
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -270,7 +334,24 @@ export function NoaaLeafletPaneWeatherOverlay() {
                 {forecast.note ? <div style={{ marginTop: 4, fontSize: 9, color: "#f1d56b" }}>{forecast.note}</div> : null}
               </>
             ) : loading ? <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Loading NOAA route forecast…</div> : error ? <div style={{ marginTop: 9, fontSize: 10, color: "#fca5a5" }}>{error}</div> : <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Load a route to enable NOAA weather.</div>}
-            <div style={{ marginTop: 8, paddingTop: 7, borderTop: "1px solid rgba(148,163,184,.16)", fontSize: 9, color: "#8294a5" }}>NOAA weather blocks are native Leaflet markers. AMI WX remains independent.</div>
+
+            <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid rgba(148,163,184,.22)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                <strong style={{ color: "#67e8f9", fontSize: 11, letterSpacing: ".1em" }}>AMI ROUTE WX</strong>
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, fontWeight: 800, opacity: amiOverlay ? 1 : .55 }}>
+                  <input type="checkbox" checked={amiVisible && Boolean(amiOverlay)} disabled={!amiOverlay} onChange={(e) => setAmiDisplay(e.target.checked)} /> DISPLAY
+                </label>
+              </div>
+              {amiPoints.length ? (
+                <>
+                  <div style={{ marginTop: 9, display: "flex", justifyContent: "space-between", fontSize: 10, fontWeight: 750 }}>
+                    <span>FORECAST TIME</span><span style={{ color: "#67e8f9" }}>{amiPoint?.validAt ? validLabel(amiPoint.validAt) : "--"}</span>
+                  </div>
+                  <input aria-label="WX Layers AMI forecast time" type="range" min={0} max={amiPoints.length - 1} step={1} value={Math.min(amiSelectedIndex, amiPoints.length - 1)} onChange={(e) => setAmiForecastIndex(Number(e.target.value))} style={{ width: "100%", accentColor: "#22d3ee" }} />
+                  <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.35 }}>{amiOverlay?.sourceName || "AMI route forecast"} · {amiPoints.length} coordinate points</div>
+                </>
+              ) : <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Load an AMI route forecast to enable AMI weather.</div>}
+            </div>
           </div>
         ) : null}
       </div>
