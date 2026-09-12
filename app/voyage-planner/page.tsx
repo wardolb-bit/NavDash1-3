@@ -8,6 +8,15 @@ type Waypoint = { id: string; name: string; lat: number; lon: number };
 type PlanningRoute = { routeName: string; waypoints: Waypoint[] };
 type LegPlan = { speed: number; holdHours: number };
 
+type SolveResult = {
+  holdLegIndex: number;
+  resumeTime: Date;
+  remainingDistance: number;
+  availableHours: number;
+  requiredSpeed: number | null;
+  status: "ready" | "impossible" | "none";
+};
+
 function toRad(value: number) { return value * Math.PI / 180; }
 function lonDelta(value: number) { let v = value; while (v > 180) v -= 360; while (v < -180) v += 360; return v; }
 function distanceNm(a: Pick<Waypoint, "lat" | "lon">, b: Pick<Waypoint, "lat" | "lon">) {
@@ -76,6 +85,7 @@ export default function VoyagePlannerPage() {
   const [targetArrival, setTargetArrival] = useState("");
   const [targetWaypointIndex, setTargetWaypointIndex] = useState<number | null>(null);
   const [plans, setPlans] = useState<LegPlan[]>([]);
+  const [planningLimit, setPlanningLimit] = useState("14");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -84,35 +94,72 @@ export default function VoyagePlannerPage() {
     setDeparture(localInputValue(now));
   }, []);
 
-  const legs = useMemo(() => {
+  const resolvedTargetWaypointIndex = route ? (targetWaypointIndex ?? route.waypoints.length - 1) : null;
+
+  const rawLegs = useMemo(() => {
     if (!route) return [];
     return route.waypoints.slice(1).map((to, index) => {
       const from = route.waypoints[index], distance = distanceNm(from, to);
       const speed = plans[index]?.speed || safeSpeed(defaultSpeed), holdHours = plans[index]?.holdHours || 0;
-      return { index, from, to, distance, bearing: bearingDeg(from, to), speed, holdHours, underwayHours: distance / speed };
+      return { index, from, to, distance, bearing: bearingDeg(from, to), speed, holdHours };
     });
   }, [route, plans, defaultSpeed]);
+
+  const baseTimeline = useMemo(() => {
+    const start = departure ? new Date(departure) : null;
+    if (!start || !Number.isFinite(start.getTime())) return [];
+    let cursor = new Date(start);
+    return rawLegs.map((leg) => {
+      const underwayHours = leg.distance / leg.speed;
+      const depart = new Date(cursor), arrive = new Date(depart.getTime() + underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
+      cursor = resume;
+      return { ...leg, underwayHours, depart, arrive, resume, solvedSpeed: null as number | null };
+    });
+  }, [rawLegs, departure]);
+
+  const solveResult = useMemo<SolveResult>(() => {
+    if (!route || resolvedTargetWaypointIndex === null || resolvedTargetWaypointIndex <= 0 || !targetArrival) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+    const target = new Date(targetArrival);
+    if (!Number.isFinite(target.getTime())) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+
+    const candidateIndexes = rawLegs.map((leg, index) => ({ index, hold: leg.holdHours })).filter((x) => x.index < resolvedTargetWaypointIndex && x.hold > 0);
+    if (!candidateIndexes.length) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+
+    const holdLegIndex = candidateIndexes[candidateIndexes.length - 1].index;
+    const resumeTime = baseTimeline[holdLegIndex]?.resume;
+    if (!resumeTime) return { holdLegIndex, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+
+    const remainingDistance = rawLegs.slice(holdLegIndex + 1, resolvedTargetWaypointIndex).reduce((sum, leg) => sum + leg.distance, 0);
+    const downstreamHoldHours = rawLegs.slice(holdLegIndex + 1, resolvedTargetWaypointIndex).reduce((sum, leg) => sum + leg.holdHours, 0);
+    const availableHours = (target.getTime() - resumeTime.getTime()) / 3600000 - downstreamHoldHours;
+    if (remainingDistance <= 0 || availableHours <= 0) return { holdLegIndex, resumeTime, remainingDistance, availableHours, requiredSpeed: null, status: "impossible" };
+    return { holdLegIndex, resumeTime, remainingDistance, availableHours, requiredSpeed: remainingDistance / availableHours, status: "ready" };
+  }, [route, resolvedTargetWaypointIndex, targetArrival, rawLegs, baseTimeline]);
 
   const timeline = useMemo(() => {
     const start = departure ? new Date(departure) : null;
     if (!start || !Number.isFinite(start.getTime())) return [];
     let cursor = new Date(start);
-    return legs.map((leg) => {
-      const depart = new Date(cursor), arrive = new Date(depart.getTime() + leg.underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
+    return rawLegs.map((leg) => {
+      const useSolved = solveResult.status === "ready" && solveResult.requiredSpeed !== null && leg.index > solveResult.holdLegIndex && resolvedTargetWaypointIndex !== null && leg.index < resolvedTargetWaypointIndex;
+      const effectiveSpeed = useSolved ? solveResult.requiredSpeed! : leg.speed;
+      const underwayHours = leg.distance / effectiveSpeed;
+      const depart = new Date(cursor), arrive = new Date(depart.getTime() + underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
       cursor = resume;
-      return { ...leg, depart, arrive, resume };
+      return { ...leg, speed: effectiveSpeed, underwayHours, depart, arrive, resume, solvedSpeed: useSolved ? effectiveSpeed : null };
     });
-  }, [legs, departure]);
+  }, [rawLegs, departure, solveResult, resolvedTargetWaypointIndex]);
 
-  const totalDistance = legs.reduce((sum, leg) => sum + leg.distance, 0);
-  const totalUnderway = legs.reduce((sum, leg) => sum + leg.underwayHours, 0);
-  const totalHold = legs.reduce((sum, leg) => sum + leg.holdHours, 0);
+  const totalDistance = rawLegs.reduce((sum, leg) => sum + leg.distance, 0);
+  const totalUnderway = timeline.reduce((sum, leg) => sum + leg.underwayHours, 0);
+  const totalHold = rawLegs.reduce((sum, leg) => sum + leg.holdHours, 0);
   const finalArrival = timeline.length ? timeline[timeline.length - 1].arrive : null;
-  const resolvedTargetWaypointIndex = route ? (targetWaypointIndex ?? route.waypoints.length - 1) : null;
   const targetWaypoint = route && resolvedTargetWaypointIndex !== null ? route.waypoints[resolvedTargetWaypointIndex] : null;
   const targetWaypointArrival = resolvedTargetWaypointIndex !== null && resolvedTargetWaypointIndex > 0 ? timeline[resolvedTargetWaypointIndex - 1]?.arrive || null : departure ? new Date(departure) : null;
   const target = targetArrival ? new Date(targetArrival) : null;
   const targetDeltaHours = targetWaypointArrival && target && Number.isFinite(target.getTime()) ? (targetWaypointArrival.getTime() - target.getTime()) / 3600000 : null;
+  const limit = safeSpeed(planningLimit, 14);
+  const exceedsLimit = solveResult.requiredSpeed !== null && solveResult.requiredSpeed > limit;
 
   async function loadRoute(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -147,12 +194,7 @@ export default function VoyagePlannerPage() {
         <header className={`border p-3 ${panel}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div><h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Voyage Timing Planner</h1><div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>Planning route only · not shared · not cached</div></div>
-            <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => { window.location.href = "/bridge"; }} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>Main</button>
-              <label className="cursor-pointer border border-[#c9a227]/70 bg-[#c9a227] px-3 py-2 text-[10px] font-black uppercase text-black">Load RTZ<input type="file" accept=".rtz,.xml" onChange={loadRoute} className="hidden" /></label>
-              <button type="button" onClick={clearPlanner} disabled={!route} className={`border px-3 py-2 text-[10px] font-black uppercase ${route ? "border-red-400/50 text-red-400" : "border-slate-500/20 text-slate-500"}`}>Clear</button>
-              <button type="button" onClick={toggleTheme} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>{nightMode ? "Day" : "Night"}</button>
-            </div>
+            <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { window.location.href = "/bridge"; }} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>Main</button><label className="cursor-pointer border border-[#c9a227]/70 bg-[#c9a227] px-3 py-2 text-[10px] font-black uppercase text-black">Load RTZ<input type="file" accept=".rtz,.xml" onChange={loadRoute} className="hidden" /></label><button type="button" onClick={clearPlanner} disabled={!route} className={`border px-3 py-2 text-[10px] font-black uppercase ${route ? "border-red-400/50 text-red-400" : "border-slate-500/20 text-slate-500"}`}>Clear</button><button type="button" onClick={toggleTheme} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>{nightMode ? "Day" : "Night"}</button></div>
           </div>
         </header>
 
@@ -168,41 +210,32 @@ export default function VoyagePlannerPage() {
             <div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Timing Controls</div>
             <div className="mt-3 grid gap-3">
               <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Departure</span><input type="datetime-local" value={departure} onChange={(e) => setDeparture(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></label>
-
-              <div className={`border-2 border-[#c9a227] p-3 ${day ? "bg-amber-50" : "bg-[#c9a227]/10"}`}>
-                <div className="mb-2 text-[10px] font-black uppercase tracking-[.16em] text-[#c9a227]">Arrival Target Waypoint</div>
-                <select disabled={!route} value={resolvedTargetWaypointIndex ?? ""} onChange={(e) => setTargetWaypointIndex(Number(e.target.value))} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`}>
-                  {route ? route.waypoints.map((wp, index) => <option key={`${wp.id}-${index}`} value={index}>{index + 1} · {wp.name}</option>) : <option value="">Load route first</option>}
-                </select>
-                <div className={`mt-2 text-[10px] font-bold ${muted}`}>Choose the waypoint you want to hit at the target time below.</div>
-              </div>
-
+              <div className={`border-2 border-[#c9a227] p-3 ${day ? "bg-amber-50" : "bg-[#c9a227]/10"}`}><div className="mb-2 text-[10px] font-black uppercase tracking-[.16em] text-[#c9a227]">Arrival Target Waypoint</div><select disabled={!route} value={resolvedTargetWaypointIndex ?? ""} onChange={(e) => setTargetWaypointIndex(Number(e.target.value))} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`}>{route ? route.waypoints.map((wp, index) => <option key={`${wp.id}-${index}`} value={index}>{index + 1} · {wp.name}</option>) : <option value="">Load route first</option>}</select></div>
               <label className="block"><span className="mb-1 block text-[9px] font-black uppercase tracking-[.12em] text-[#c9a227]">Target Arrival At Selected Waypoint</span><input type="datetime-local" value={targetArrival} onChange={(e) => setTargetArrival(e.target.value)} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`} /></label>
-
-              <div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Default Speed</span><div className="flex gap-2"><input type="number" min="0.1" step="0.1" value={defaultSpeed} onChange={(e) => setDefaultSpeed(e.target.value)} className={`min-w-0 flex-1 border px-3 py-2 text-base font-mono ${control}`} /><button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply All</button></div></div>
+              <div className="grid grid-cols-[1fr_110px] gap-2"><div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Default Speed</span><input type="number" min="0.1" step="0.1" value={defaultSpeed} onChange={(e) => setDefaultSpeed(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></div><div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Speed Limit</span><input type="number" min="0.1" step="0.1" value={planningLimit} onChange={(e) => setPlanningLimit(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></div></div>
+              <button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply Default Speed To All Legs</button>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <Metric label="Distance" value={route ? `${totalDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
-              <Metric label="Underway" value={route ? durationText(totalUnderway) : "--"} inset={inset} muted={muted} />
-              <Metric label="Holding" value={route ? durationText(totalHold) : "--"} inset={inset} muted={muted} />
-              <Metric label="Final Arrival" value={dateTimeText(finalArrival)} inset={inset} muted={muted} />
-              <Metric label="Target WP" value={targetWaypoint ? `${resolvedTargetWaypointIndex! + 1} · ${targetWaypoint.name}` : "--"} inset={inset} muted={muted} />
-              <Metric label="Target WP ETA" value={dateTimeText(targetWaypointArrival)} inset={inset} muted={muted} />
-            </div>
+            {solveResult.status === "ready" && solveResult.requiredSpeed !== null && (
+              <div className={`mt-4 border-2 p-4 ${exceedsLimit ? "border-red-500 bg-red-500/10" : "border-emerald-500 bg-emerald-500/10"}`}>
+                <div className={`text-[10px] font-black uppercase tracking-[.14em] ${exceedsLimit ? "text-red-400" : "text-emerald-500"}`}>Smart Arrival Solver</div>
+                <div className="mt-2 text-3xl font-black font-mono">{solveResult.requiredSpeed.toFixed(1)} KT</div>
+                <div className={`mt-1 text-[10px] font-black uppercase ${muted}`}>Required average speed after the last hold to reach {targetWaypoint?.name || "target waypoint"} on time</div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><Metric label="Resume" value={dateTimeText(solveResult.resumeTime)} inset={inset} muted={muted} /><Metric label="Distance Left" value={`${solveResult.remainingDistance.toFixed(1)} nm`} inset={inset} muted={muted} /><Metric label="Time Available" value={durationText(solveResult.availableHours)} inset={inset} muted={muted} /><Metric label="Target" value={dateTimeText(target)} inset={inset} muted={muted} /></div>
+                {exceedsLimit && <div className="mt-3 border border-red-500/60 p-2 text-xs font-black uppercase text-red-400">Required speed exceeds your {limit.toFixed(1)} kt planning limit</div>}
+              </div>
+            )}
 
+            {solveResult.status === "impossible" && <div className="mt-4 border-2 border-red-500 bg-red-500/10 p-4 text-sm font-black uppercase text-red-400">Target ETA cannot be made after this hold. There is not enough remaining time.</div>}
+
+            <div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Distance" value={route ? `${totalDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="Underway" value={route ? durationText(totalUnderway) : "--"} inset={inset} muted={muted} /><Metric label="Holding" value={route ? durationText(totalHold) : "--"} inset={inset} muted={muted} /><Metric label="Final Arrival" value={dateTimeText(finalArrival)} inset={inset} muted={muted} /><Metric label="Target WP" value={targetWaypoint ? `${resolvedTargetWaypointIndex! + 1} · ${targetWaypoint.name}` : "--"} inset={inset} muted={muted} /><Metric label="Target WP ETA" value={dateTimeText(targetWaypointArrival)} inset={inset} muted={muted} /></div>
             {targetDeltaHours !== null && <div className={`mt-2 border p-3 ${inset}`}><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Waypoint Arrival Difference</div><div className={`mt-1 font-mono text-lg font-black ${Math.abs(targetDeltaHours) < 0.05 ? "text-emerald-500" : targetDeltaHours > 0 ? "text-red-400" : "text-cyan-400"}`}>{Math.abs(targetDeltaHours) < 0.05 ? "ON TIME" : `${durationText(Math.abs(targetDeltaHours))} ${targetDeltaHours > 0 ? "LATE" : "EARLY"}`}</div></div>}
           </section>
         </div>
 
         <section className={`mt-2 border ${panel}`}>
           <div className="flex items-center justify-between border-b border-current/10 px-3 py-2"><div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Leg Speed & Holding Plan</div><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Hold is applied after arrival at the waypoint</div></div>
-          {!route ? <div className={`p-8 text-center text-sm ${muted}`}>Load an RTZ route to start planning.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1050px] border-collapse text-left"><thead><tr className={`text-[9px] font-black uppercase tracking-[.1em] ${muted}`}><th className="border-b border-current/10 px-3 py-2">Leg</th><th className="border-b border-current/10 px-3 py-2">From → To</th><th className="border-b border-current/10 px-3 py-2">Dist</th><th className="border-b border-current/10 px-3 py-2">Course</th><th className="border-b border-current/10 px-3 py-2">Speed</th><th className="border-b border-current/10 px-3 py-2">Run Time</th><th className="border-b border-current/10 px-3 py-2">Arrive</th><th className="border-b border-current/10 px-3 py-2">Hold</th><th className="border-b border-current/10 px-3 py-2">Resume</th></tr></thead><tbody>
-            {timeline.map((row) => {
-              const isTarget = resolvedTargetWaypointIndex === row.index + 1;
-              return <tr key={`${row.from.id}-${row.to.id}`} className={`border-b border-current/10 last:border-b-0 ${isTarget ? (day ? "bg-amber-50" : "bg-[#c9a227]/10") : ""}`}><td className="px-3 py-2 font-mono text-xs font-black">{row.index + 1}</td><td className="px-3 py-2"><div className="text-sm font-black">{row.from.name} → {row.to.name}{isTarget && <span className="ml-2 text-[9px] font-black uppercase text-[#c9a227]">Target</span>}</div><div className={`mt-0.5 font-mono text-[10px] ${muted}`}>{row.from.id} → {row.to.id}</div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.distance.toFixed(1)} nm</td><td className="px-3 py-2 font-mono text-sm font-black">{row.bearing.toFixed(0)}°T</td><td className="px-3 py-2"><input aria-label={`Speed for leg ${row.index + 1}`} type="number" min="0.1" step="0.1" value={plans[row.index]?.speed ?? row.speed} onChange={(e) => updatePlan(row.index, { speed: safeSpeed(e.target.value, row.speed) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /></td><td className="px-3 py-2 font-mono text-sm font-black">{durationText(row.underwayHours)}</td><td className={`px-3 py-2 font-mono text-sm font-black ${isTarget ? "text-[#c9a227]" : ""}`}>{dateTimeText(row.arrive)}</td><td className="px-3 py-2"><div className="flex items-center gap-1"><input aria-label={`Hold after ${row.to.name}`} type="number" min="0" step="0.25" value={plans[row.index]?.holdHours ?? 0} onChange={(e) => updatePlan(row.index, { holdHours: decimalHours(e.target.value) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /><span className={`text-xs ${muted}`}>hr</span></div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.holdHours > 0 ? dateTimeText(row.resume) : "—"}</td></tr>;
-            })}
-          </tbody></table></div>}
+          {!route ? <div className={`p-8 text-center text-sm ${muted}`}>Load an RTZ route to start planning.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1120px] border-collapse text-left"><thead><tr className={`text-[9px] font-black uppercase tracking-[.1em] ${muted}`}><th className="border-b border-current/10 px-3 py-2">Leg</th><th className="border-b border-current/10 px-3 py-2">From → To</th><th className="border-b border-current/10 px-3 py-2">Dist</th><th className="border-b border-current/10 px-3 py-2">Course</th><th className="border-b border-current/10 px-3 py-2">Speed</th><th className="border-b border-current/10 px-3 py-2">Run Time</th><th className="border-b border-current/10 px-3 py-2">Arrive</th><th className="border-b border-current/10 px-3 py-2">Hold</th><th className="border-b border-current/10 px-3 py-2">Resume</th></tr></thead><tbody>{timeline.map((row) => { const isTarget = resolvedTargetWaypointIndex === row.index + 1; const isSolved = row.solvedSpeed !== null; return <tr key={`${row.from.id}-${row.to.id}`} className={`border-b border-current/10 last:border-b-0 ${isTarget ? (day ? "bg-amber-50" : "bg-[#c9a227]/10") : isSolved ? (day ? "bg-emerald-50" : "bg-emerald-500/10") : ""}`}><td className="px-3 py-2 font-mono text-xs font-black">{row.index + 1}</td><td className="px-3 py-2"><div className="text-sm font-black">{row.from.name} → {row.to.name}{isTarget && <span className="ml-2 text-[9px] font-black uppercase text-[#c9a227]">Target</span>}{isSolved && <span className="ml-2 text-[9px] font-black uppercase text-emerald-500">Auto speed</span>}</div><div className={`mt-0.5 font-mono text-[10px] ${muted}`}>{row.from.id} → {row.to.id}</div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.distance.toFixed(1)} nm</td><td className="px-3 py-2 font-mono text-sm font-black">{row.bearing.toFixed(0)}°T</td><td className="px-3 py-2">{isSolved ? <div className="w-24 border border-emerald-500/60 px-2 py-2 font-mono text-base font-black text-emerald-500">{row.speed.toFixed(1)}</div> : <input aria-label={`Speed for leg ${row.index + 1}`} type="number" min="0.1" step="0.1" value={plans[row.index]?.speed ?? row.speed} onChange={(e) => updatePlan(row.index, { speed: safeSpeed(e.target.value, row.speed) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} />}</td><td className="px-3 py-2 font-mono text-sm font-black">{durationText(row.underwayHours)}</td><td className={`px-3 py-2 font-mono text-sm font-black ${isTarget ? "text-[#c9a227]" : ""}`}>{dateTimeText(row.arrive)}</td><td className="px-3 py-2"><div className="flex items-center gap-1"><input aria-label={`Hold after ${row.to.name}`} type="number" min="0" step="0.25" value={plans[row.index]?.holdHours ?? 0} onChange={(e) => updatePlan(row.index, { holdHours: decimalHours(e.target.value) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /><span className={`text-xs ${muted}`}>hr</span></div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.holdHours > 0 ? dateTimeText(row.resume) : "—"}</td></tr>; })}</tbody></table></div>}
         </section>
       </div>
     </main>
