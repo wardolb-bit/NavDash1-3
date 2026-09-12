@@ -22,76 +22,46 @@ function bearingDeg(a: Waypoint, b: Waypoint) {
 }
 function getAttr(node: Element | null, names: string[]) {
   if (!node) return null;
-  for (const name of names) {
-    const value = node.getAttribute(name);
-    if (value) return value;
-  }
+  for (const name of names) { const value = node.getAttribute(name); if (value) return value; }
   return null;
 }
 function parseCoordinate(raw: string | null, isLat: boolean) {
   if (!raw) return NaN;
-  const text = raw.trim();
-  const decimal = Number(text);
+  const text = raw.trim(), decimal = Number(text);
   if (Number.isFinite(decimal)) return decimal;
   const hemi = text.match(/[NSEW]/i)?.[0]?.toUpperCase();
   const nums = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
   if (!nums.length) return NaN;
-  let value = nums.length >= 3
-    ? Math.abs(nums[0]) + nums[1] / 60 + nums[2] / 3600
-    : nums.length >= 2
-      ? Math.abs(nums[0]) + nums[1] / 60
-      : nums[0];
+  let value = nums.length >= 3 ? Math.abs(nums[0]) + nums[1] / 60 + nums[2] / 3600 : nums.length >= 2 ? Math.abs(nums[0]) + nums[1] / 60 : nums[0];
   if (hemi === "S" || hemi === "W" || (!hemi && nums[0] < 0)) value *= -1;
-  if ((isLat && Math.abs(value) > 90) || (!isLat && Math.abs(value) > 180)) return NaN;
-  return value;
+  return (isLat && Math.abs(value) > 90) || (!isLat && Math.abs(value) > 180) ? NaN : value;
 }
 function waypointName(node: Element, fallback: string) {
-  return getAttr(node, ["name", "Name", "waypointName", "WaypointName", "id", "ID"])
-    || node.querySelector("name,Name,waypointName,WaypointName")?.textContent?.trim()
-    || fallback;
+  return getAttr(node, ["name", "Name", "waypointName", "WaypointName", "id", "ID"]) || node.querySelector("name,Name,waypointName,WaypointName")?.textContent?.trim() || fallback;
 }
 function parseRtz(xmlText: string): PlanningRoute {
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("Could not parse RTZ/XML route file.");
   const routeNode = doc.querySelector("route,Route") || doc.documentElement;
   const routeInfo = doc.querySelector("routeInfo,RouteInfo");
-  const routeName = getAttr(routeInfo, ["routeName", "RouteName", "name", "Name"])
-    || getAttr(routeNode, ["routeName", "RouteName", "name", "Name", "id", "ID"])
-    || routeNode.querySelector("routeName,name")?.textContent?.trim()
-    || "Planning Route";
+  const routeName = getAttr(routeInfo, ["routeName", "RouteName", "name", "Name"]) || getAttr(routeNode, ["routeName", "RouteName", "name", "Name", "id", "ID"]) || routeNode.querySelector("routeName,name")?.textContent?.trim() || "Planning Route";
   const waypoints = Array.from(doc.querySelectorAll("waypoint,Waypoint,wp,WP")).map((node, index) => {
     const pos = node.querySelector("position,Position,pos") || node;
     const lat = parseCoordinate(getAttr(pos, ["lat", "Lat", "latitude", "Latitude"]) || getAttr(node, ["lat", "Lat", "latitude", "Latitude"]), true);
     const lon = parseCoordinate(getAttr(pos, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]) || getAttr(node, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]), false);
-    return {
-      id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`,
-      name: waypointName(node, `Waypoint ${index + 1}`),
-      lat,
-      lon,
-    };
+    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: waypointName(node, `Waypoint ${index + 1}`), lat, lon };
   }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (waypoints.length < 2) throw new Error("Route needs at least two valid waypoints.");
   return { routeName, waypoints };
 }
-function decimalHours(value: string) {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-function safeSpeed(value: string, fallback = 10) {
-  const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
+function decimalHours(value: string) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : 0; }
+function safeSpeed(value: string, fallback = 10) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
 function durationText(hours: number) {
   if (!Number.isFinite(hours) || hours < 0) return "--";
-  const totalMinutes = Math.round(hours * 60);
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
+  const totalMinutes = Math.round(hours * 60), h = Math.floor(totalMinutes / 60), m = totalMinutes % 60;
   return `${h}h ${String(m).padStart(2, "0")}m`;
 }
-function dateTimeText(date: Date | null) {
-  if (!date || !Number.isFinite(date.getTime())) return "--";
-  return date.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
+function dateTimeText(date: Date | null) { return !date || !Number.isFinite(date.getTime()) ? "--" : date.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 function localInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
@@ -104,6 +74,7 @@ export default function VoyagePlannerPage() {
   const [defaultSpeed, setDefaultSpeed] = useState("10");
   const [departure, setDeparture] = useState("");
   const [targetArrival, setTargetArrival] = useState("");
+  const [targetWaypointIndex, setTargetWaypointIndex] = useState<number | null>(null);
   const [plans, setPlans] = useState<LegPlan[]>([]);
   const [error, setError] = useState("");
 
@@ -116,10 +87,8 @@ export default function VoyagePlannerPage() {
   const legs = useMemo(() => {
     if (!route) return [];
     return route.waypoints.slice(1).map((to, index) => {
-      const from = route.waypoints[index];
-      const distance = distanceNm(from, to);
-      const speed = plans[index]?.speed || safeSpeed(defaultSpeed);
-      const holdHours = plans[index]?.holdHours || 0;
+      const from = route.waypoints[index], distance = distanceNm(from, to);
+      const speed = plans[index]?.speed || safeSpeed(defaultSpeed), holdHours = plans[index]?.holdHours || 0;
       return { index, from, to, distance, bearing: bearingDeg(from, to), speed, holdHours, underwayHours: distance / speed };
     });
   }, [route, plans, defaultSpeed]);
@@ -129,9 +98,7 @@ export default function VoyagePlannerPage() {
     if (!start || !Number.isFinite(start.getTime())) return [];
     let cursor = new Date(start);
     return legs.map((leg) => {
-      const depart = new Date(cursor);
-      const arrive = new Date(depart.getTime() + leg.underwayHours * 3600000);
-      const resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
+      const depart = new Date(cursor), arrive = new Date(depart.getTime() + leg.underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
       cursor = resume;
       return { ...leg, depart, arrive, resume };
     });
@@ -141,22 +108,23 @@ export default function VoyagePlannerPage() {
   const totalUnderway = legs.reduce((sum, leg) => sum + leg.underwayHours, 0);
   const totalHold = legs.reduce((sum, leg) => sum + leg.holdHours, 0);
   const finalArrival = timeline.length ? timeline[timeline.length - 1].arrive : null;
+  const resolvedTargetWaypointIndex = route ? (targetWaypointIndex ?? route.waypoints.length - 1) : null;
+  const targetWaypoint = route && resolvedTargetWaypointIndex !== null ? route.waypoints[resolvedTargetWaypointIndex] : null;
+  const targetWaypointArrival = resolvedTargetWaypointIndex !== null && resolvedTargetWaypointIndex > 0 ? timeline[resolvedTargetWaypointIndex - 1]?.arrive || null : departure ? new Date(departure) : null;
   const target = targetArrival ? new Date(targetArrival) : null;
-  const targetDeltaHours = finalArrival && target && Number.isFinite(target.getTime()) ? (finalArrival.getTime() - target.getTime()) / 3600000 : null;
+  const targetDeltaHours = targetWaypointArrival && target && Number.isFinite(target.getTime()) ? (targetWaypointArrival.getTime() - target.getTime()) / 3600000 : null;
 
   async function loadRoute(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
     try {
-      const parsed = parseRtz(await file.text());
-      const speed = safeSpeed(defaultSpeed);
+      const parsed = parseRtz(await file.text()), speed = safeSpeed(defaultSpeed);
       setRoute(parsed);
       setPlans(parsed.waypoints.slice(1).map(() => ({ speed, holdHours: 0 })));
+      setTargetWaypointIndex(parsed.waypoints.length - 1);
       setError("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load route.");
-    }
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not load route."); }
   }
 
   function applyDefaultSpeed() {
@@ -164,34 +132,21 @@ export default function VoyagePlannerPage() {
     setDefaultSpeed(String(speed));
     setPlans((current) => current.map((plan) => ({ ...plan, speed })));
   }
-
-  function updatePlan(index: number, patch: Partial<LegPlan>) {
-    setPlans((current) => current.map((plan, i) => i === index ? { ...plan, ...patch } : plan));
-  }
-
-  function clearPlanner() {
-    setRoute(null);
-    setPlans([]);
-    setTargetArrival("");
-    setError("");
-  }
+  function updatePlan(index: number, patch: Partial<LegPlan>) { setPlans((current) => current.map((plan, i) => i === index ? { ...plan, ...patch } : plan)); }
+  function clearPlanner() { setRoute(null); setPlans([]); setTargetArrival(""); setTargetWaypointIndex(null); setError(""); }
 
   const panel = day ? "border-slate-300 bg-white" : "border-white/15 bg-[#071019]";
   const inset = day ? "border-slate-200 bg-[#f5f7f9]" : "border-white/10 bg-[#04080c]";
   const control = day ? "border-slate-300 bg-white text-slate-900" : "border-white/15 bg-[#0b141d] text-slate-100";
   const muted = day ? "text-slate-500" : "text-slate-400";
-  const mapRoute = route ? { routeName: route.routeName, waypoints: route.waypoints, activeWaypointIndex: 1 } : null;
+  const mapRoute = route ? { routeName: route.routeName, waypoints: route.waypoints, activeWaypointIndex: Math.max(1, resolvedTargetWaypointIndex ?? 1) } : null;
 
   return (
     <main className={day ? "min-h-screen bg-[#eef2f5] text-slate-900" : "min-h-screen bg-[#04080c] text-slate-100"}>
       <div className="mx-auto max-w-[1900px] p-2 sm:p-3">
         <header className={`border p-3 ${panel}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div>
-              <h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Voyage Timing Planner</h1>
-              <div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>Planning route only · not shared · not cached</div>
-            </div>
+            <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div><h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Voyage Timing Planner</h1><div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>Planning route only · not shared · not cached</div></div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => { window.location.href = "/bridge"; }} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>Main</button>
               <label className="cursor-pointer border border-[#c9a227]/70 bg-[#c9a227] px-3 py-2 text-[10px] font-black uppercase text-black">Load RTZ<input type="file" accept=".rtz,.xml" onChange={loadRoute} className="hidden" /></label>
@@ -205,94 +160,40 @@ export default function VoyagePlannerPage() {
 
         <div className="mt-2 grid gap-2 xl:grid-cols-[minmax(0,1.55fr)_430px]">
           <section className={`overflow-hidden border ${panel}`}>
-            <div className="flex items-center justify-between border-b border-current/10 px-3 py-2">
-              <div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>NOAA ENC · Planning Route</div>
-              <div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>{route?.routeName || "No planning route loaded"}</div>
-            </div>
-            <div className="h-[470px] xl:h-[570px]">
-              <CrewNoaaMap route={mapRoute} ship={null} nightMode={nightMode} />
-            </div>
+            <div className="flex items-center justify-between border-b border-current/10 px-3 py-2"><div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>NOAA ENC · Planning Route</div><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>{route?.routeName || "No planning route loaded"}</div></div>
+            <div className="h-[470px] xl:h-[570px]"><CrewNoaaMap route={mapRoute} ship={null} nightMode={nightMode} /></div>
           </section>
 
           <section className={`border p-3 ${panel}`}>
             <div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Timing Controls</div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-              <label className="block">
-                <span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Departure</span>
-                <input type="datetime-local" value={departure} onChange={(e) => setDeparture(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} />
-              </label>
-              <label className="block">
-                <span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Arrival · Optional</span>
-                <input type="datetime-local" value={targetArrival} onChange={(e) => setTargetArrival(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} />
-              </label>
-              <div>
-                <span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Default Speed</span>
-                <div className="flex gap-2">
-                  <input type="number" min="0.1" step="0.1" value={defaultSpeed} onChange={(e) => setDefaultSpeed(e.target.value)} className={`min-w-0 flex-1 border px-3 py-2 text-base font-mono ${control}`} />
-                  <button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply All</button>
-                </div>
-              </div>
+              <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Departure</span><input type="datetime-local" value={departure} onChange={(e) => setDeparture(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></label>
+              <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Waypoint</span><select disabled={!route} value={resolvedTargetWaypointIndex ?? ""} onChange={(e) => setTargetWaypointIndex(Number(e.target.value))} className={`w-full border px-3 py-2 text-base font-mono ${control}`}>{route?.waypoints.map((wp, index) => <option key={`${wp.id}-${index}`} value={index}>{index + 1} · {wp.name}</option>)}</select></label>
+              <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Arrival · Optional</span><input type="datetime-local" value={targetArrival} onChange={(e) => setTargetArrival(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></label>
+              <div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Default Speed</span><div className="flex gap-2"><input type="number" min="0.1" step="0.1" value={defaultSpeed} onChange={(e) => setDefaultSpeed(e.target.value)} className={`min-w-0 flex-1 border px-3 py-2 text-base font-mono ${control}`} /><button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply All</button></div></div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Metric label="Distance" value={route ? `${totalDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} />
               <Metric label="Underway" value={route ? durationText(totalUnderway) : "--"} inset={inset} muted={muted} />
               <Metric label="Holding" value={route ? durationText(totalHold) : "--"} inset={inset} muted={muted} />
-              <Metric label="Arrival" value={dateTimeText(finalArrival)} inset={inset} muted={muted} />
+              <Metric label="Final Arrival" value={dateTimeText(finalArrival)} inset={inset} muted={muted} />
+              <Metric label="Target WP" value={targetWaypoint ? `${resolvedTargetWaypointIndex! + 1} · ${targetWaypoint.name}` : "--"} inset={inset} muted={muted} />
+              <Metric label="Target WP ETA" value={dateTimeText(targetWaypointArrival)} inset={inset} muted={muted} />
             </div>
 
-            {targetDeltaHours !== null && (
-              <div className={`mt-2 border p-3 ${inset}`}>
-                <div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Arrival Difference</div>
-                <div className={`mt-1 font-mono text-lg font-black ${Math.abs(targetDeltaHours) < 0.05 ? "text-emerald-500" : targetDeltaHours > 0 ? "text-red-400" : "text-cyan-400"}`}>
-                  {Math.abs(targetDeltaHours) < 0.05 ? "ON TIME" : `${durationText(Math.abs(targetDeltaHours))} ${targetDeltaHours > 0 ? "LATE" : "EARLY"}`}
-                </div>
-              </div>
-            )}
+            {targetDeltaHours !== null && <div className={`mt-2 border p-3 ${inset}`}><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Waypoint Arrival Difference</div><div className={`mt-1 font-mono text-lg font-black ${Math.abs(targetDeltaHours) < 0.05 ? "text-emerald-500" : targetDeltaHours > 0 ? "text-red-400" : "text-cyan-400"}`}>{Math.abs(targetDeltaHours) < 0.05 ? "ON TIME" : `${durationText(Math.abs(targetDeltaHours))} ${targetDeltaHours > 0 ? "LATE" : "EARLY"}`}</div></div>}
           </section>
         </div>
 
         <section className={`mt-2 border ${panel}`}>
-          <div className="flex items-center justify-between border-b border-current/10 px-3 py-2">
-            <div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Leg Speed & Holding Plan</div>
-            <div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Hold is applied after arrival at the waypoint</div>
-          </div>
-          {!route ? (
-            <div className={`p-8 text-center text-sm ${muted}`}>Load an RTZ route to start planning.</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[1050px] border-collapse text-left">
-                <thead>
-                  <tr className={`text-[9px] font-black uppercase tracking-[.1em] ${muted}`}>
-                    <th className="border-b border-current/10 px-3 py-2">Leg</th>
-                    <th className="border-b border-current/10 px-3 py-2">From → To</th>
-                    <th className="border-b border-current/10 px-3 py-2">Dist</th>
-                    <th className="border-b border-current/10 px-3 py-2">Course</th>
-                    <th className="border-b border-current/10 px-3 py-2">Speed</th>
-                    <th className="border-b border-current/10 px-3 py-2">Run Time</th>
-                    <th className="border-b border-current/10 px-3 py-2">Arrive</th>
-                    <th className="border-b border-current/10 px-3 py-2">Hold</th>
-                    <th className="border-b border-current/10 px-3 py-2">Resume</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timeline.map((row) => (
-                    <tr key={`${row.from.id}-${row.to.id}`} className="border-b border-current/10 last:border-b-0">
-                      <td className="px-3 py-2 font-mono text-xs font-black">{row.index + 1}</td>
-                      <td className="px-3 py-2"><div className="text-sm font-black">{row.from.name} → {row.to.name}</div><div className={`mt-0.5 font-mono text-[10px] ${muted}`}>{row.from.id} → {row.to.id}</div></td>
-                      <td className="px-3 py-2 font-mono text-sm font-black">{row.distance.toFixed(1)} nm</td>
-                      <td className="px-3 py-2 font-mono text-sm font-black">{row.bearing.toFixed(0)}°T</td>
-                      <td className="px-3 py-2"><input aria-label={`Speed for leg ${row.index + 1}`} type="number" min="0.1" step="0.1" value={plans[row.index]?.speed ?? row.speed} onChange={(e) => updatePlan(row.index, { speed: safeSpeed(e.target.value, row.speed) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /></td>
-                      <td className="px-3 py-2 font-mono text-sm font-black">{durationText(row.underwayHours)}</td>
-                      <td className="px-3 py-2 font-mono text-sm font-black">{dateTimeText(row.arrive)}</td>
-                      <td className="px-3 py-2"><div className="flex items-center gap-1"><input aria-label={`Hold after ${row.to.name}`} type="number" min="0" step="0.25" value={plans[row.index]?.holdHours ?? 0} onChange={(e) => updatePlan(row.index, { holdHours: decimalHours(e.target.value) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /><span className={`text-xs ${muted}`}>hr</span></div></td>
-                      <td className="px-3 py-2 font-mono text-sm font-black">{row.holdHours > 0 ? dateTimeText(row.resume) : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="flex items-center justify-between border-b border-current/10 px-3 py-2"><div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Leg Speed & Holding Plan</div><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Hold is applied after arrival at the waypoint</div></div>
+          {!route ? <div className={`p-8 text-center text-sm ${muted}`}>Load an RTZ route to start planning.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1050px] border-collapse text-left"><thead><tr className={`text-[9px] font-black uppercase tracking-[.1em] ${muted}`}><th className="border-b border-current/10 px-3 py-2">Leg</th><th className="border-b border-current/10 px-3 py-2">From → To</th><th className="border-b border-current/10 px-3 py-2">Dist</th><th className="border-b border-current/10 px-3 py-2">Course</th><th className="border-b border-current/10 px-3 py-2">Speed</th><th className="border-b border-current/10 px-3 py-2">Run Time</th><th className="border-b border-current/10 px-3 py-2">Arrive</th><th className="border-b border-current/10 px-3 py-2">Hold</th><th className="border-b border-current/10 px-3 py-2">Resume</th></tr></thead><tbody>
+            {timeline.map((row) => {
+              const isTarget = resolvedTargetWaypointIndex === row.index + 1;
+              return <tr key={`${row.from.id}-${row.to.id}`} className={`border-b border-current/10 last:border-b-0 ${isTarget ? (day ? "bg-amber-50" : "bg-[#c9a227]/10") : ""}`}><td className="px-3 py-2 font-mono text-xs font-black">{row.index + 1}</td><td className="px-3 py-2"><div className="text-sm font-black">{row.from.name} → {row.to.name}{isTarget && <span className="ml-2 text-[9px] font-black uppercase text-[#c9a227]">Target</span>}</div><div className={`mt-0.5 font-mono text-[10px] ${muted}`}>{row.from.id} → {row.to.id}</div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.distance.toFixed(1)} nm</td><td className="px-3 py-2 font-mono text-sm font-black">{row.bearing.toFixed(0)}°T</td><td className="px-3 py-2"><input aria-label={`Speed for leg ${row.index + 1}`} type="number" min="0.1" step="0.1" value={plans[row.index]?.speed ?? row.speed} onChange={(e) => updatePlan(row.index, { speed: safeSpeed(e.target.value, row.speed) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /></td><td className="px-3 py-2 font-mono text-sm font-black">{durationText(row.underwayHours)}</td><td className={`px-3 py-2 font-mono text-sm font-black ${isTarget ? "text-[#c9a227]" : ""}`}>{dateTimeText(row.arrive)}</td><td className="px-3 py-2"><div className="flex items-center gap-1"><input aria-label={`Hold after ${row.to.name}`} type="number" min="0" step="0.25" value={plans[row.index]?.holdHours ?? 0} onChange={(e) => updatePlan(row.index, { holdHours: decimalHours(e.target.value) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /><span className={`text-xs ${muted}`}>hr</span></div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.holdHours > 0 ? dateTimeText(row.resume) : "—"}</td></tr>;
+            })}
+          </tbody></table></div>}
         </section>
       </div>
     </main>
