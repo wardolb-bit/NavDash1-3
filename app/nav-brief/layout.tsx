@@ -22,7 +22,6 @@ type TideResult = {
   error?: string;
 };
 type TidePair = { departure: TideResult | null; arrival: TideResult | null; loading: boolean; error: string };
-
 type LocalZone = { iana?: string; offsetHours?: number };
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
@@ -117,9 +116,7 @@ function oldUtc(value: string) {
   const date = new Date(value);
   return !Number.isFinite(date.getTime()) ? value : date.toLocaleString("en-US", { timeZone: "UTC", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) + "Z";
 }
-function maxBy(points: AmiForecastPoint[], getter: (p: AmiForecastPoint) => number) {
-  return points.reduce<AmiForecastPoint | null>((best, point) => !best || getter(point) > getter(best) ? point : best, null);
-}
+function maxBy(points: AmiForecastPoint[], getter: (p: AmiForecastPoint) => number) { return points.reduce<AmiForecastPoint | null>((best, point) => !best || getter(point) > getter(best) ? point : best, null); }
 function replaceText(root: Element, from: string, to: string) {
   if (!from || from === to) return;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -135,20 +132,20 @@ async function fetchTide(point: Waypoint, at: Date): Promise<TideResult> {
   return json;
 }
 function formatEvent(event: TideEvent, point: Pick<Waypoint, "lat" | "lon">) {
-  const label = event.type === "H" ? "HW" : event.type === "L" ? "LW" : event.type;
-  return `${label} ${formatLocalValue(event.time, point)} · ${event.valueFt.toFixed(1)} ft`;
+  const label = event.type === "H" ? "High Tide" : event.type === "L" ? "Low Tide" : event.type;
+  return `${label} · ${formatLocalValue(event.time, point)} · ${event.valueFt.toFixed(1)} ft`;
 }
 function TideCard({ title, result, target }: { title: string; result: TideResult | null; target: Date | null }) {
-  if (!target) return <div className="print-sub border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">Set departure time to calculate tide conditions.</div></div>;
-  if (!result?.station) return <div className="print-sub border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">NOAA tide data unavailable.</div></div>;
+  if (!target) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">Set departure time to calculate tide conditions.</div></div>;
+  if (!result?.station) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">NOAA tide data unavailable.</div></div>;
   const point = result.station;
-  return <div className="print-sub border border-white/10 p-3">
+  return <div className="print-sub print-avoid border border-white/10 p-3">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-[12px] font-black">{title}</div><div className="font-mono text-[10px] text-[#42d3c8]">{result.trend || "UNKNOWN"}</div></div>
     <div className="mt-2 text-[11px] leading-5 text-[#8294a5]">
       <b>{result.station.name}</b> · NOAA {result.station.id} · {(result.station.distanceNm ?? 0).toFixed(1)} NM from route endpoint<br/>
-      Target · {formatLocal(target, point)} · Datum MLLW<br/>
-      {(result.events || []).map((event, index) => <span key={`${event.time}-${index}`}>{formatEvent(event, point)}{index < (result.events?.length || 0) - 1 ? " · " : ""}</span>)}
-      {result.representativeWarning ? <><br/><b>Station caution:</b> {result.representativeWarning}</> : null}
+      Target · {formatLocal(target, point)} · Datum MLLW
+      <div className="mt-1 space-y-[1px]">{(result.events || []).map((event, index) => <div key={`${event.time}-${index}`}>{formatEvent(event, point)}</div>)}</div>
+      {result.representativeWarning ? <><div className="mt-1"><b>Station caution:</b> {result.representativeWarning}</div></> : null}
     </div>
   </div>;
 }
