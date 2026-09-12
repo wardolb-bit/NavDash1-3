@@ -4,7 +4,7 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 import type { AmiForecastPoint, AmiRouteForecast } from "../../lib/amiRouteForecast";
 
-type Waypoint = { id: string; name: string; lat: number; lon: number };
+type Waypoint = { id: string; name: string; lat: number; lon: number; rtzNote?: string };
 type RouteBrief = { routeName: string; waypoints: Waypoint[] };
 type UserMark = { id: string; name: string; lat: number; lon: number };
 type OverlayResponse = { ok: boolean; forecast?: AmiRouteForecast; error?: string };
@@ -21,7 +21,6 @@ type NavStationWaypoint = {
   xtdPortNm?: number;
   turnRadiusNm?: number;
   references?: string[];
-  remarks?: string;
 };
 type NavStationPassage = {
   sourceFile: string;
@@ -69,30 +68,38 @@ function parseCoordinate(raw: string | null, isLat: boolean) {
   if (hemi === "S" || hemi === "W" || (!hemi && nums[0] < 0)) value *= -1;
   return isLat && Math.abs(value) > 90 || !isLat && Math.abs(value) > 180 ? NaN : value;
 }
-function getAttr(node: Element, names: string[]) { for (const name of names) { const value = node.getAttribute(name); if (value) return value; } return null; }
+function getAttr(node: Element | null, names: string[]) { if (!node) return null; for (const name of names) { const value = node.getAttribute(name); if (value) return value; } return null; }
 function findName(node: Element, fallback: string) { return getAttr(node, ["name", "Name", "id", "ID"]) || node.querySelector("name,Name,waypointName,WaypointName")?.textContent?.trim() || fallback; }
 function parseRtz(xmlText: string): RouteBrief {
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("Could not parse RTZ/XML route file.");
   const routeNode = doc.querySelector("route,Route") || doc.documentElement;
-  const routeName = getAttr(routeNode, ["name", "Name", "id", "ID"]) || routeNode.querySelector("routeName,name")?.textContent?.trim() || "Loaded RTZ Route";
-  const waypoints = Array.from(doc.querySelectorAll("waypoint,Waypoint,wp,WP")).map((node, index) => {
+  const routeInfo = doc.querySelector("routeInfo,RouteInfo");
+  const routeName = getAttr(routeInfo, ["routeName", "RouteName", "name", "Name"]) || getAttr(routeNode, ["name", "Name", "id", "ID"]) || routeNode.querySelector("routeName,name")?.textContent?.trim() || "Loaded RTZ Route";
+  const parsed = Array.from(doc.querySelectorAll("waypoint,Waypoint,wp,WP")).map((node, index) => {
     const pos = node.querySelector("position,Position,pos") || node;
+    const leg = node.querySelector("leg,Leg");
     const lat = parseCoordinate(getAttr(pos, ["lat", "Lat", "latitude", "Latitude"]) || getAttr(node, ["lat", "Lat", "latitude", "Latitude"]), true);
     const lon = parseCoordinate(getAttr(pos, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]) || getAttr(node, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]), false);
-    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: findName(node, `Waypoint ${index + 1}`), lat, lon };
+    const incomingLegNote = (getAttr(leg, ["legNote2", "LegNote2"]) || "").replace(/\s+/g, " ").trim();
+    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: findName(node, `Waypoint ${index + 1}`), lat, lon, incomingLegNote };
   }).filter(wp => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
-  if (waypoints.length < 2) throw new Error("Route needs at least two valid waypoints.");
+  if (parsed.length < 2) throw new Error("Route needs at least two valid waypoints.");
+  const waypoints: Waypoint[] = parsed.map(({ incomingLegNote: _incomingLegNote, ...wp }) => wp);
+  for (let index = 1; index < parsed.length; index += 1) {
+    const note = parsed[index].incomingLegNote;
+    if (note) waypoints[index - 1].rtzNote = note;
+  }
   return { routeName, waypoints };
 }
 function normalizeRoutePayload(payload: any): RouteBrief | null {
   const raw = Array.isArray(payload) ? payload : Array.isArray(payload?.waypoints) ? payload.waypoints : Array.isArray(payload?.route?.waypoints) ? payload.route.waypoints : [];
-  const waypoints = raw.map((wp: any, index: number) => ({ id: String(wp?.id || `WP${String(index + 1).padStart(3, "0")}`), name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`), lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+  const waypoints = raw.map((wp: any, index: number) => ({ id: String(wp?.id || `WP${String(index + 1).padStart(3, "0")}`), name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`), lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude), rtzNote: typeof wp?.rtzNote === "string" ? wp.rtzNote : undefined })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
   return waypoints.length < 2 ? null : { routeName: String(payload?.routeName || payload?.name || payload?.route?.routeName || "Current NavDash Route"), waypoints };
 }
 function readCurrentRoute() { try { const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY); return raw ? normalizeRoutePayload(JSON.parse(raw)) : null; } catch { return null; } }
 function normalizeMarks(raw: any[]): UserMark[] {
-  return raw.map((mark: any, index) => mark?.type === "Feature" && mark?.geometry?.type === "Point" && Array.isArray(mark.geometry.coordinates)
+  return raw.map((mark: any, index: number) => mark?.type === "Feature" && mark?.geometry?.type === "Point" && Array.isArray(mark.geometry.coordinates)
     ? { id: String(mark?.id || mark?.properties?.id || `mark-${index + 1}`), name: String(mark?.properties?.name || mark?.properties?.title || mark?.properties?.label || `Mark ${index + 1}`), lat: Number(mark.geometry.coordinates[1]), lon: Number(mark.geometry.coordinates[0]) }
     : { id: String(mark?.id || `mark-${index + 1}`), name: String(mark?.name || mark?.title || mark?.label || `Mark ${index + 1}`), lat: Number(mark?.lat ?? mark?.latitude), lon: Number(mark?.lon ?? mark?.lng ?? mark?.longitude) })
     .filter((mark: UserMark) => Number.isFinite(mark.lat) && Number.isFinite(mark.lon) && Math.abs(mark.lat) <= 90 && Math.abs(mark.lon) <= 180);
@@ -190,7 +197,7 @@ export default function NavBriefBuilderPage() {
   const selectedWp = route?.waypoints.find(wp => wp.id === selectedWaypoint) || route?.waypoints[0] || null;
   const printedNotes = useMemo(() => route ? route.waypoints.map((wp, index) => {
     const source = navStationForRouteWaypoint(passage, wp, index);
-    const importedNote = (source?.remarks || "").trim();
+    const importedNote = (wp.rtzNote || "").trim();
     const manualNote = (waypointNotes[wp.id] || "").trim();
     return { wp, index, note: [importedNote, manualNote].filter(Boolean).join("\n\n"), importedNote, manualNote, passage: source };
   }).filter(item => item.note) : [], [route, waypointNotes, passage]);
@@ -202,7 +209,7 @@ export default function NavBriefBuilderPage() {
     route.waypoints.forEach((wp, index) => {
       const source = navStationForRouteWaypoint(passage, wp, index);
       if (!source || !Number.isFinite(source.lat) || !Number.isFinite(source.lon)) return;
-      const delta = nmBetween(wp, { lat: Number(source.lat), lon: Number(source.lon), id: "", name: "" });
+      const delta = nmBetween(wp, { lat: Number(source.lat), lon: Number(source.lon) });
       if (delta > 0.05) issues.push(`${wp.name}: position differs by ${delta.toFixed(2)} NM`);
     });
     return issues.slice(0, 8);
@@ -309,9 +316,9 @@ export default function NavBriefBuilderPage() {
       <section className="no-print mt-2 grid grid-cols-1 gap-2 md:grid-cols-3">{status.map(item => <div key={item.label} className={`border px-3 py-2 ${sub}`}><div className={`text-[9px] font-black uppercase tracking-[.18em] ${muted}`}>{item.label}</div><div className="mt-1 flex items-center justify-between"><span className={`text-[14px] font-black ${item.value === "READY" ? accent : muted}`}>{item.value}</span><span className={`font-mono text-[10px] ${muted}`}>{item.detail}</span></div></div>)}</section>
 
       <section className="no-print mt-2 grid grid-cols-1 gap-2 xl:grid-cols-4">
-        <div className={`border p-3 ${panel}`}><div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>01 · Route</div><h2 className="mt-1 text-[15px] font-black">RTZ / CURRENT ROUTE</h2><p className={`mt-1 text-[11px] leading-5 ${muted}`}>RTZ remains the authoritative route geometry.</p><input type="file" accept=".rtz,.xml,.txt" onChange={loadRtz} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} /><button onClick={() => void loadCurrentNavDashRoute(false)} className={`mt-2 w-full border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Use Current NavDash Route</button><div className={`mt-2 min-h-[16px] font-mono text-[10px] ${muted}`}>{routeSource || "NO ROUTE SOURCE"}</div>{routeError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{routeError}</div>}</div>
+        <div className={`border p-3 ${panel}`}><div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>01 · Route</div><h2 className="mt-1 text-[15px] font-black">RTZ / CURRENT ROUTE</h2><p className={`mt-1 text-[11px] leading-5 ${muted}`}>RTZ is authoritative for route geometry and NavStation leg notes.</p><input type="file" accept=".rtz,.xml,.txt" onChange={loadRtz} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} /><button onClick={() => void loadCurrentNavDashRoute(false)} className={`mt-2 w-full border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Use Current NavDash Route</button><div className={`mt-2 min-h-[16px] font-mono text-[10px] ${muted}`}>{routeSource || "NO ROUTE SOURCE"}</div>{routeError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{routeError}</div>}</div>
 
-        <div className={`border p-3 ${panel}`}><div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>02 · NavStation</div><h2 className="mt-1 text-[15px] font-black">PASSAGE PLAN PDF</h2><p className={`mt-1 text-[11px] leading-5 ${muted}`}>Imports voyage details, waypoint metadata and remarks. Draft and UKC data are intentionally ignored.</p><input type="file" accept="application/pdf,.pdf" onChange={loadPassagePlan} disabled={passageLoading} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} /><div className={`mt-2 font-mono text-[10px] ${muted}`}>{passageLoading ? "READING PASSAGE PLAN..." : passageFile ? `FILE · ${passageFile}` : "NO NAVSTATION PLAN"}</div>{passage && <div className={`mt-2 text-[10px] leading-4 ${muted}`}>{passage.voyageNumber ? `VOY ${passage.voyageNumber} · ` : ""}{passage.routeName || "ROUTE"}{passage.totalDistanceNm ? ` · ${passage.totalDistanceNm.toFixed(1)} NM` : ""}</div>}{passageError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{passageError}</div>}{passageMismatches.length > 0 && <div className="mt-2 border border-amber-500/60 bg-amber-950/20 px-3 py-2 text-[10px] leading-4 text-amber-200"><b>REVIEW MISMATCHES</b>{passageMismatches.map(item => <div key={item}>• {item}</div>)}</div>}</div>
+        <div className={`border p-3 ${panel}`}><div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>02 · NavStation</div><h2 className="mt-1 text-[15px] font-black">PASSAGE PLAN PDF</h2><p className={`mt-1 text-[11px] leading-5 ${muted}`}>Imports voyage details and waypoint metadata. Waypoint notes come from the RTZ. Draft and UKC data are intentionally ignored.</p><input type="file" accept="application/pdf,.pdf" onChange={loadPassagePlan} disabled={passageLoading} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} /><div className={`mt-2 font-mono text-[10px] ${muted}`}>{passageLoading ? "READING PASSAGE PLAN..." : passageFile ? `FILE · ${passageFile}` : "NO NAVSTATION PLAN"}</div>{passage && <div className={`mt-2 text-[10px] leading-4 ${muted}`}>{passage.voyageNumber ? `VOY ${passage.voyageNumber} · ` : ""}{passage.routeName || "ROUTE"}{passage.totalDistanceNm ? ` · ${passage.totalDistanceNm.toFixed(1)} NM` : ""}</div>}{passageError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{passageError}</div>}{passageMismatches.length > 0 && <div className="mt-2 border border-amber-500/60 bg-amber-950/20 px-3 py-2 text-[10px] leading-4 text-amber-200"><b>REVIEW MISMATCHES</b>{passageMismatches.map(item => <div key={item}>• {item}</div>)}</div>}</div>
 
         <div className={`border p-3 ${panel}`}><div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>03 · User Chart</div><h2 className="mt-1 text-[15px] font-black">USER LAYER</h2><p className={`mt-1 text-[11px] leading-5 ${muted}`}>Navtor user-chart XML, JSON / GeoJSON, or CSV point marks.</p><input type="file" accept=".xml,.json,.geojson,.csv,.txt" onChange={loadUserChart} className={`mt-3 w-full border px-3 py-2 text-[11px] ${input}`} /><div className={`mt-2 font-mono text-[10px] ${muted}`}>{userChartFile ? `FILE · ${userChartFile}` : userMarks.length ? `SAVED LAYER · ${userMarks.length} MARKS` : "NO USER CHART"}</div>{userChartError && <div className="mt-2 border border-red-500/50 bg-red-950/30 px-3 py-2 text-[11px] text-red-200">{userChartError}</div>}</div>
 
@@ -320,12 +327,12 @@ export default function NavBriefBuilderPage() {
 
       <section className={`no-print mt-2 border p-3 ${panel}`}>
         <div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>Waypoint Notes</div>
-        <div className={`mt-1 text-[10px] leading-4 ${muted}`}>NavStation waypoint remarks print automatically. Manual text is only added to the brief after you press Add / Update Note.</div>
+        <div className={`mt-1 text-[10px] leading-4 ${muted}`}>RTZ / NavStation leg notes print automatically. Manual text is only added after you press Add / Update Note.</div>
         <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-[320px_1fr]">
-          <div><label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Select waypoint<select value={selectedWp?.id || ""} onChange={e => { const id = e.target.value; setSelectedWaypoint(id); setNoteDraft(waypointNotes[id] || ""); setNoteConfirmation(""); }} disabled={!route} className={`mt-1 w-full border px-3 py-2 text-[11px] normal-case tracking-normal ${input}`}>{route?.waypoints.map((wp, index) => <option key={wp.id} value={wp.id}>{index + 1}. {wp.name}</option>)}</select></label>{selectedWp && (() => { const index = route!.waypoints.findIndex(wp => wp.id === selectedWp.id); const source = navStationForRouteWaypoint(passage, selectedWp, index); return source ? <div className={`mt-2 border p-2 text-[10px] leading-4 ${sub}`}><b>NAVSTATION DATA</b><br/>{source.xtdStbdNm != null || source.xtdPortNm != null ? `XTD STBD ${source.xtdStbdNm ?? "--"} NM · PORT ${source.xtdPortNm ?? "--"} NM` : "XTD --"}{source.turnRadiusNm != null ? ` · RAD ${source.turnRadiusNm} NM` : ""}{source.references?.length ? <><br/>REF · {source.references.join(" / ")}</> : null}{source.remarks ? <><br/><br/><b>IMPORTED NOTE · WILL PRINT</b><br/>{source.remarks}</> : <><br/><br/><b>NO NAVSTATION NOTE</b></>}</div> : <div className={`mt-2 border p-2 text-[10px] ${sub}`}><b>NO NAVSTATION DATA FOR THIS WAYPOINT</b></div>; })()}</div>
+          <div><label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Select waypoint<select value={selectedWp?.id || ""} onChange={e => { const id = e.target.value; setSelectedWaypoint(id); setNoteDraft(waypointNotes[id] || ""); setNoteConfirmation(""); }} disabled={!route} className={`mt-1 w-full border px-3 py-2 text-[11px] normal-case tracking-normal ${input}`}>{route?.waypoints.map((wp, index) => <option key={wp.id} value={wp.id}>{index + 1}. {wp.name}</option>)}</select></label>{selectedWp && (() => { const index = route!.waypoints.findIndex(wp => wp.id === selectedWp.id); const source = navStationForRouteWaypoint(passage, selectedWp, index); return <div className={`mt-2 border p-2 text-[10px] leading-4 ${sub}`}><b>{source ? "NAVSTATION DATA" : "ROUTE DATA"}</b>{source ? <><br/>{source.xtdStbdNm != null || source.xtdPortNm != null ? `XTD STBD ${source.xtdStbdNm ?? "--"} NM · PORT ${source.xtdPortNm ?? "--"} NM` : "XTD --"}{source.turnRadiusNm != null ? ` · RAD ${source.turnRadiusNm} NM` : ""}{source.references?.length ? <><br/>REF · {source.references.join(" / ")}</> : null}</> : null}{selectedWp.rtzNote ? <><br/><br/><b>RTZ NOTE · WILL PRINT</b><br/>{selectedWp.rtzNote}</> : <><br/><br/><b>NO RTZ NOTE</b></>}</div>; })()}</div>
           <div><label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Manual note for selected waypoint<textarea value={noteDraft} onChange={e => { setNoteDraft(e.target.value); setNoteConfirmation(""); }} disabled={!selectedWp} className={`mt-1 min-h-32 w-full resize-y border p-3 text-[11px] leading-5 normal-case tracking-normal ${input}`} placeholder="Operational note, local condition, reference, call point, hazard, watch item..." /></label><div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={addWaypointNote} disabled={!selectedWp} className="border border-[#c9a227] bg-[#c9a227] px-4 py-2 text-[11px] font-black uppercase tracking-[.08em] text-black disabled:opacity-40">Add / Update Note</button>{selectedWp && waypointNotes[selectedWp.id]?.trim() ? <span className={`text-[10px] font-black uppercase ${accent}`}>MANUAL NOTE SAVED</span> : null}{noteConfirmation ? <span className={`text-[10px] font-black uppercase ${accent}`}>{noteConfirmation}</span> : null}</div></div>
         </div>
-        <div className={`mt-2 text-[10px] ${muted}`}>{printedNotes.length ? `${printedNotes.length} waypoint note${printedNotes.length === 1 ? "" : "s"} will print. Waypoints with no imported or confirmed manual note are omitted.` : "No waypoint notes will print."}</div>
+        <div className={`mt-2 text-[10px] ${muted}`}>{printedNotes.length ? `${printedNotes.length} waypoint note${printedNotes.length === 1 ? "" : "s"} will print. Waypoints with no RTZ or confirmed manual note are omitted.` : "No waypoint notes will print."}</div>
       </section>
 
       <section className={`print-panel mt-2 border p-4 ${panel}`}>
