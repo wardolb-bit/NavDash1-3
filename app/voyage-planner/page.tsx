@@ -166,10 +166,19 @@ export default function VoyagePlannerPage() {
 
           <section className={`border p-3 ${panel}`}>
             <div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Timing Controls</div>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="mt-3 grid gap-3">
               <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Departure</span><input type="datetime-local" value={departure} onChange={(e) => setDeparture(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></label>
-              <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Waypoint</span><select disabled={!route} value={resolvedTargetWaypointIndex ?? ""} onChange={(e) => setTargetWaypointIndex(Number(e.target.value))} className={`w-full border px-3 py-2 text-base font-mono ${control}`}>{route?.waypoints.map((wp, index) => <option key={`${wp.id}-${index}`} value={index}>{index + 1} · {wp.name}</option>)}</select></label>
-              <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Arrival · Optional</span><input type="datetime-local" value={targetArrival} onChange={(e) => setTargetArrival(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></label>
+
+              <div className={`border-2 border-[#c9a227] p-3 ${day ? "bg-amber-50" : "bg-[#c9a227]/10"}`}>
+                <div className="mb-2 text-[10px] font-black uppercase tracking-[.16em] text-[#c9a227]">Arrival Target Waypoint</div>
+                <select disabled={!route} value={resolvedTargetWaypointIndex ?? ""} onChange={(e) => setTargetWaypointIndex(Number(e.target.value))} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`}>
+                  {route ? route.waypoints.map((wp, index) => <option key={`${wp.id}-${index}`} value={index}>{index + 1} · {wp.name}</option>) : <option value="">Load route first</option>}
+                </select>
+                <div className={`mt-2 text-[10px] font-bold ${muted}`}>Choose the waypoint you want to hit at the target time below.</div>
+              </div>
+
+              <label className="block"><span className="mb-1 block text-[9px] font-black uppercase tracking-[.12em] text-[#c9a227]">Target Arrival At Selected Waypoint</span><input type="datetime-local" value={targetArrival} onChange={(e) => setTargetArrival(e.target.value)} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`} /></label>
+
               <div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Default Speed</span><div className="flex gap-2"><input type="number" min="0.1" step="0.1" value={defaultSpeed} onChange={(e) => setDefaultSpeed(e.target.value)} className={`min-w-0 flex-1 border px-3 py-2 text-base font-mono ${control}`} /><button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply All</button></div></div>
             </div>
 
