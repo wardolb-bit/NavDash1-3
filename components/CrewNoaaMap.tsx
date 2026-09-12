@@ -11,6 +11,8 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   const mapRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
+  const printLabelLayerRef = useRef<any>(null);
+  const printStyleRef = useRef<HTMLStyleElement | null>(null);
   const fittedRef = useRef(false);
 
   useEffect(() => {
@@ -58,15 +60,119 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         attribution: "NOAA Office of Coast Survey ENC Online",
       } as any).addTo(map);
 
+      const PrintControl = L.Control.extend({
+        options: { position: "topright" },
+        onAdd() {
+          const wrap = L.DomUtil.create("div", "leaflet-bar navdash-print-chart-control");
+          const button = L.DomUtil.create("button", "", wrap) as HTMLButtonElement;
+          button.type = "button";
+          button.title = "Print planning chart";
+          button.setAttribute("aria-label", "Print planning chart");
+          button.style.cssText = "width:auto;min-width:84px;height:34px;padding:0 9px;border:0;background:#071019;color:#f1d56b;font:800 10px/34px system-ui,sans-serif;letter-spacing:.08em;cursor:pointer;";
+          button.textContent = "PRINT CHART";
+          L.DomEvent.disableClickPropagation(wrap);
+          L.DomEvent.on(button, "click", () => void printPlanningChart());
+          return wrap;
+        },
+      });
+      new PrintControl().addTo(map);
+
       mapRef.current = map;
       window.setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    async function printPlanningChart() {
+      const map = mapRef.current;
+      const container = containerRef.current;
+      if (!map || !container || !route?.waypoints?.length) return;
+      const L = await import("leaflet");
+
+      if (printLabelLayerRef.current) {
+        printLabelLayerRef.current.remove();
+        printLabelLayerRef.current = null;
+      }
+
+      const rows = Array.from(document.querySelectorAll("table tbody tr"));
+      const labelGroup = L.layerGroup();
+
+      route.waypoints.slice(1).forEach((to, index) => {
+        const from = route.waypoints[index];
+        const row = rows[index] as HTMLTableRowElement | undefined;
+        const cells = row ? Array.from(row.querySelectorAll("td")) : [];
+        const speedInput = row?.querySelector('input[aria-label^="Speed for leg"]') as HTMLInputElement | null;
+        const speedText = speedInput?.value ? `${Number(speedInput.value).toFixed(1)} kt` : (cells[4]?.textContent?.trim() || "");
+        const etaText = cells[6]?.textContent?.trim() || "";
+
+        const midLat = (from.lat + to.lat) / 2;
+        let lon1 = from.lon;
+        let lon2 = to.lon;
+        if (Math.abs(lon2 - lon1) > 180) {
+          if (lon1 < lon2) lon1 += 360;
+          else lon2 += 360;
+        }
+        let midLon = (lon1 + lon2) / 2;
+        if (midLon > 180) midLon -= 360;
+        if (midLon < -180) midLon += 360;
+
+        const icon = L.divIcon({
+          className: "navdash-print-leg-label",
+          html: `<div style="white-space:nowrap;background:rgba(255,255,255,.94);color:#111827;border:1.5px solid #111827;border-radius:4px;padding:3px 5px;font:800 10px/1.2 system-ui,sans-serif;box-shadow:0 1px 2px rgba(0,0,0,.18)"><div>LEG ${index + 1} · ${speedText}</div><div>ETA ${etaText || "--"}</div></div>`,
+          iconSize: [140, 34],
+          iconAnchor: [70, 17],
+        });
+        L.marker([midLat, midLon], { icon, interactive: false }).addTo(labelGroup);
+      });
+
+      labelGroup.addTo(map);
+      printLabelLayerRef.current = labelGroup;
+      container.classList.add("navdash-chart-print-target");
+
+      const style = document.createElement("style");
+      style.setAttribute("data-navdash-chart-print", "true");
+      style.textContent = `
+        @media print {
+          @page { size: landscape; margin: 0.35in; }
+          body { background: #fff !important; }
+          body * { visibility: hidden !important; }
+          .navdash-chart-print-target,
+          .navdash-chart-print-target * { visibility: visible !important; }
+          .navdash-chart-print-target {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            background: #d9e4ea !important;
+          }
+          .navdash-chart-print-target .leaflet-control-container { display: none !important; }
+          .navdash-print-leg-label { visibility: visible !important; }
+        }
+      `;
+      document.head.appendChild(style);
+      printStyleRef.current = style;
+
+      const cleanup = () => {
+        container.classList.remove("navdash-chart-print-target");
+        printLabelLayerRef.current?.remove();
+        printLabelLayerRef.current = null;
+        printStyleRef.current?.remove();
+        printStyleRef.current = null;
+        window.removeEventListener("afterprint", cleanup);
+        window.setTimeout(() => map.invalidateSize(), 50);
+      };
+
+      window.addEventListener("afterprint", cleanup);
+      window.setTimeout(() => {
+        map.invalidateSize();
+        window.print();
+      }, 150);
     }
 
     void init();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [route]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,7 +209,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
             fillColor: nightMode ? "#08111a" : "#ffffff",
             fillOpacity: 1,
           });
-          marker.bindTooltip(`${index + 1} · ${wp.name}`, { direction: "top", opacity: 0.95 });
+          marker.bindTooltip(`${index + 1} · ${wp.name}`, { direction: "top", opacity: 0.95, permanent: false });
           marker.addTo(routeGroup);
         });
       }
@@ -152,6 +258,8 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
 
   useEffect(() => {
     return () => {
+      printLabelLayerRef.current?.remove();
+      printStyleRef.current?.remove();
       mapRef.current?.remove();
       mapRef.current = null;
     };
