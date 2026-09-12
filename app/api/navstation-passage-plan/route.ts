@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import "pdf-parse/worker";
 import { PDFParse } from "pdf-parse";
+import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -114,25 +115,10 @@ function parsePartC(text: string, waypoints: Map<number, ParsedWaypoint>) {
   }
 }
 
-function escapeRegExp(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function cleanRemarkLine(value: string, names: string[]) {
-  let text = value;
-  for (const name of names) text = text.replace(new RegExp(escapeRegExp(name), "ig"), " ");
-  text = text
-    .replace(/\b\d{1,3}\s+(?:Coastal|Ocean|Pilotage|fairway|channel)\b/gi, " ")
-    .replace(/\b(?:Coastal|Ocean|Pilotage|fairway|channel)\b/gi, " ")
-    .replace(/\b\d+(?:\.\d+)?\s*NM\b/gi, " ")
-    .replace(/\b(?:CPA|TCPA|Anti-grounding|Look ahead)\b[^\n]*/gi, " ")
-    .replace(/\bPage\s+\d+\b/gi, " ");
-  return clean(text);
-}
-
 function looksLikeRemark(value: string) {
-  if (!value || value.split(/\s+/).length < 5) return false;
-  return !/(?:Passage Plan|Leg safety parameters|Remarks\/Notes|Navigational warnings|Date prepared|Date approved|Last revision|WP No|WP Name|Passage type|XTD|Stbd|Port limits|MB480)/i.test(value);
+  const text = clean(value);
+  if (!text || text.split(/\s+/).length < 4) return false;
+  return !/(?:Passage Plan|Leg safety parameters|Remarks\/Notes|Navigational warnings|Date prepared|Date approved|Last revision|WP No|WP Name|Passage type|XTD|CPA|TCPA|Anti-grounding|Look ahead|MB480)/i.test(text);
 }
 
 function mergeRemark(wp: ParsedWaypoint, value: string) {
@@ -147,9 +133,6 @@ function mergeRemark(wp: ParsedWaypoint, value: string) {
 
 function parsePartD(text: string, waypoints: Map<number, ParsedWaypoint>) {
   const part = section(text, /Passage Plan, part D:[\s\S]*?Leg safety parameters\/Remarks/i, /Passage Plan, part E:/i);
-  const ignore = /^(Coastal|Ocean|Pilotage|fairway|channel|Page \d+)$/i;
-
-  // Keep the simple row parser for NavStation PDFs whose text layer is emitted in row order.
   for (const block of numberedBlocks(part)) {
     const wp = waypoints.get(block.number);
     if (!wp) continue;
@@ -159,57 +142,89 @@ function parsePartD(text: string, waypoints: Map<number, ParsedWaypoint>) {
       wp.xtdStbdNm = Number(xtd[1]);
       wp.xtdPortNm = Number(xtd[2]);
     }
-    const notes = block.lines
-      .filter(line => line && !ignore.test(line) && !/^\d+(?:\.\d+)?\s*NM(?:\s+\d+(?:\.\d+)?\s*NM)?$/i.test(line) && !/^(CPA|TCPA|Anti-grounding|Look ahead)/i.test(line))
-      .filter(line => line !== wp.name)
-      .filter(line => !/^\d+(?:\.\d+)?\s*NM\s+\d+(?:\.\d+)?\s*NM/i.test(line));
-    mergeRemark(wp, notes.join(" "));
   }
 }
 
-function flattenCells(row: unknown): string[] {
-  if (!Array.isArray(row)) return [];
-  return row.flatMap(cell => Array.isArray(cell) ? flattenCells(cell) : [clean(String(cell ?? ""))]).filter(Boolean);
-}
+type PositionedText = { str: string; x: number; y: number };
 
-function parsePartDFromTables(tableResult: any, waypoints: Map<number, ParsedWaypoint>) {
-  const entries = Array.from(waypoints.values()).sort((a, b) => a.number - b.number);
-  const pages = Array.isArray(tableResult?.pages) ? tableResult.pages : [];
-  for (const page of pages) {
-    const tables = Array.isArray(page?.tables) ? page.tables : [];
-    for (const table of tables) {
-      if (!Array.isArray(table)) continue;
-      for (const row of table) {
-        const cells = flattenCells(row);
-        if (!cells.length) continue;
-        const joined = clean(cells.join(" | "));
-        if (!joined || !/(?:Coastal|Ocean|Pilotage|fairway|channel|NM|Currents|winds|COG|SOG|sea state|weather|traffic|restriction|warning)/i.test(joined)) continue;
+async function parsePartDByPosition(data: Uint8Array, waypoints: Map<number, ParsedWaypoint>) {
+  const loadingTask = getDocument({ data, useSystemFonts: true, isEvalSupported: false });
+  const pdf = await loadingTask.promise;
+  try {
+    for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+      const page = await pdf.getPage(pageNumber);
+      const content = await page.getTextContent();
+      const items: PositionedText[] = (content.items as any[])
+        .filter(item => typeof item?.str === "string" && Array.isArray(item?.transform))
+        .map(item => ({ str: clean(item.str), x: Number(item.transform[4]), y: Number(item.transform[5]) }))
+        .filter(item => item.str && Number.isFinite(item.x) && Number.isFinite(item.y));
 
-        let wp: ParsedWaypoint | undefined;
-        const numberCell = cells.find(cell => /^\d{1,3}$/.test(cell));
-        if (numberCell) wp = waypoints.get(Number(numberCell));
-        if (!wp) {
-          wp = entries.find(item => cells.some(cell => cell.toLowerCase().includes(item.name.toLowerCase())));
-        }
-        if (!wp) continue;
+      const pageText = clean(items.map(item => item.str).join(" "));
+      if (!/Passage Plan, part D:/i.test(pageText) || !/Leg safety parameters\/Remarks/i.test(pageText)) continue;
 
-        const xtdMatches = Array.from(joined.matchAll(/(\d+(?:\.\d+)?)\s*NM/gi)).map(match => Number(match[1])).filter(Number.isFinite);
-        if (xtdMatches.length >= 2) {
-          wp.xtdStbdNm = xtdMatches[0];
-          wp.xtdPortNm = xtdMatches[1];
-        }
+      const remarkHeader = items.find(item => /Remarks\/Notes:/i.test(item.str));
+      if (!remarkHeader) continue;
+      const remarkX = remarkHeader.x;
 
-        const candidates = cells
-          .map(cell => cleanRemarkLine(cell, entries.map(item => item.name)))
-          .filter(looksLikeRemark)
-          .sort((a, b) => b.length - a.length);
-        if (candidates[0]) mergeRemark(wp, candidates[0]);
+      const entries = Array.from(waypoints.values()).sort((a, b) => a.number - b.number);
+      const anchors: Array<{ wp: ParsedWaypoint; y: number }> = [];
+
+      for (const wp of entries) {
+        const exact = items.find(item => clean(item.str).toLowerCase() === clean(wp.name).toLowerCase() && item.x < remarkX);
+        const contains = exact || items.find(item => item.x < remarkX && clean(item.str).toLowerCase().includes(clean(wp.name).toLowerCase()));
+        if (contains) anchors.push({ wp, y: contains.y });
       }
+
+      anchors.sort((a, b) => b.y - a.y);
+      if (!anchors.length) continue;
+
+      for (let i = 0; i < anchors.length; i += 1) {
+        const current = anchors[i];
+        const prevY = i === 0 ? current.y + 16 : (anchors[i - 1].y + current.y) / 2;
+        const nextY = i === anchors.length - 1 ? current.y - 16 : (current.y + anchors[i + 1].y) / 2;
+
+        const remarkItems = items
+          .filter(item => item.x >= remarkX - 3 && item.y <= prevY && item.y > nextY)
+          .sort((a, b) => {
+            if (Math.abs(a.y - b.y) > 1.5) return b.y - a.y;
+            return a.x - b.x;
+          });
+
+        const lines: Array<{ y: number; text: string }> = [];
+        for (const item of remarkItems) {
+          let line = lines.find(candidate => Math.abs(candidate.y - item.y) <= 1.5);
+          if (!line) {
+            line = { y: item.y, text: "" };
+            lines.push(line);
+          }
+          line.text = clean(`${line.text} ${item.str}`);
+        }
+        lines.sort((a, b) => b.y - a.y);
+        const remark = clean(lines.map(line => line.text).join(" "));
+        mergeRemark(current.wp, remark);
+      }
+
+      // XTD values are easier to recover from geometry than from flattened column-order text.
+      for (const { wp, y } of anchors) {
+        const rowItems = items
+          .filter(item => item.x < remarkX && Math.abs(item.y - y) <= 5)
+          .sort((a, b) => a.x - b.x);
+        const rowText = clean(rowItems.map(item => item.str).join(" "));
+        const xtd = Array.from(rowText.matchAll(/(\d+(?:\.\d+)?)\s*NM/gi)).map(match => Number(match[1])).filter(Number.isFinite);
+        if (xtd.length >= 2) {
+          wp.xtdStbdNm = xtd[0];
+          wp.xtdPortNm = xtd[1];
+        }
+      }
+
+      break;
     }
+  } finally {
+    await loadingTask.destroy().catch(() => undefined);
   }
 }
 
-function parsePassagePlan(text: string, fileName: string, tableResult?: any) {
+function parsePassagePlan(text: string, fileName: string) {
   const voyageNumber = first(text, /Voyage number:\s*([^\n]+?)(?=\s+Route name:)/i) || first(text, /Voyage No\.:\s*([^,\n]+)/i);
   const routeName = first(text, /Route name:\s*([^\n]+)/i) || first(text, /Voyage No\.:\s*[^,]+,\s*([^\)\n]+)/i);
   const totalDistanceNm = Number(first(text, /Total distance:\s*([\d.]+)\s*NM/i));
@@ -224,7 +239,6 @@ function parsePassagePlan(text: string, fileName: string, tableResult?: any) {
   const waypoints = parsePartA(text);
   parsePartC(text, waypoints);
   parsePartD(text, waypoints);
-  if (tableResult) parsePartDFromTables(tableResult, waypoints);
 
   return {
     sourceFile: fileName,
@@ -236,7 +250,7 @@ function parsePassagePlan(text: string, fileName: string, tableResult?: any) {
     etaLocal,
     totalDistanceNm: Number.isFinite(totalDistanceNm) ? totalDistanceNm : undefined,
     averageSpeedKt: Number.isFinite(averageSpeedKt) ? averageSpeedKt : undefined,
-    waypoints: Array.from(waypoints.values()).sort((a, b) => a.number - b.number),
+    waypoints,
   };
 }
 
@@ -251,17 +265,27 @@ export async function POST(request: NextRequest) {
     }
     if (file.size > MAX_FILE_BYTES) return NextResponse.json({ ok: false, error: "PDF exceeds the 30 MB NavDash upload limit." }, { status: 413 });
 
-    parser = new PDFParse({ data: new Uint8Array(await file.arrayBuffer()) });
+    const data = new Uint8Array(await file.arrayBuffer());
+    parser = new PDFParse({ data });
     const extracted = await parser.getText();
-    let tableResult: any = null;
-    try {
-      tableResult = await parser.getTable();
-    } catch {
-      tableResult = null;
-    }
-    const passage = parsePassagePlan(extracted.text, file.name, tableResult);
-    if (!passage.routeName && passage.waypoints.length < 2) throw new Error("This PDF does not look like a NavStation passage plan.");
-    return NextResponse.json({ ok: true, passage });
+    const passage = parsePassagePlan(extracted.text, file.name);
+    await parsePartDByPosition(data, passage.waypoints);
+
+    const response = {
+      sourceFile: passage.sourceFile,
+      voyageNumber: passage.voyageNumber,
+      routeName: passage.routeName,
+      departurePort: passage.departurePort,
+      destinationPort: passage.destinationPort,
+      etdLocal: passage.etdLocal,
+      etaLocal: passage.etaLocal,
+      totalDistanceNm: passage.totalDistanceNm,
+      averageSpeedKt: passage.averageSpeedKt,
+      waypoints: Array.from(passage.waypoints.values()).sort((a, b) => a.number - b.number),
+    };
+
+    if (!response.routeName && response.waypoints.length < 2) throw new Error("This PDF does not look like a NavStation passage plan.");
+    return NextResponse.json({ ok: true, passage: response });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "NavStation passage plan could not be read." }, { status: 422 });
   } finally {
