@@ -73,13 +73,19 @@ function simplifyAmiIssuedLine() {
     if (!heading) continue;
     const detail = heading.nextElementSibling;
     if (!(detail instanceof HTMLElement)) continue;
-    const firstNode = detail.firstChild;
-    if (!firstNode || firstNode.nodeType !== Node.TEXT_NODE) continue;
-    const text = firstNode.nodeValue || "";
-    const match = text.match(/ISSUED\s+(.+)$/i);
+
+    const nodes = Array.from(detail.childNodes);
+    const firstBreakIndex = nodes.findIndex(node => node.nodeName === "BR");
+    const leadNodes = firstBreakIndex >= 0 ? nodes.slice(0, firstBreakIndex) : nodes;
+    const leadText = leadNodes.map(node => node.textContent || "").join("").trim();
+    const match = leadText.match(/ISSUED\s+(.+)$/i);
     if (!match) continue;
+
     const simplified = `AMI Weather Issued: ${match[1].trim()}`;
-    if (firstNode.nodeValue !== simplified) firstNode.nodeValue = simplified;
+    if (leadText === simplified) continue;
+
+    for (const node of leadNodes) node.remove();
+    detail.insertBefore(document.createTextNode(simplified), detail.firstChild);
   }
 }
 
