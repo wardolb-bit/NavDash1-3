@@ -172,6 +172,8 @@ export default function NavBriefBuilderPage() {
   const [passageFile, setPassageFile] = useState("");
   const [waypointNotes, setWaypointNotes] = useState<Record<string, string>>({});
   const [selectedWaypoint, setSelectedWaypoint] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [noteConfirmation, setNoteConfirmation] = useState("");
 
   const legs = useMemo(() => route ? segmentRows(route.waypoints) : [], [route]);
   const distanceNm = useMemo(() => route ? totalDistance(route.waypoints) : 0, [route]);
@@ -186,7 +188,12 @@ export default function NavBriefBuilderPage() {
   const strongestGust = useMemo(() => ami ? maxBy(ami.forecastPoints, point => point.gustKt) : null, [ami]);
   const highestSea = useMemo(() => ami ? maxBy(ami.forecastPoints, point => point.significantWaveM) : null, [ami]);
   const selectedWp = route?.waypoints.find(wp => wp.id === selectedWaypoint) || route?.waypoints[0] || null;
-  const printedNotes = useMemo(() => route ? route.waypoints.map((wp, index) => ({ wp, index, note: (waypointNotes[wp.id] || "").trim(), passage: navStationForRouteWaypoint(passage, wp, index) })).filter(item => item.note) : [], [route, waypointNotes, passage]);
+  const printedNotes = useMemo(() => route ? route.waypoints.map((wp, index) => {
+    const source = navStationForRouteWaypoint(passage, wp, index);
+    const importedNote = (source?.remarks || "").trim();
+    const manualNote = (waypointNotes[wp.id] || "").trim();
+    return { wp, index, note: [importedNote, manualNote].filter(Boolean).join("\n\n"), importedNote, manualNote, passage: source };
+  }).filter(item => item.note) : [], [route, waypointNotes, passage]);
   const passageMismatches = useMemo(() => {
     if (!route || !passage) return [] as string[];
     const issues: string[] = [];
@@ -212,13 +219,13 @@ export default function NavBriefBuilderPage() {
   async function loadCurrentNavDashRoute(silent = false) {
     if (!silent) setRouteError("");
     const local = readCurrentRoute();
-    if (local) { setRoute(local); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); setSelectedWaypoint(local.waypoints[0]?.id || ""); return; }
+    if (local) { setRoute(local); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); setSelectedWaypoint(local.waypoints[0]?.id || ""); setNoteDraft(""); setNoteConfirmation(""); return; }
     try {
       const response = await fetch("/api/route-state", { cache: "no-store" });
       if (!response.ok) throw new Error(`Route state API returned ${response.status}`);
       const serverRoute = normalizeRoutePayload(await response.json());
       if (!serverRoute) throw new Error("No current NavDash route was found.");
-      setRoute(serverRoute); setRouteSource("ROUTE-STATE API FALLBACK"); setSelectedWaypoint(serverRoute.waypoints[0]?.id || "");
+      setRoute(serverRoute); setRouteSource("ROUTE-STATE API FALLBACK"); setSelectedWaypoint(serverRoute.waypoints[0]?.id || ""); setNoteDraft(""); setNoteConfirmation("");
     } catch (error) { if (!silent) setRouteError(error instanceof Error ? error.message : "Could not load current NavDash route."); }
   }
   useEffect(() => {
@@ -226,7 +233,7 @@ export default function NavBriefBuilderPage() {
     refresh(); window.addEventListener("storage", refresh); window.addEventListener("navdash-ami-overlay-updated", refresh); window.addEventListener("navdash-user-chart-updated", refresh);
     return () => { window.removeEventListener("storage", refresh); window.removeEventListener("navdash-ami-overlay-updated", refresh); window.removeEventListener("navdash-user-chart-updated", refresh); };
   }, []);
-  async function loadRtz(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setRouteError(""); try { const parsed = parseRtz(await file.text()); setRoute(parsed); setRouteSource(`RTZ · ${file.name}`); setSelectedWaypoint(parsed.waypoints[0]?.id || ""); } catch (e) { setRouteError(e instanceof Error ? e.message : "Unable to load route."); } }
+  async function loadRtz(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setRouteError(""); try { const parsed = parseRtz(await file.text()); setRoute(parsed); setRouteSource(`RTZ · ${file.name}`); setSelectedWaypoint(parsed.waypoints[0]?.id || ""); setNoteDraft(""); setNoteConfirmation(""); } catch (e) { setRouteError(e instanceof Error ? e.message : "Unable to load route."); } }
   async function loadUserChart(event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file) return; setUserChartError(""); try { const marks = parseUserChartText(await file.text(), file.name); setUserMarks(marks); setUserChartFile(file.name); window.localStorage.setItem(USER_CHART_STORAGE_KEY, JSON.stringify(marks)); window.dispatchEvent(new CustomEvent("navdash-user-chart-updated")); } catch (e) { setUserChartError(e instanceof Error ? e.message : "Unable to load user chart."); } }
   async function loadAmiPdf(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]; if (!file) return;
@@ -251,18 +258,19 @@ export default function NavBriefBuilderPage() {
       setPassage(json.passage);
       if (Number.isFinite(json.passage.averageSpeedKt)) setPlannedSpeed(Number(json.passage.averageSpeedKt).toFixed(1));
       const etd = parseLocalDmy(json.passage.etdLocal); if (etd) setDeparture(etd);
-      if (route) {
-        setWaypointNotes(current => {
-          const next = { ...current };
-          route.waypoints.forEach((wp, index) => {
-            const source = navStationForRouteWaypoint(json.passage!, wp, index);
-            if (source?.remarks && !next[wp.id]?.trim()) next[wp.id] = source.remarks;
-          });
-          return next;
-        });
-      }
     } catch (e) { setPassageError(e instanceof Error ? e.message : "NavStation passage plan could not be read."); }
     finally { setPassageLoading(false); }
+  }
+  function addWaypointNote() {
+    if (!selectedWp) return;
+    const note = noteDraft.trim();
+    setWaypointNotes(current => {
+      const next = { ...current };
+      if (note) next[selectedWp.id] = note;
+      else delete next[selectedWp.id];
+      return next;
+    });
+    setNoteConfirmation(note ? `✓ ADDED TO PRINT · ${selectedWp.name}` : `✓ MANUAL NOTE CLEARED · ${selectedWp.name}`);
   }
   function refreshInputs() { const current = readCurrentRoute(); if (current) { setRoute(current); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); setSelectedWaypoint(value => value || current.waypoints[0]?.id || ""); } setUserMarks(readUserMarks()); setAmi(readAmi()); }
 
@@ -312,11 +320,12 @@ export default function NavBriefBuilderPage() {
 
       <section className={`no-print mt-2 border p-3 ${panel}`}>
         <div className={`text-[9px] font-black uppercase tracking-[.18em] ${accent}`}>Waypoint Notes</div>
+        <div className={`mt-1 text-[10px] leading-4 ${muted}`}>NavStation waypoint remarks print automatically. Manual text is only added to the brief after you press Add / Update Note.</div>
         <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-[320px_1fr]">
-          <div><label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Select waypoint<select value={selectedWp?.id || ""} onChange={e => setSelectedWaypoint(e.target.value)} disabled={!route} className={`mt-1 w-full border px-3 py-2 text-[11px] normal-case tracking-normal ${input}`}>{route?.waypoints.map((wp, index) => <option key={wp.id} value={wp.id}>{index + 1}. {wp.name}</option>)}</select></label>{selectedWp && (() => { const index = route!.waypoints.findIndex(wp => wp.id === selectedWp.id); const source = navStationForRouteWaypoint(passage, selectedWp, index); return source ? <div className={`mt-2 border p-2 text-[10px] leading-4 ${sub}`}><b>NAVSTATION DATA</b><br/>{source.xtdStbdNm != null || source.xtdPortNm != null ? `XTD STBD ${source.xtdStbdNm ?? "--"} NM · PORT ${source.xtdPortNm ?? "--"} NM` : "XTD --"}{source.turnRadiusNm != null ? ` · RAD ${source.turnRadiusNm} NM` : ""}{source.references?.length ? <><br/>REF · {source.references.join(" / ")}</> : null}</div> : null; })()}</div>
-          <label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Note for selected waypoint<textarea value={selectedWp ? waypointNotes[selectedWp.id] || "" : ""} onChange={e => selectedWp && setWaypointNotes(current => ({ ...current, [selectedWp.id]: e.target.value }))} disabled={!selectedWp} className={`mt-1 min-h-32 w-full resize-y border p-3 text-[11px] leading-5 normal-case tracking-normal ${input}`} placeholder="Operational note, local condition, reference, call point, hazard, watch item..." /></label>
+          <div><label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Select waypoint<select value={selectedWp?.id || ""} onChange={e => { const id = e.target.value; setSelectedWaypoint(id); setNoteDraft(waypointNotes[id] || ""); setNoteConfirmation(""); }} disabled={!route} className={`mt-1 w-full border px-3 py-2 text-[11px] normal-case tracking-normal ${input}`}>{route?.waypoints.map((wp, index) => <option key={wp.id} value={wp.id}>{index + 1}. {wp.name}</option>)}</select></label>{selectedWp && (() => { const index = route!.waypoints.findIndex(wp => wp.id === selectedWp.id); const source = navStationForRouteWaypoint(passage, selectedWp, index); return source ? <div className={`mt-2 border p-2 text-[10px] leading-4 ${sub}`}><b>NAVSTATION DATA</b><br/>{source.xtdStbdNm != null || source.xtdPortNm != null ? `XTD STBD ${source.xtdStbdNm ?? "--"} NM · PORT ${source.xtdPortNm ?? "--"} NM` : "XTD --"}{source.turnRadiusNm != null ? ` · RAD ${source.turnRadiusNm} NM` : ""}{source.references?.length ? <><br/>REF · {source.references.join(" / ")}</> : null}{source.remarks ? <><br/><br/><b>IMPORTED NOTE · WILL PRINT</b><br/>{source.remarks}</> : <><br/><br/><b>NO NAVSTATION NOTE</b></>}</div> : <div className={`mt-2 border p-2 text-[10px] ${sub}`}><b>NO NAVSTATION DATA FOR THIS WAYPOINT</b></div>; })()}</div>
+          <div><label className={`text-[10px] font-black uppercase tracking-[.08em] ${muted}`}>Manual note for selected waypoint<textarea value={noteDraft} onChange={e => { setNoteDraft(e.target.value); setNoteConfirmation(""); }} disabled={!selectedWp} className={`mt-1 min-h-32 w-full resize-y border p-3 text-[11px] leading-5 normal-case tracking-normal ${input}`} placeholder="Operational note, local condition, reference, call point, hazard, watch item..." /></label><div className="mt-2 flex flex-wrap items-center gap-2"><button type="button" onClick={addWaypointNote} disabled={!selectedWp} className="border border-[#c9a227] bg-[#c9a227] px-4 py-2 text-[11px] font-black uppercase tracking-[.08em] text-black disabled:opacity-40">Add / Update Note</button>{selectedWp && waypointNotes[selectedWp.id]?.trim() ? <span className={`text-[10px] font-black uppercase ${accent}`}>MANUAL NOTE SAVED</span> : null}{noteConfirmation ? <span className={`text-[10px] font-black uppercase ${accent}`}>{noteConfirmation}</span> : null}</div></div>
         </div>
-        <div className={`mt-2 text-[10px] ${muted}`}>{printedNotes.length ? `${printedNotes.length} waypoint note${printedNotes.length === 1 ? "" : "s"} will print as full-width note blocks.` : "No waypoint notes added yet."}</div>
+        <div className={`mt-2 text-[10px] ${muted}`}>{printedNotes.length ? `${printedNotes.length} waypoint note${printedNotes.length === 1 ? "" : "s"} will print. Waypoints with no imported or confirmed manual note are omitted.` : "No waypoint notes will print."}</div>
       </section>
 
       <section className={`print-panel mt-2 border p-4 ${panel}`}>
