@@ -106,10 +106,7 @@ function parsePartC(text: string, waypoints: Map<number, ParsedWaypoint>) {
     const body = block.lines.filter(Boolean).join("\n");
     const radius = body.match(/(\d+(?:\.\d+)?)\s*NM\s+\d+(?:\.\d+)?°\/min/i);
     if (radius) wp.turnRadiusNm = Number(radius[1]);
-    const refs: string[] = [];
-    for (const line of block.lines) {
-      if (/light/i.test(line) && !/^WP/i.test(line)) refs.push(clean(line));
-    }
+    const refs = block.lines.filter(line => /light/i.test(line) && !/^WP/i.test(line)).map(clean);
     if (refs.length) wp.references = Array.from(new Set(refs));
   }
 }
@@ -118,117 +115,105 @@ function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function cleanRemarkLine(value: string, names: string[]) {
+function stripPartDTechnicalText(value: string, names: string[]) {
   let text = value;
   for (const name of names) text = text.replace(new RegExp(escapeRegExp(name), "ig"), " ");
-  text = text
-    .replace(/\b\d{1,3}\s+(?:Coastal|Ocean|Pilotage|fairway|channel)\b/gi, " ")
+  return clean(text
     .replace(/\b(?:Coastal|Ocean|Pilotage|fairway|channel)\b/gi, " ")
     .replace(/\b\d+(?:\.\d+)?\s*NM\b/gi, " ")
-    .replace(/\b(?:CPA|TCPA|Anti-grounding|Look ahead)\b[^\n]*/gi, " ")
-    .replace(/\bPage\s+\d+\b/gi, " ");
-  return clean(text);
+    .replace(/^\s*\d{1,3}\s+/, " ")
+    .replace(/\bPage\s+\d+\b/gi, " "));
 }
 
-function looksLikeRemark(value: string) {
-  if (!value || value.split(/\s+/).length < 5) return false;
-  return !/(?:Passage Plan|Leg safety parameters|Remarks\/Notes|Navigational warnings|Date prepared|Date approved|Last revision|WP No|WP Name|Passage type|XTD|Stbd|Port limits|MB480)/i.test(value);
+function isPartDProse(value: string) {
+  const text = clean(value);
+  if (!text || text.split(/\s+/).length < 4) return false;
+  if (!/[a-z]{3}/i.test(text)) return false;
+  return !/(?:Passage Plan|Leg safety parameters|Remarks\/Notes|Navigational warnings|traffic density|prevailing weather|local restrictions|Date prepared|Date approved|Last revision|WP No|WP Name|Passage type|XTD|Stbd|Port|CPA|TCPA|Anti-grounding|Look ahead|MB480|Pearl Harbor to Big Island)/i.test(text);
 }
 
 function mergeRemark(wp: ParsedWaypoint, value: string) {
   const remark = clean(value);
-  if (!looksLikeRemark(remark)) return;
-  if (!wp.remarks || !looksLikeRemark(wp.remarks)) {
-    wp.remarks = remark;
-    return;
-  }
-  if (!wp.remarks.includes(remark) && !remark.includes(wp.remarks)) wp.remarks = clean(`${wp.remarks} ${remark}`);
+  if (!isPartDProse(remark)) return;
+  if (!wp.remarks) wp.remarks = remark;
+  else if (!wp.remarks.includes(remark) && !remark.includes(wp.remarks)) wp.remarks = clean(`${wp.remarks} ${remark}`);
 }
 
-function parsePartD(text: string, waypoints: Map<number, ParsedWaypoint>) {
+function parsePartDNavStation(text: string, waypoints: Map<number, ParsedWaypoint>) {
   const part = section(text, /Passage Plan, part D:[\s\S]*?Leg safety parameters\/Remarks/i, /Passage Plan, part E:/i);
-  const ignore = /^(Coastal|Ocean|Pilotage|fairway|channel|Page \d+)$/i;
+  if (!part) return;
 
-  for (const block of numberedBlocks(part)) {
-    const wp = waypoints.get(block.number);
-    if (!wp) continue;
-    const body = block.lines.filter(Boolean).join("\n");
-    const xtd = body.match(/(\d+(?:\.\d+)?)\s*NM\s+(\d+(?:\.\d+)?)\s*NM/i);
-    if (xtd) {
-      wp.xtdStbdNm = Number(xtd[1]);
-      wp.xtdPortNm = Number(xtd[2]);
-    }
-    const notes = block.lines
-      .filter(line => line && !ignore.test(line) && !/^\d+(?:\.\d+)?\s*NM(?:\s+\d+(?:\.\d+)?\s*NM)?$/i.test(line) && !/^(CPA|TCPA|Anti-grounding|Look ahead)/i.test(line))
-      .filter(line => line !== wp.name)
-      .filter(line => !/^\d+(?:\.\d+)?\s*NM\s+\d+(?:\.\d+)?\s*NM/i.test(line));
-    mergeRemark(wp, notes.join(" "));
-  }
-}
-
-function flattenCells(row: unknown): string[] {
-  if (!Array.isArray(row)) return [];
-  return row.flatMap(cell => Array.isArray(cell) ? flattenCells(cell) : [clean(String(cell ?? ""))]).filter(Boolean);
-}
-
-function parsePartDFromTables(tableResult: any, waypoints: Map<number, ParsedWaypoint>) {
+  const lines = part.split(/\r?\n/).map(line => line.trim());
   const entries = Array.from(waypoints.values()).sort((a, b) => a.number - b.number);
-  const pages = Array.isArray(tableResult?.pages) ? tableResult.pages : [];
-  for (const page of pages) {
-    const tables = Array.isArray(page?.tables) ? page.tables : [];
-    for (const table of tables) {
-      if (!Array.isArray(table)) continue;
-      for (const row of table) {
-        const cells = flattenCells(row);
-        if (!cells.length) continue;
-        const joined = clean(cells.join(" | "));
-        if (!joined || !/(?:Coastal|Ocean|Pilotage|fairway|channel|NM|Currents|winds|COG|SOG|sea state|weather|traffic|restriction|warning)/i.test(joined)) continue;
+  const names = entries.map(wp => wp.name).filter(Boolean);
+  const anchors = new Map<number, number>();
 
-        let wp: ParsedWaypoint | undefined;
-        const numberCell = cells.find(cell => /^\d{1,3}$/.test(cell));
-        if (numberCell) wp = waypoints.get(Number(numberCell));
-        if (!wp) wp = entries.find(item => cells.some(cell => cell.toLowerCase().includes(item.name.toLowerCase())));
-        if (!wp) continue;
+  for (const wp of entries) {
+    const target = clean(wp.name).toLowerCase();
+    const lineIndex = lines.findIndex(line => clean(line).toLowerCase() === target || clean(line).toLowerCase().includes(target));
+    if (lineIndex >= 0) anchors.set(wp.number, lineIndex);
+  }
 
-        const xtdMatches = Array.from(joined.matchAll(/(\d+(?:\.\d+)?)\s*NM/gi)).map(match => Number(match[1])).filter(Number.isFinite);
-        if (xtdMatches.length >= 2) {
-          wp.xtdStbdNm = xtdMatches[0];
-          wp.xtdPortNm = xtdMatches[1];
-        }
+  // NavStation Part D uses a fixed waypoint-name / XTD / remarks layout. Recover XTDs
+  // from the few lines around each waypoint name instead of trying to parse the whole PDF table.
+  for (const wp of entries) {
+    const anchor = anchors.get(wp.number);
+    if (anchor == null) continue;
+    const nearby = lines.slice(Math.max(0, anchor - 2), Math.min(lines.length, anchor + 4)).join(" ");
+    const xtd = Array.from(nearby.matchAll(/(\d+(?:\.\d+)?)\s*NM/gi)).map(match => Number(match[1])).filter(Number.isFinite);
+    if (xtd.length >= 2) {
+      wp.xtdStbdNm = xtd[0];
+      wp.xtdPortNm = xtd[1];
+    }
+  }
 
-        const candidates = cells
-          .map(cell => cleanRemarkLine(cell, entries.map(item => item.name)))
-          .filter(looksLikeRemark)
-          .sort((a, b) => b.length - a.length);
-        if (candidates[0]) mergeRemark(wp, candidates[0]);
+  // Remarks can appear before, beside, or after the waypoint name in NavStation's PDF text layer.
+  // Keep only prose lines and attach each one to the closest waypoint-name line.
+  let previousAssignment: { wp: ParsedWaypoint; lineIndex: number } | null = null;
+  for (let i = 0; i < lines.length; i += 1) {
+    const candidate = stripPartDTechnicalText(lines[i], names);
+    const wordCount = candidate.split(/\s+/).filter(Boolean).length;
+    const prose = isPartDProse(candidate);
+    const continuation = previousAssignment && i - previousAssignment.lineIndex <= 2 && wordCount >= 3 && /[a-z]{3}/i.test(candidate) && !/\bNM\b/i.test(lines[i]);
+    if (!prose && !continuation) continue;
+
+    let bestWp: ParsedWaypoint | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const wp of entries) {
+      const anchor = anchors.get(wp.number);
+      if (anchor == null) continue;
+      const distance = Math.abs(anchor - i);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestWp = wp;
       }
     }
+    if (!bestWp || bestDistance > 3) continue;
+
+    mergeRemark(bestWp, candidate);
+    previousAssignment = { wp: bestWp, lineIndex: i };
   }
 }
 
-function parsePassagePlan(text: string, fileName: string, tableResult?: any) {
+function parsePassagePlan(text: string, fileName: string) {
   const voyageNumber = first(text, /Voyage number:\s*([^\n]+?)(?=\s+Route name:)/i) || first(text, /Voyage No\.:\s*([^,\n]+)/i);
   const routeName = first(text, /Route name:\s*([^\n]+)/i) || first(text, /Voyage No\.:\s*[^,]+,\s*([^\)\n]+)/i);
   const totalDistanceNm = Number(first(text, /Total distance:\s*([\d.]+)\s*NM/i));
   const averageSpeedKt = Number(first(text, /Average speed:\s*([\d.]+)\s*kn/i));
   const etdLocal = first(text, /ETD LT:\s*([^\n]+)/i);
   const etaLocal = first(text, /ETA LT:\s*([^\n]+)/i);
-
   const portMatches = Array.from(text.matchAll(/Port name:\s*([^\n]+?)(?=\s+Country:)/gi)).map(match => clean(match[1]));
-  const departurePort = portMatches[0] || "";
-  const destinationPort = portMatches[1] || "";
 
   const waypoints = parsePartA(text);
   parsePartC(text, waypoints);
-  parsePartD(text, waypoints);
-  if (tableResult) parsePartDFromTables(tableResult, waypoints);
+  parsePartDNavStation(text, waypoints);
 
   return {
     sourceFile: fileName,
     voyageNumber,
     routeName,
-    departurePort,
-    destinationPort,
+    departurePort: portMatches[0] || "",
+    destinationPort: portMatches[1] || "",
     etdLocal,
     etaLocal,
     totalDistanceNm: Number.isFinite(totalDistanceNm) ? totalDistanceNm : undefined,
@@ -250,14 +235,8 @@ export async function POST(request: NextRequest) {
 
     parser = new PDFParse({ data: new Uint8Array(await file.arrayBuffer()) });
     const extracted = await parser.getText();
-    let tableResult: any = null;
-    try {
-      tableResult = await parser.getTable();
-    } catch {
-      tableResult = null;
-    }
-    const passage = parsePassagePlan(extracted.text, file.name, tableResult);
-    if (!passage.routeName && passage.waypoints.length < 2) throw new Error("This PDF does not look like a NavStation passage plan.");
+    const passage = parsePassagePlan(extracted.text, file.name);
+    if (!passage.routeName && passage.waypoints.length < 2) throw new Error("This PDF does not look like the supported NavStation passage-plan format.");
     return NextResponse.json({ ok: true, passage });
   } catch (error) {
     return NextResponse.json({ ok: false, error: error instanceof Error ? error.message : "NavStation passage plan could not be read." }, { status: 422 });
