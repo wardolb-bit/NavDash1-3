@@ -49,6 +49,40 @@ function formatWeatherPositions() {
   }
 }
 
+function clarifyWeatherGusts() {
+  for (const table of printTables()) {
+    const headers = tableHeaders(table);
+    const windIndex = headers.indexOf("WIND");
+    if (windIndex < 0 || !headers.includes("SEAS") || !headers.includes("POSITION")) continue;
+
+    for (const row of Array.from(table.querySelectorAll("tbody tr"))) {
+      const cells = Array.from(row.querySelectorAll("td"));
+      const cell = cells[windIndex];
+      if (!cell) continue;
+      const current = (cell.textContent || "").trim();
+      const clarified = current.replace(/\sG\s+(\d+(?:\.\d+)?)/i, " Gusts $1");
+      if (clarified !== current) cell.textContent = clarified;
+    }
+  }
+}
+
+function simplifyAmiIssuedLine() {
+  const panels = Array.from(document.querySelectorAll<HTMLElement>(".print-sub"));
+  for (const panel of panels) {
+    const heading = Array.from(panel.querySelectorAll("div")).find(div => (div.textContent || "").trim().toUpperCase() === "WEATHER INFORMATION");
+    if (!heading) continue;
+    const detail = heading.nextElementSibling;
+    if (!(detail instanceof HTMLElement)) continue;
+    const firstNode = detail.firstChild;
+    if (!firstNode || firstNode.nodeType !== Node.TEXT_NODE) continue;
+    const text = firstNode.nodeValue || "";
+    const match = text.match(/ISSUED\s+(.+)$/i);
+    if (!match) continue;
+    const simplified = `AMI Weather Issued: ${match[1].trim()}`;
+    if (firstNode.nodeValue !== simplified) firstNode.nodeValue = simplified;
+  }
+}
+
 function addWaypointEtas() {
   const page = document.querySelector(".navdash-navbrief-console");
   if (!page) return;
@@ -108,6 +142,8 @@ function addWaypointEtas() {
 
 function enhancePrintTables() {
   formatWeatherPositions();
+  clarifyWeatherGusts();
+  simplifyAmiIssuedLine();
   addWaypointEtas();
 }
 
