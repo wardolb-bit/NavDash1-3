@@ -114,9 +114,32 @@ function parsePartC(text: string, waypoints: Map<number, ParsedWaypoint>) {
   }
 }
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function cleanRemarkLine(value: string, names: string[]) {
+  let text = value;
+  for (const name of names) text = text.replace(new RegExp(escapeRegExp(name), "ig"), " ");
+  text = text
+    .replace(/\b\d{1,3}\s+(?:Coastal|Ocean|Pilotage|fairway|channel)\b/gi, " ")
+    .replace(/\b(?:Coastal|Ocean|Pilotage|fairway|channel)\b/gi, " ")
+    .replace(/\b\d+(?:\.\d+)?\s*NM\b/gi, " ")
+    .replace(/\b(?:CPA|TCPA|Anti-grounding|Look ahead)\b[^\n]*/gi, " ")
+    .replace(/\bPage\s+\d+\b/gi, " ");
+  return clean(text);
+}
+
+function looksLikeRemark(value: string) {
+  if (!value || value.split(/\s+/).length < 5) return false;
+  return !/(?:Passage Plan|Leg safety parameters|Remarks\/Notes|Navigational warnings|Date prepared|Date approved|Last revision|WP No|WP Name|Passage type|XTD|Stbd|Port limits|MB480)/i.test(value);
+}
+
 function parsePartD(text: string, waypoints: Map<number, ParsedWaypoint>) {
   const part = section(text, /Passage Plan, part D:[\s\S]*?Leg safety parameters\/Remarks/i, /Passage Plan, part E:/i);
   const ignore = /^(Coastal|Ocean|Pilotage|fairway|channel|Page \d+)$/i;
+
+  // First pass handles PDFs whose text extractor keeps the waypoint number on its own line.
   for (const block of numberedBlocks(part)) {
     const wp = waypoints.get(block.number);
     if (!wp) continue;
@@ -133,6 +156,67 @@ function parsePartD(text: string, waypoints: Map<number, ParsedWaypoint>) {
     const remarks = clean(notes.join(" "));
     if (remarks && remarks.length > 4) wp.remarks = remarks;
   }
+
+  // NavStation tables can be extracted in visual-column order instead of row order.
+  // In that layout the remark may land before the waypoint name, on the same line,
+  // or immediately after the XTD row. Associate prose with the nearest waypoint name.
+  const lines = part.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const entries = Array.from(waypoints.values()).sort((a, b) => a.number - b.number);
+  const names = entries.map(wp => wp.name).filter(Boolean);
+  const nameLines = new Map<number, number>();
+
+  entries.forEach(wp => {
+    const needle = wp.name.toLowerCase();
+    const index = lines.findIndex(line => line.toLowerCase().includes(needle));
+    if (index >= 0) nameLines.set(wp.number, index);
+  });
+
+  // Recover XTD from the row nearest each waypoint name when the normal block parser misses it.
+  entries.forEach(wp => {
+    if (wp.xtdStbdNm != null && wp.xtdPortNm != null) return;
+    const anchor = nameLines.get(wp.number);
+    if (anchor == null) return;
+    for (let offset = -1; offset <= 2; offset += 1) {
+      const line = lines[anchor + offset];
+      if (!line) continue;
+      const row = line.match(new RegExp(`(?:^|\\s)${wp.number}\\s+(?:Coastal|Ocean|Pilotage|fairway|channel)?\\s*(\\d+(?:\\.\\d+)?)\\s*NM\\s+(\\d+(?:\\.\\d+)?)\\s*NM`, "i"));
+      const pair = row || line.match(/(\d+(?:\.\d+)?)\s*NM\s+(\d+(?:\.\d+)?)\s*NM/i);
+      if (pair) {
+        wp.xtdStbdNm = Number(pair[1]);
+        wp.xtdPortNm = Number(pair[2]);
+        break;
+      }
+    }
+  });
+
+  const fragments = new Map<number, string[]>();
+  lines.forEach((line, lineIndex) => {
+    const candidate = cleanRemarkLine(line, names);
+    if (!looksLikeRemark(candidate)) return;
+
+    let bestWp: ParsedWaypoint | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const wp of entries) {
+      const anchor = nameLines.get(wp.number);
+      if (anchor == null) continue;
+      const distance = Math.abs(anchor - lineIndex);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestWp = wp;
+      }
+    }
+    if (!bestWp || bestDistance > 2) return;
+    const list = fragments.get(bestWp.number) || [];
+    if (!list.includes(candidate)) list.push(candidate);
+    fragments.set(bestWp.number, list);
+  });
+
+  entries.forEach(wp => {
+    const fallback = clean((fragments.get(wp.number) || []).join(" "));
+    if (!fallback) return;
+    if (!wp.remarks || !looksLikeRemark(wp.remarks)) wp.remarks = fallback;
+    else if (!wp.remarks.includes(fallback) && !fallback.includes(wp.remarks)) wp.remarks = clean(`${wp.remarks} ${fallback}`);
+  });
 }
 
 function parsePassagePlan(text: string, fileName: string) {
