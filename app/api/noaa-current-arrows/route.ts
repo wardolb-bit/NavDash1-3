@@ -33,8 +33,8 @@ async function latestTimeIndex() {
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`NOAA DDS ${response.status}: ${text.slice(0, 180)}`);
-  const match = text.match(/time\s*=\s*(\d+)\s*;/i);
-  if (!match) throw new Error("Unable to determine NOAA current time dimension.");
+  const match = text.match(/time\s*=\s*(\d+)\s*\]/i);
+  if (!match) throw new Error(`Unable to determine NOAA current time dimension. DDS: ${text.slice(0, 220)}`);
   const size = Number(match[1]);
   if (!Number.isFinite(size) || size < 1) throw new Error("NOAA current time dimension is invalid.");
   return size - 1;
