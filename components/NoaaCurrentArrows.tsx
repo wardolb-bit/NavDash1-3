@@ -13,6 +13,19 @@ type CurrentResponse = {
   points: CurrentPoint[];
 };
 
+type GeoJsonGeometry = {
+  type?: string;
+  coordinates?: any;
+};
+
+type LandFeature = {
+  geometry?: GeoJsonGeometry | null;
+};
+
+type LandResponse = {
+  features?: LandFeature[];
+};
+
 const MAP_ID = "navmap-main-isolated-v2";
 const TOGGLE_ID = "navdash-current-arrows-toggle";
 const CANVAS_ID = "navdash-current-arrows-canvas";
@@ -22,13 +35,36 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function pointKey(point: CurrentPoint) {
-  return `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`;
+function pointInRing(lon: number, lat: number, ring: number[][]) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = Number(ring[i]?.[0]);
+    const yi = Number(ring[i]?.[1]);
+    const xj = Number(ring[j]?.[0]);
+    const yj = Number(ring[j]?.[1]);
+    if (![xi, yi, xj, yj].every(Number.isFinite)) continue;
+
+    const intersects = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi || Number.EPSILON) + xi;
+    if (intersects) inside = !inside;
+  }
+  return inside;
 }
 
-function encResultsContainLand(results: unknown) {
-  const text = JSON.stringify(results ?? []).toUpperCase();
-  return text.includes("LNDARE") || text.includes("LAND AREA") || text.includes("LANDAREA");
+function pointInPolygon(lon: number, lat: number, polygon: number[][][]) {
+  if (!polygon.length || !pointInRing(lon, lat, polygon[0])) return false;
+  for (let i = 1; i < polygon.length; i += 1) {
+    if (pointInRing(lon, lat, polygon[i])) return false;
+  }
+  return true;
+}
+
+function geometryContainsPoint(geometry: GeoJsonGeometry | null | undefined, lon: number, lat: number) {
+  if (!geometry?.type || !geometry.coordinates) return false;
+  if (geometry.type === "Polygon") return pointInPolygon(lon, lat, geometry.coordinates as number[][][]);
+  if (geometry.type === "MultiPolygon") {
+    return (geometry.coordinates as number[][][][]).some((polygon) => pointInPolygon(lon, lat, polygon));
+  }
+  return false;
 }
 
 function validTimeLabel(value: string) {
@@ -50,11 +86,9 @@ export function NoaaCurrentArrows() {
   const [data, setData] = useState<CurrentResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [maskTick, setMaskTick] = useState(0);
+  const [landFeatures, setLandFeatures] = useState<LandFeature[] | null>(null);
   const mapRef = useRef<any>(null);
   const reloadRef = useRef(0);
-  const waterMaskRef = useRef(new Map<string, boolean>());
-  const pendingMaskRef = useRef(new Set<string>());
 
   useEffect(() => {
     let stopped = false;
@@ -92,12 +126,14 @@ export function NoaaCurrentArrows() {
 
       if (west < -180 || east > 180 || east <= west) {
         setData(null);
+        setLandFeatures(null);
         setError("Current arrows do not yet span the dateline.");
         return;
       }
 
       setLoading(true);
       setError("");
+      setLandFeatures(null);
       try {
         const params = new URLSearchParams({
           south: south.toFixed(3),
@@ -105,12 +141,25 @@ export function NoaaCurrentArrows() {
           west: west.toFixed(3),
           east: east.toFixed(3),
         });
-        const response = await fetch(`/api/noaa-current-arrows?${params.toString()}`, { cache: "no-store" });
-        const next = await response.json();
-        if (!response.ok) throw new Error(next?.error || "NOAA current arrows unavailable");
-        setData(next);
+
+        const [currentResponse, landResponse] = await Promise.all([
+          fetch(`/api/noaa-current-arrows?${params.toString()}`, { cache: "no-store" }),
+          fetch(`/api/noaa-enc-land-polygons?${params.toString()}`, { cache: "no-store" }),
+        ]);
+
+        const currentPayload = await currentResponse.json();
+        if (!currentResponse.ok) throw new Error(currentPayload?.error || "NOAA current arrows unavailable");
+        setData(currentPayload);
+
+        if (landResponse.ok) {
+          const landPayload = (await landResponse.json()) as LandResponse;
+          setLandFeatures(Array.isArray(landPayload?.features) ? landPayload.features : []);
+        } else {
+          setLandFeatures(null);
+        }
       } catch (err) {
         setData(null);
+        setLandFeatures(null);
         setError(err instanceof Error ? err.message : "NOAA current arrows unavailable");
       } finally {
         setLoading(false);
@@ -125,6 +174,7 @@ export function NoaaCurrentArrows() {
     if (enabled) load();
     else {
       setData(null);
+      setLandFeatures(null);
       setError("");
     }
 
@@ -136,62 +186,10 @@ export function NoaaCurrentArrows() {
   }, [enabled, host]);
 
   useEffect(() => {
-    if (!enabled || !data?.points?.length) return;
-    let cancelled = false;
-
-    const unchecked = data.points.filter((point) => {
-      const key = pointKey(point);
-      return !waterMaskRef.current.has(key) && !pendingMaskRef.current.has(key);
-    });
-
-    if (!unchecked.length) return;
-
-    const queue = [...unchecked];
-    const worker = async () => {
-      while (!cancelled && queue.length) {
-        const point = queue.shift();
-        if (!point) return;
-        const key = pointKey(point);
-        pendingMaskRef.current.add(key);
-
-        try {
-          const pad = 0.03;
-          const params = new URLSearchParams({
-            lat: point.lat.toFixed(5),
-            lon: point.lon.toFixed(5),
-            west: (point.lon - pad).toFixed(5),
-            south: (point.lat - pad).toFixed(5),
-            east: (point.lon + pad).toFixed(5),
-            north: (point.lat + pad).toFixed(5),
-            width: "1200",
-            height: "800",
-            tolerance: "2",
-          });
-          const response = await fetch(`/api/noaa-enc-identify?${params.toString()}`, { cache: "no-store" });
-          const payload = await response.json();
-          if (response.ok && !cancelled) {
-            waterMaskRef.current.set(key, !encResultsContainLand(payload?.results));
-            setMaskTick((value) => value + 1);
-          }
-        } catch {
-          // Fail closed: an unverified point remains hidden rather than drawing over possible land.
-        } finally {
-          pendingMaskRef.current.delete(key);
-        }
-      }
-    };
-
-    void Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => worker()));
-    return () => {
-      cancelled = true;
-    };
-  }, [data, enabled]);
-
-  useEffect(() => {
     const map = mapRef.current;
     const mapElement = document.getElementById(MAP_ID) as HTMLElement | null;
     document.getElementById(CANVAS_ID)?.remove();
-    if (!enabled || !map || !mapElement || !data?.points?.length) return;
+    if (!enabled || !map || !mapElement || !data?.points?.length || landFeatures === null) return;
 
     const canvas = document.createElement("canvas");
     canvas.id = CANVAS_ID;
@@ -218,7 +216,7 @@ export function NoaaCurrentArrows() {
       const bounds = map.getBounds();
 
       const candidates = data.points
-        .filter((p) => waterMaskRef.current.get(pointKey(p)) === true)
+        .filter((p) => !landFeatures.some((feature) => geometryContainsPoint(feature.geometry, p.lon, p.lat)))
         .filter((p) => bounds.contains([p.lat, p.lon]))
         .map((p) => ({ p, screen: map.latLngToContainerPoint([p.lat, p.lon]) }))
         .filter(({ screen }) => screen.x >= 0 && screen.y >= 0 && screen.x <= width && screen.y <= height);
@@ -292,7 +290,7 @@ export function NoaaCurrentArrows() {
       map.off("zoomend moveend", redraw);
       canvas.remove();
     };
-  }, [data, enabled, maskTick]);
+  }, [data, enabled, landFeatures]);
 
   useEffect(() => () => {
     window.clearTimeout(reloadRef.current);
@@ -303,9 +301,11 @@ export function NoaaCurrentArrows() {
     ? "NOAA CURRENTS • LOADING"
     : error
       ? "NOAA CURRENTS • UNAVAILABLE"
-      : data
-        ? `NOAA CURRENTS • ${validTimeLabel(data.validAt)}`
-        : "NOAA CURRENTS";
+      : data && landFeatures === null
+        ? "NOAA CURRENTS • MASKING"
+        : data
+          ? `NOAA CURRENTS • ${validTimeLabel(data.validAt)}`
+          : "NOAA CURRENTS";
 
   return (
     <>
