@@ -36,7 +36,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Script id="navdash-map-tools-behavior" strategy="afterInteractive">
           {`
             (() => {
+              let activeMap = null;
+              let contextMenu = null;
+              let longPressTimer = 0;
+              let pointerStart = null;
+
               const getMap = () => document.getElementById("v12-map");
+              const getMapSurface = () => document.getElementById("navmap-main-isolated-v2");
               const getTools = () => {
                 const map = getMap();
                 if (!map) return null;
@@ -44,6 +50,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   const style = el.getAttribute("style") || "";
                   return /z-index:\\s*760/.test(style);
                 }) || null;
+              };
+
+              const getControlGroup = () => {
+                const tools = getTools();
+                return tools instanceof HTMLElement ? tools.firstElementChild : null;
+              };
+
+              const getOriginalButton = (label) => {
+                const group = getControlGroup();
+                if (!(group instanceof HTMLElement)) return null;
+                return Array.from(group.querySelectorAll("button")).find((button) =>
+                  (button.textContent || "").trim().toUpperCase() === label
+                ) || null;
+              };
+
+              const getOriginalToggle = (label) => {
+                const group = getControlGroup();
+                if (!(group instanceof HTMLElement)) return null;
+                return Array.from(group.querySelectorAll("label")).find((item) =>
+                  (item.textContent || "").trim().toUpperCase().includes(label)
+                ) || null;
               };
 
               const syncMeasureReadout = () => {
@@ -69,32 +96,194 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 readout.textContent = label.textContent.trim();
               };
 
-              document.addEventListener("click", (event) => {
-                const tools = getTools();
-                const target = event.target;
+              const hideFloatingButtons = () => {
+                const group = getControlGroup();
+                if (group instanceof HTMLElement) group.style.setProperty("display", "none", "important");
+              };
 
-                if (tools instanceof HTMLElement && target instanceof Element) {
-                  const button = target.closest("button");
-                  if (button && tools.contains(button)) {
-                    const firstButton = tools.querySelector("button");
+              const closeMenu = () => {
+                contextMenu?.remove();
+                contextMenu = null;
+              };
 
-                    if (button === firstButton) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      if (tools.getAttribute("data-map-tools-open") === "true") {
-                        tools.removeAttribute("data-map-tools-open");
-                      } else {
-                        tools.setAttribute("data-map-tools-open", "true");
-                      }
-                      if (button instanceof HTMLElement) button.blur();
-                    }
+              const menuTheme = () => document.documentElement.getAttribute("data-navdash-theme") === "day"
+                ? {
+                    background: "rgba(255,255,255,.98)",
+                    border: "rgba(15,23,42,.22)",
+                    text: "#17212b",
+                    muted: "#586773",
+                    hover: "#f3f6f8",
+                    active: "#006f78",
                   }
+                : {
+                    background: "rgba(5,12,18,.97)",
+                    border: "rgba(241,213,107,.38)",
+                    text: "#e7edf3",
+                    muted: "#91a0ad",
+                    hover: "#15212c",
+                    active: "#22d3ee",
+                  };
+
+              const invokeButton = (label, returnToPan = false) => {
+                const button = getOriginalButton(label);
+                if (button instanceof HTMLButtonElement && !button.disabled) button.click();
+                if (returnToPan) {
+                  const pan = getOriginalButton("PAN");
+                  if (pan instanceof HTMLButtonElement && !pan.disabled) pan.click();
                 }
-
+                closeMenu();
                 window.setTimeout(syncMeasureReadout, 60);
-              }, true);
+              };
 
-              window.addEventListener("resize", () => window.setTimeout(syncMeasureReadout, 30));
+              const invokeToggle = (label) => {
+                const toggle = getOriginalToggle(label);
+                const checkbox = toggle?.querySelector('input[type="checkbox"]');
+                if (checkbox instanceof HTMLInputElement && !checkbox.disabled) checkbox.click();
+                closeMenu();
+              };
+
+              const buildMenuItem = (menu, text, action, options = {}) => {
+                const theme = menuTheme();
+                const row = document.createElement("button");
+                row.type = "button";
+                row.textContent = text;
+                row.disabled = Boolean(options.disabled);
+                row.style.cssText = "display:flex;width:100%;min-width:190px;align-items:center;justify-content:space-between;border:0;background:transparent;padding:10px 12px;text-align:left;font:700 11px/1.2 system-ui,sans-serif;letter-spacing:.07em;cursor:pointer;border-radius:4px";
+                row.style.color = options.active ? theme.active : options.disabled ? theme.muted : theme.text;
+                row.style.opacity = options.disabled ? "0.45" : "1";
+                if (!options.disabled) {
+                  row.addEventListener("mouseenter", () => { row.style.background = theme.hover; });
+                  row.addEventListener("mouseleave", () => { row.style.background = "transparent"; });
+                  row.addEventListener("click", action);
+                }
+                menu.appendChild(row);
+              };
+
+              const addSeparator = (menu) => {
+                const theme = menuTheme();
+                const line = document.createElement("div");
+                line.style.cssText = "height:1px;margin:4px 6px";
+                line.style.background = theme.border;
+                menu.appendChild(line);
+              };
+
+              const openMenu = (clientX, clientY) => {
+                const map = getMap();
+                if (!(map instanceof HTMLElement)) return;
+                closeMenu();
+
+                const theme = menuTheme();
+                const menu = document.createElement("div");
+                menu.id = "navdash-map-context-menu";
+                menu.setAttribute("role", "menu");
+                menu.style.cssText = "position:absolute;z-index:1700;padding:6px;border-radius:7px;box-shadow:0 10px 28px rgba(0,0,0,.34);backdrop-filter:blur(8px);user-select:none;-webkit-user-select:none";
+                menu.style.background = theme.background;
+                menu.style.border = "1px solid " + theme.border;
+
+                const group = getControlGroup();
+                const pan = getOriginalButton("PAN");
+                const fromShip = getOriginalButton("FROM SHIP");
+                const twoPoints = getOriginalButton("TWO POINTS");
+                const clearMeasure = getOriginalButton("CLEAR MEASURE");
+                const sunLabel = getOriginalToggle("SUN EVENTS");
+                const sunInput = sunLabel?.querySelector('input[type="checkbox"]');
+                const amiLabel = getOriginalToggle("AMI WX");
+                const amiInput = amiLabel?.querySelector('input[type="checkbox"]');
+
+                if (!(group instanceof HTMLElement) || !(pan instanceof HTMLButtonElement)) return;
+
+                buildMenuItem(menu, "PAN", () => invokeButton("PAN"), { active: pan.style.border.includes("34,211,238") });
+                buildMenuItem(menu, "FROM SHIP", () => invokeButton("FROM SHIP"), { active: fromShip instanceof HTMLButtonElement && fromShip.style.border.includes("34,211,238"), disabled: !(fromShip instanceof HTMLButtonElement) });
+                buildMenuItem(menu, "TWO POINTS", () => invokeButton("TWO POINTS"), { active: twoPoints instanceof HTMLButtonElement && twoPoints.style.border.includes("34,211,238"), disabled: !(twoPoints instanceof HTMLButtonElement) });
+                buildMenuItem(menu, "CLEAR MEASURE", () => invokeButton("CLEAR MEASURE", true), { disabled: !(clearMeasure instanceof HTMLButtonElement) });
+                addSeparator(menu);
+                buildMenuItem(menu, "SUN EVENTS" + (sunInput instanceof HTMLInputElement && sunInput.checked ? "  ✓" : ""), () => invokeToggle("SUN EVENTS"), { active: sunInput instanceof HTMLInputElement && sunInput.checked, disabled: !(sunInput instanceof HTMLInputElement) });
+                buildMenuItem(menu, "AMI WX" + (amiInput instanceof HTMLInputElement && amiInput.checked ? "  ✓" : ""), () => invokeToggle("AMI WX"), { active: amiInput instanceof HTMLInputElement && amiInput.checked, disabled: !(amiInput instanceof HTMLInputElement) || amiInput.disabled });
+
+                map.appendChild(menu);
+                contextMenu = menu;
+
+                const rect = map.getBoundingClientRect();
+                const menuRect = menu.getBoundingClientRect();
+                const x = Math.max(6, Math.min(clientX - rect.left, rect.width - menuRect.width - 6));
+                const y = Math.max(6, Math.min(clientY - rect.top, rect.height - menuRect.height - 6));
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+              };
+
+              const cancelLongPress = () => {
+                window.clearTimeout(longPressTimer);
+                longPressTimer = 0;
+                pointerStart = null;
+              };
+
+              const detachMapListeners = () => {
+                if (!(activeMap instanceof HTMLElement)) return;
+                activeMap.removeEventListener("contextmenu", activeMap.__navdashContextMenuHandler);
+                activeMap.removeEventListener("pointerdown", activeMap.__navdashPointerDownHandler);
+                activeMap.removeEventListener("pointermove", activeMap.__navdashPointerMoveHandler);
+                activeMap.removeEventListener("pointerup", activeMap.__navdashPointerUpHandler);
+                activeMap.removeEventListener("pointercancel", activeMap.__navdashPointerUpHandler);
+                activeMap = null;
+              };
+
+              const attachMapListeners = () => {
+                const surface = getMapSurface();
+                if (!(surface instanceof HTMLElement) || surface === activeMap) return;
+                detachMapListeners();
+                activeMap = surface;
+
+                const onContextMenu = (event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  openMenu(event.clientX, event.clientY);
+                };
+
+                const onPointerDown = (event) => {
+                  if (event.pointerType !== "touch" || !event.isPrimary) return;
+                  cancelLongPress();
+                  pointerStart = { x: event.clientX, y: event.clientY };
+                  longPressTimer = window.setTimeout(() => {
+                    if (!pointerStart) return;
+                    openMenu(pointerStart.x, pointerStart.y);
+                    if (navigator.vibrate) navigator.vibrate(15);
+                    cancelLongPress();
+                  }, 650);
+                };
+
+                const onPointerMove = (event) => {
+                  if (!pointerStart) return;
+                  if (Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) > 12) cancelLongPress();
+                };
+
+                const onPointerUp = () => cancelLongPress();
+
+                surface.__navdashContextMenuHandler = onContextMenu;
+                surface.__navdashPointerDownHandler = onPointerDown;
+                surface.__navdashPointerMoveHandler = onPointerMove;
+                surface.__navdashPointerUpHandler = onPointerUp;
+                surface.addEventListener("contextmenu", onContextMenu);
+                surface.addEventListener("pointerdown", onPointerDown);
+                surface.addEventListener("pointermove", onPointerMove);
+                surface.addEventListener("pointerup", onPointerUp);
+                surface.addEventListener("pointercancel", onPointerUp);
+              };
+
+              const mount = () => {
+                hideFloatingButtons();
+                attachMapListeners();
+              };
+
+              document.addEventListener("pointerdown", (event) => {
+                if (contextMenu && event.target instanceof Node && !contextMenu.contains(event.target)) closeMenu();
+              }, true);
+              document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeMenu(); });
+              document.addEventListener("click", () => window.setTimeout(syncMeasureReadout, 60), true);
+              window.addEventListener("resize", () => { closeMenu(); window.setTimeout(syncMeasureReadout, 30); });
+
+              mount();
+              const observer = new MutationObserver(() => mount());
+              observer.observe(document.body, { childList: true, subtree: true });
             })();
           `}
         </Script>
