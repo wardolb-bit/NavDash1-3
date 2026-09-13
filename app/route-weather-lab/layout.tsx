@@ -131,6 +131,19 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           filter: drop-shadow(0 0 4px rgba(34,211,238,.7));
         }
 
+        /* Map wind markers use a north-pointing base glyph so meteorological
+           bearings rotate correctly. The inline code supplies compass bearing. */
+        .leaflet-marker-icon > div[style*="color:#7dd3fc"][style*="transform:rotate"] {
+          font-size: 0 !important;
+        }
+        .leaflet-marker-icon > div[style*="color:#7dd3fc"][style*="transform:rotate"]::before {
+          content: "▲";
+          display: block;
+          font-size: 18px;
+          line-height: 24px;
+          color: #7dd3fc;
+        }
+
         @media (max-width: 1350px) {
           svg[viewBox="0 0 1000 160"] > g:not(.route-profile-enhancements):nth-of-type(2),
           svg[viewBox="0 0 1000 160"] > g:not(.route-profile-enhancements):nth-of-type(4) {
