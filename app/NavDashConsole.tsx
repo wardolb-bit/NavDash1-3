@@ -182,9 +182,23 @@ function legMetrics(ship: OwnShip, start: Waypoint, end: Waypoint) {
 
   return {
     ratio,
+    projectionRatio,
     xte: distanceNm(ship, { lat: closestLat, lon: closestLon }),
     side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--",
   };
+}
+
+function logicalRouteLeg(route: Waypoint[], ownShip: OwnShip | null, currentLegIndex: number) {
+  if (!ownShip || route.length < 2) return null;
+  let best: { index: number; metrics: ReturnType<typeof legMetrics>; score: number } | null = null;
+  for (let i = 1; i < route.length; i += 1) {
+    const metrics = legMetrics(ownShip, route[i - 1], route[i]);
+    const jumpPenalty = Math.abs(i - currentLegIndex) * 0.35;
+    const endPenalty = metrics.projectionRatio <= 0 || metrics.projectionRatio >= 1 ? 0.25 : 0;
+    const score = metrics.xte + jumpPenalty + endPenalty;
+    if (!best || score < best.score) best = { index: i, metrics, score };
+  }
+  return best;
 }
 
 function routeDtg(ship: OwnShip | null, route: Waypoint[], activeIndex: number) {
@@ -286,15 +300,7 @@ export default function NavDashConsole() {
 
   useEffect(() => {
     if (!ownShip || route.length < 2) return;
-    setActiveIndex((current) => {
-      let index = Math.max(1, Math.min(route.length - 1, current));
-      while (index < route.length - 1) {
-        const metrics = legMetrics(ownShip, route[index - 1], route[index]);
-        if (metrics.ratio < 1.02) break;
-        index += 1;
-      }
-      return index;
-    });
+    setActiveIndex((current) => logicalRouteLeg(route, ownShip, current)?.index ?? current);
   }, [ownShip?.lat, ownShip?.lon, route]);
 
   useEffect(() => {
