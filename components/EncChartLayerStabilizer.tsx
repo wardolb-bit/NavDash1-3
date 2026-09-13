@@ -4,6 +4,7 @@ import { useEffect } from "react";
 
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_WMS_URL = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer";
+const NOAA_PANE = "navdash-noaa-enc-pane";
 
 export function EncChartLayerStabilizer() {
   useEffect(() => {
@@ -75,7 +76,7 @@ export function EncChartLayerStabilizer() {
           opacity: 0.9,
           interactive: false,
           crossOrigin: true,
-          pane: "overlayPane",
+          pane: NOAA_PANE,
         });
         nextOverlay.__navdashSingleNoaaViewport = true;
 
@@ -95,8 +96,6 @@ export function EncChartLayerStabilizer() {
           try { map.removeLayer(nextOverlay); } catch {}
         });
 
-        // Start loading the next full-viewport chart image while the previous
-        // one remains visible. Once the new image loads, swap them atomically.
         try { nextOverlay.addTo(map); } catch {}
       }, 140);
     };
@@ -124,6 +123,13 @@ export function EncChartLayerStabilizer() {
 
       L = await import("leaflet");
       if (cancelled || !map) return;
+
+      let noaaPane = map.getPane(NOAA_PANE);
+      if (!noaaPane) noaaPane = map.createPane(NOAA_PANE);
+      if (noaaPane?.style) {
+        noaaPane.style.zIndex = "250";
+        noaaPane.style.pointerEvents = "none";
+      }
 
       removeConflictingChartLayers();
       map.on("moveend zoomend resize", refresh);
