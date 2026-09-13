@@ -13,7 +13,9 @@ type ForecastPoint = {
   gustKt: number | null;
   waveHeightFt: number | null;
   wavePeriodSec: number | null;
+  waveDirectionDeg?: number | null;
   source: string;
+  waveSource?: string;
 };
 type Frame = { validAt: string; points: ForecastPoint[] };
 type WeatherResponse = {
@@ -24,6 +26,22 @@ type WeatherResponse = {
   coveredSampleCount: number;
   frames: Frame[];
   note?: string | null;
+};
+type WaveResponse = {
+  provider: string;
+  product: string;
+  frames: Array<{
+    validAt: string;
+    points: Array<{
+      lat: number;
+      lon: number;
+      distanceNm: number;
+      waveHeightFt: number | null;
+      wavePeriodSec: number | null;
+      waveDirectionDeg: number | null;
+      source: string;
+    }>;
+  }>;
 };
 type EncounterPoint = ForecastPoint & { eta: Date; validAt: Date; deltaHours: number };
 
@@ -45,25 +63,29 @@ function routeLengthNm(route: Waypoint[]) {
 
 function parseRtz(text: string): Waypoint[] {
   const doc = new DOMParser().parseFromString(text, "application/xml");
-  const nodes = Array.from(doc.querySelectorAll("waypoint"));
-  return nodes.map((node, index) => {
+  return Array.from(doc.querySelectorAll("waypoint")).map((node, index) => {
     const pos = node.querySelector("position");
-    const lat = Number(pos?.getAttribute("lat"));
-    const lon = Number(pos?.getAttribute("lon"));
-    const name = node.getAttribute("name") || node.getAttribute("id") || `WP${String(index + 1).padStart(2, "0")}`;
-    return { name, lat, lon };
+    return {
+      name: node.getAttribute("name") || node.getAttribute("id") || `WP${String(index + 1).padStart(2, "0")}`,
+      lat: Number(pos?.getAttribute("lat")),
+      lon: Number(pos?.getAttribute("lon")),
+    };
   }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
 }
 
 function formatWhen(date: Date) {
   return new Intl.DateTimeFormat("en-US", {
-    month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-    hour12: false, timeZone: "Pacific/Honolulu",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Pacific/Honolulu",
   }).format(date) + " HST";
 }
 
-function compass(deg: number | null) {
-  if (deg === null || !Number.isFinite(deg)) return "--";
+function compass(deg: number | null | undefined) {
+  if (deg === null || deg === undefined || !Number.isFinite(deg)) return "--";
   const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
   return dirs[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
 }
@@ -75,6 +97,46 @@ function maxBy(points: ForecastPoint[], key: "waveHeightFt" | "windKt" | "gustKt
     if (!best || best[key] === null || (value as number) > (best[key] as number)) return p;
     return best;
   }, null);
+}
+
+function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherResponse {
+  if (!wave?.frames?.length) return base;
+  return {
+    ...base,
+    product: `${base.product} + ${wave.product}`,
+    frames: base.frames.map((frame) => {
+      const target = new Date(frame.validAt).getTime();
+      let bestWaveFrame = wave.frames[0];
+      let bestDelta = Math.abs(new Date(bestWaveFrame.validAt).getTime() - target);
+      for (const candidate of wave.frames) {
+        const delta = Math.abs(new Date(candidate.validAt).getTime() - target);
+        if (delta < bestDelta) {
+          bestDelta = delta;
+          bestWaveFrame = candidate;
+        }
+      }
+      const points = frame.points.map((point) => {
+        let nearest = bestWaveFrame?.points?.[0];
+        let score = Number.POSITIVE_INFINITY;
+        for (const wp of bestWaveFrame?.points || []) {
+          const d = Math.abs(wp.distanceNm - point.distanceNm);
+          if (d < score) {
+            nearest = wp;
+            score = d;
+          }
+        }
+        if (!nearest) return point;
+        return {
+          ...point,
+          waveHeightFt: nearest.waveHeightFt,
+          wavePeriodSec: nearest.wavePeriodSec,
+          waveDirectionDeg: nearest.waveDirectionDeg,
+          waveSource: nearest.source,
+        };
+      });
+      return { ...frame, points };
+    }),
+  };
 }
 
 export default function RouteWeatherLabPage() {
@@ -126,7 +188,11 @@ export default function RouteWeatherLabPage() {
       setTimeout(() => map.invalidateSize(), 100);
     }
     init();
-    return () => { cancelled = true; mapRef.current?.remove(); mapRef.current = null; };
+    return () => {
+      cancelled = true;
+      mapRef.current?.remove();
+      mapRef.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -140,8 +206,13 @@ export default function RouteWeatherLabPage() {
       const latlngs = route.map((wp) => [wp.lat, wp.lon] as [number, number]);
       L.polyline(latlngs, { color: "#22d3ee", weight: 3, opacity: 0.95 }).addTo(layer);
       route.forEach((wp, i) => {
-        L.circleMarker([wp.lat, wp.lon], { radius: 4, color: "#f1d56b", weight: 2, fillColor: "#071019", fillOpacity: 1 })
-          .bindTooltip(`${i + 1}. ${wp.name}`, { direction: "top" }).addTo(layer);
+        L.circleMarker([wp.lat, wp.lon], {
+          radius: 4,
+          color: "#f1d56b",
+          weight: 2,
+          fillColor: "#071019",
+          fillOpacity: 1,
+        }).bindTooltip(`${i + 1}. ${wp.name}`, { direction: "top" }).addTo(layer);
       });
       map.fitBounds(L.latLngBounds(latlngs), { padding: [28, 28] });
     }
@@ -162,7 +233,10 @@ export default function RouteWeatherLabPage() {
       let bestDelta = Math.abs(new Date(bestFrame.validAt).getTime() - eta.getTime());
       for (const frame of weather.frames) {
         const delta = Math.abs(new Date(frame.validAt).getTime() - eta.getTime());
-        if (delta < bestDelta) { bestFrame = frame; bestDelta = delta; }
+        if (delta < bestDelta) {
+          bestFrame = frame;
+          bestDelta = delta;
+        }
       }
       const p = bestFrame.points[i];
       if (!p) continue;
@@ -177,9 +251,9 @@ export default function RouteWeatherLabPage() {
     return weather.frames[frameIndex]?.points || [];
   }, [weather, encounter, mode, frameIndex]);
 
-  const maxSeas = useMemo(() => maxBy(displayedPoints, "waveHeightFt"), [displayedPoints]);
-  const maxWind = useMemo(() => maxBy(displayedPoints, "windKt"), [displayedPoints]);
-  const maxGust = useMemo(() => maxBy(displayedPoints, "gustKt"), [displayedPoints]);
+  const maxSeas = useMemo(() => maxBy(encounter, "waveHeightFt") as EncounterPoint | null, [encounter]);
+  const maxWind = useMemo(() => maxBy(encounter, "windKt") as EncounterPoint | null, [encounter]);
+  const maxGust = useMemo(() => maxBy(encounter, "gustKt") as EncounterPoint | null, [encounter]);
   const selectedFrame = weather?.frames?.[frameIndex];
 
   useEffect(() => {
@@ -201,12 +275,14 @@ export default function RouteWeatherLabPage() {
           iconSize: [1, 1],
           iconAnchor: [0, 0],
         });
-        const marker = L.marker([p.lat, p.lon], { icon, interactive: true });
-        marker.bindPopup([
-          showSeas ? `<b>Seas:</b> ${wave === null ? "No wave grid" : `${wave.toFixed(1)} ft`}` : "",
+        L.marker([p.lat, p.lon], { icon, interactive: true }).bindPopup([
+          showSeas ? `<b>Seas:</b> ${wave === null ? "No wave data" : `${wave.toFixed(1)} ft`}` : "",
+          p.wavePeriodSec !== null && showSeas ? `<b>Wave period:</b> ${p.wavePeriodSec.toFixed(0)} s` : "",
+          p.waveDirectionDeg !== null && p.waveDirectionDeg !== undefined && showSeas ? `<b>Wave direction:</b> ${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°` : "",
           showWind ? `<b>Wind:</b> ${wind === null ? "--" : `${compass(p.windDirectionDeg)} ${wind.toFixed(0)} kt`}` : "",
           p.gustKt !== null && showWind ? `<b>Gust:</b> ${p.gustKt.toFixed(0)} kt` : "",
-          `<b>Source:</b> ${p.source}`,
+          `<b>Wind source:</b> ${p.source}`,
+          p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).addTo(layer);
       });
     }
@@ -222,7 +298,7 @@ export default function RouteWeatherLabPage() {
       setRouteName(file.name);
       setWeather(null);
       setFrameIndex(0);
-      setStatus(`${parsed.length} waypoints loaded. Ready to analyze NOAA route weather.`);
+      setStatus(`${parsed.length} waypoints loaded. Ready to analyze route weather.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not read route.");
     }
@@ -230,22 +306,55 @@ export default function RouteWeatherLabPage() {
 
   async function analyze() {
     if (route.length < 2) return;
-    setStatus("Sampling NOAA/NWS weather along the route…");
+    setStatus("Sampling NWS winds and GFS-forced WaveWatch along the route…");
     setWeather(null);
     try {
-      const response = await fetch("/api/noaa-route-weather", {
+      const windResponse = await fetch("/api/noaa-route-weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ waypoints: route }),
       });
-      const json = await response.json();
-      if (!response.ok) throw new Error(json?.error || "Route weather request failed.");
-      setWeather(json);
+      const windJson = await windResponse.json();
+      if (!windResponse.ok) throw new Error(windJson?.error || "Route weather request failed.");
+      let merged = windJson as WeatherResponse;
+      const basePoints = merged.frames?.[0]?.points || [];
+      const validTimes = merged.frames?.map((frame) => frame.validAt) || [];
+      let waveMessage = "";
+      if (basePoints.length && validTimes.length) {
+        try {
+          const waveResponse = await fetch("/api/gfs-wave-route", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              points: basePoints.map((p) => ({ lat: p.lat, lon: p.lon, distanceNm: p.distanceNm })),
+              validTimes,
+            }),
+          });
+          const waveJson = await waveResponse.json();
+          if (waveResponse.ok) {
+            merged = mergeWave(merged, waveJson as WaveResponse);
+          } else {
+            waveMessage = ` WaveWatch unavailable: ${waveJson?.error || "unknown error"}`;
+          }
+        } catch (waveError) {
+          waveMessage = ` WaveWatch unavailable: ${waveError instanceof Error ? waveError.message : "request failed"}`;
+        }
+      }
+      setWeather(merged);
       setFrameIndex(0);
-      setStatus(json.note || `Weather loaded from ${json.product}.`);
+      if (merged.frames.some((frame) => frame.points.some((point) => point.waveHeightFt !== null))) {
+        setStatus(`Route weather loaded. Waves: GFS-forced WaveWatch III. Winds: ${windJson.product}.`);
+      } else {
+        setStatus((windJson.note || `Wind loaded from ${windJson.product}; no wave data returned.`) + waveMessage);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Weather analysis failed.");
     }
+  }
+
+  function occurrence(point: EncounterPoint | null) {
+    if (!point) return null;
+    return `Occurs ${point.distanceNm.toFixed(0)} NM along route • ETA ${formatWhen(point.eta)}`;
   }
 
   return (
@@ -258,7 +367,7 @@ export default function RouteWeatherLabPage() {
         <Link href="/" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">NAV CONSOLE</Link>
       </div>
 
-      <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="border border-slate-700/50 bg-[#071019] p-2">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && loadRouteFile(e.target.files[0])} /></label>
@@ -266,21 +375,13 @@ export default function RouteWeatherLabPage() {
             <button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button>
             <button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button>
           </div>
-
           <div ref={mapEl} style={{ width: "100%", height: "62vh", minHeight: 500, background: "#0a141d" }} />
 
           {weather && mode === "time" && (
             <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black">
-                <span className="text-slate-400">FORECAST SNAPSHOT · ALL ROUTE SAMPLES UPDATE AS YOU SCRUB</span>
-                <span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button type="button" onClick={() => setFrameIndex((i) => Math.max(0, i - 1))} className="border border-slate-700 px-3 py-2 text-xs font-black">◀</button>
-                <input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} />
-                <button type="button" onClick={() => setFrameIndex((i) => Math.min(weather.frames.length - 1, i + 1))} className="border border-slate-700 px-3 py-2 text-xs font-black">▶</button>
-              </div>
-              <div className="mt-1 flex justify-between text-[9px] text-slate-500"><span>NOW</span><span>+24 HR</span></div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">FORECAST VALID</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div>
+              <input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} />
+              <div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>NOW</span><span>ALL ROUTE LABELS UPDATE AS YOU SCRUB</span><span>+24 HR</span></div>
             </div>
           )}
         </section>
@@ -301,30 +402,19 @@ export default function RouteWeatherLabPage() {
           </section>
 
           <section className="border border-slate-700/50 bg-[#071019] p-3">
-            <div className="flex items-center justify-between gap-2"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">{mode === "encounter" ? "WORST ALONG VOYAGE" : "ROUTE AT SELECTED TIME"}</div><span className="text-[9px] font-black text-emerald-300">ROUTE-SAMPLED</span></div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <div className="border border-slate-800 bg-[#050a0f] p-3">
-                <div className="text-[8px] font-black text-slate-500">MAX SEAS</div>
-                <div className={`mt-1 font-black ${maxSeas ? "text-3xl text-[#f1d56b]" : "text-sm text-amber-300"}`}>{maxSeas?.waveHeightFt !== null && maxSeas?.waveHeightFt !== undefined ? `${maxSeas.waveHeightFt.toFixed(1)} ft` : "NO WAVE DATA"}</div>
-                {maxSeas && <div className="mt-1 text-[9px] text-slate-500">{maxSeas.distanceNm.toFixed(0)} NM along route</div>}
-              </div>
-              <div className="border border-slate-800 bg-[#050a0f] p-3">
-                <div className="text-[8px] font-black text-slate-500">MAX WIND</div>
-                <div className={`mt-1 font-black ${maxWind ? "text-3xl text-cyan-300" : "text-sm text-slate-500"}`}>{maxWind?.windKt !== null && maxWind?.windKt !== undefined ? `${maxWind.windKt.toFixed(0)} kt` : "NO WIND DATA"}</div>
-                {maxWind && <div className="mt-1 text-[9px] text-slate-500">{compass(maxWind.windDirectionDeg)} · {maxWind.distanceNm.toFixed(0)} NM</div>}
-              </div>
-            </div>
-            {maxGust?.gustKt !== null && maxGust?.gustKt !== undefined && <div className="mt-2 text-[10px] text-slate-400">Highest gust: <b className="text-slate-200">{maxGust.gustKt.toFixed(0)} kt</b></div>}
-            {!maxSeas && weather && <div className="mt-2 border-l-2 border-amber-400/60 pl-2 text-[10px] leading-4 text-amber-200">The NOAA route response has no wave-height grid for these samples. NavDash is no longer hiding that as “--”. This is the gap we need the GFS Wave layer to fill.</div>}
+            <div className="flex items-center justify-between"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">MAX SEAS ALONG VOYAGE</div><span className="text-[9px] font-black text-cyan-300">GFS-FORCED WW3</span></div>
+            <div className="mt-2 text-4xl font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "NO WAVE DATA" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div>
+            {maxSeas?.wavePeriodSec != null && <div className="mt-1 text-sm text-slate-300">{maxSeas.wavePeriodSec.toFixed(0)} s • {compass(maxSeas.waveDirectionDeg)}</div>}
+            <div className="mt-2 text-[10px] font-bold text-slate-400">{occurrence(maxSeas) || "No route wave sample available."}</div>
+            {maxSeas?.waveSource && <div className="mt-1 text-[9px] text-slate-600">{maxSeas.waveSource}</div>}
           </section>
 
-          {weather && mode === "time" && (
-            <section className="border border-cyan-700/40 bg-[#061018] p-3">
-              <div className="text-[9px] font-black uppercase tracking-[0.14em] text-cyan-400">CURRENT SNAPSHOT</div>
-              <div className="mt-1 text-lg font-black text-cyan-100">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</div>
-              <div className="mt-2 text-xs leading-5 text-slate-300">Every weather tag on the chart is this same forecast time. Slide once and the whole route updates together.</div>
-            </section>
-          )}
+          <section className="border border-slate-700/50 bg-[#071019] p-3">
+            <div className="flex items-center justify-between"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">MAX WIND ALONG VOYAGE</div><span className="text-[9px] font-black text-emerald-300">ROUTE-SAMPLED</span></div>
+            <div className="mt-2 text-3xl font-black text-cyan-300">{maxWind?.windKt == null ? "NO WIND DATA" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div>
+            {maxGust?.gustKt != null && <div className="mt-1 text-sm text-slate-300">Max gust {maxGust.gustKt.toFixed(0)} kt</div>}
+            <div className="mt-2 text-[10px] font-bold text-slate-400">{occurrence(maxWind) || "No route wind sample available."}</div>
+          </section>
 
           <section className="border border-slate-700/50 bg-[#071019] p-3">
             <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">LAYERS</div>
@@ -339,16 +429,13 @@ export default function RouteWeatherLabPage() {
         </aside>
       </div>
 
-      {weather && mode === "encounter" && (
+      {weather && (
         <section className="border border-slate-700/50 bg-[#071019] p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs text-slate-400">Each sample uses the forecast time nearest the vessel ETA at that point.</div></div>
-            <div className="text-[10px] font-black text-amber-300">FORECAST MATCH WINDOW: 0–24 HR</div>
-          </div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs text-slate-400">Each row uses the forecast valid time nearest the vessel ETA at that route sample.</div></div><div className="text-[10px] font-black text-amber-300">FORECAST MATCH WINDOW: 0–24 HR</div></div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left text-xs">
-              <thead className="border-b border-slate-800 text-[9px] uppercase tracking-wider text-slate-500"><tr><th className="py-2">Dist</th><th>ETA HST</th><th>Forecast valid</th><th>Wind</th><th>Gust</th><th>Seas</th><th>Period</th><th>Source</th></tr></thead>
-              <tbody>{encounter.map((p, i) => <tr key={`${p.lat}-${p.lon}-${i}`} className="border-b border-slate-900"><td className="py-2 font-mono">{p.distanceNm.toFixed(0)} NM</td><td>{formatWhen(p.eta)}</td><td>{formatWhen(p.validAt)} <span className="text-slate-600">({p.deltaHours.toFixed(1)}h)</span></td><td>{p.windKt === null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td>{p.gustKt === null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="font-black text-[#f1d56b]">{p.waveHeightFt === null ? "NO DATA" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td>{p.wavePeriodSec === null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td className="text-slate-500">{p.source}</td></tr>)}</tbody>
+            <table className="w-full min-w-[900px] text-left text-xs">
+              <thead className="border-b border-slate-800 text-[9px] uppercase tracking-wider text-slate-500"><tr><th className="py-2">Dist</th><th>ETA HST</th><th>Forecast valid</th><th>Wind</th><th>Gust</th><th>Seas</th><th>Period</th><th>Wave dir</th><th>Sources</th></tr></thead>
+              <tbody>{encounter.map((p, i) => <tr key={`${p.lat}-${p.lon}-${i}`} className="border-b border-slate-900"><td className="py-2 font-mono">{p.distanceNm.toFixed(0)} NM</td><td>{formatWhen(p.eta)}</td><td>{formatWhen(p.validAt)} <span className="text-slate-600">({p.deltaHours.toFixed(1)}h)</span></td><td>{p.windKt === null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td>{p.gustKt === null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="font-black text-[#f1d56b]">{p.waveHeightFt === null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td>{p.wavePeriodSec === null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td>{p.waveDirectionDeg == null ? "--" : `${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°`}</td><td className="text-[10px] text-slate-500">{p.source}{p.waveSource ? ` / ${p.waveSource}` : ""}</td></tr>)}</tbody>
             </table>
           </div>
         </section>
