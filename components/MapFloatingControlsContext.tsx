@@ -23,6 +23,26 @@ function ensureWxPanelOpen(panel: HTMLElement | undefined) {
   if (!panel.querySelector('input[type="checkbox"], input[type="range"]')) toggle.click();
 }
 
+function findNoaaCheckbox(panel: HTMLElement | undefined) {
+  if (!panel) return null;
+
+  const heading = Array.from(panel.querySelectorAll("strong, span, div")).find((element) =>
+    (element.textContent || "").trim().toUpperCase() === "NOAA ROUTE WX",
+  );
+
+  if (heading) {
+    const row = heading.parentElement;
+    const checkbox = row?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (checkbox) return checkbox;
+  }
+
+  return Array.from(panel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((checkbox) => {
+    const label = checkbox.closest("label");
+    const text = (label?.textContent || "").replace(/\s+/g, " ").trim().toUpperCase();
+    return text.includes("NOAA") || text.includes("ROUTE WX");
+  }) || null;
+}
+
 function menuTheme() {
   return document.documentElement.getAttribute("data-navdash-theme") === "day"
     ? {
@@ -93,14 +113,18 @@ function addRange(panel: HTMLElement, source: HTMLInputElement, labelText: strin
   range.step = source.step;
   range.value = source.value;
   range.disabled = source.disabled;
-  range.style.cssText = "width:100%;accent-color:#22d3ee";
-  range.addEventListener("input", () => {
+  range.style.cssText = "width:100%;accent-color:#22d3ee;touch-action:none";
+
+  const pushValue = () => {
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
     if (setter) setter.call(source, range.value);
     else source.value = range.value;
     source.dispatchEvent(new Event("input", { bubbles: true }));
     source.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  };
+
+  range.addEventListener("input", pushValue);
+  range.addEventListener("change", pushValue);
 
   wrap.append(label, range);
   panel.appendChild(wrap);
@@ -122,12 +146,20 @@ function moveExistingButton(panel: HTMLElement, button: HTMLButtonElement) {
 function openSubmenu(anchor: HTMLElement, build: (panel: HTMLElement) => void) {
   document.getElementById("navdash-map-context-submenu")?.remove();
 
+  const rootMenu = document.getElementById("navdash-map-context-menu");
+  if (!(rootMenu instanceof HTMLElement)) return;
+
   const panel = document.createElement("div");
   panel.id = "navdash-map-context-submenu";
   panel.setAttribute("role", "menu");
   styleMenuPanel(panel);
   build(panel);
-  document.body.appendChild(panel);
+
+  // Keep the submenu inside the root menu's DOM tree. The root context-menu
+  // handler treats clicks outside the root as a request to close, so this
+  // prevents sliders and other interactive submenu controls from disappearing
+  // on pointer-down while preserving the existing outside-click behavior.
+  rootMenu.appendChild(panel);
 
   const anchorRect = anchor.getBoundingClientRect();
   const panelRect = panel.getBoundingClientRect();
@@ -214,6 +246,19 @@ function buildCategorizedMenu() {
   categoryRow(menu, "WEATHER", (panel) => {
     if (amiWx instanceof HTMLButtonElement) moveExistingButton(panel, amiWx);
 
+    const noaaCheckbox = findNoaaCheckbox(wxPanel);
+    if (noaaCheckbox instanceof HTMLInputElement) {
+      addAction(
+        panel,
+        `NOAA ROUTE WX ${noaaCheckbox.checked ? "ON" : "OFF"}`,
+        () => noaaCheckbox.click(),
+        noaaCheckbox.disabled,
+        noaaCheckbox.checked,
+      );
+    } else {
+      addAction(panel, "NOAA ROUTE WX UNAVAILABLE", () => {}, true);
+    }
+
     if (layerControls instanceof HTMLElement) {
       const clearAmi = Array.from(layerControls.querySelectorAll<HTMLButtonElement>("button")).find((button) =>
         /CLEAR AMI ROUTE/i.test(button.textContent || ""),
@@ -224,7 +269,7 @@ function buildCategorizedMenu() {
     if (wxPanel instanceof HTMLElement) {
       Array.from(wxPanel.querySelectorAll("label")).forEach((label) => {
         const checkbox = label.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        if (!checkbox) return;
+        if (!checkbox || checkbox === noaaCheckbox) return;
         const text = (label.textContent || "").replace(/\s+/g, " ").trim() || "WEATHER LAYER";
         addAction(panel, `${text}${checkbox.checked ? "  ✓" : ""}`, () => checkbox.click(), checkbox.disabled, checkbox.checked);
       });
