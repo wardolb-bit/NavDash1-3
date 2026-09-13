@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const DATASET = "noaacwBLENDEDNRTcurrentsDaily";
-const ERDDAP = `https://coastwatch.noaa.gov/erddap/griddap/${DATASET}.json`;
+const ERDDAP_BASE = `https://coastwatch.noaa.gov/erddap/griddap/${DATASET}`;
 
 type ErddapJson = {
   table?: {
@@ -20,6 +20,19 @@ function clamp(value: number, min: number, max: number) {
 function finite(value: unknown) {
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+async function latestTimestamp() {
+  const response = await fetch(`${ERDDAP_BASE}.das`, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10000),
+    headers: { "User-Agent": "NavDash/1.3 NOAA current arrows" },
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`NOAA metadata ${response.status}: ${text.slice(0, 240)}`);
+  const match = text.match(/time_coverage_end\s+"([^"]+)"/i);
+  if (!match) throw new Error("NOAA current metadata did not include time_coverage_end.");
+  return match[1];
 }
 
 export async function GET(request: NextRequest) {
@@ -49,18 +62,21 @@ export async function GET(request: NextRequest) {
   const rawCells = Math.max(latSpan * 4, lonSpan * 4);
   const stride = Math.max(1, Math.ceil(rawCells / 42));
 
-  const q = (v: string) =>
-    `${v}[(last)][(${south!.toFixed(3)}):${stride}:(${north!.toFixed(3)})][(${west!.toFixed(3)}):${stride}:(${east!.toFixed(3)})]`;
-  const url = `${ERDDAP}?${q("u_current")},${q("v_current")}`;
-
   try {
+    const timestamp = await latestTimestamp();
+    const q = (v: string) =>
+      `${v}[(${timestamp})][(${south!.toFixed(3)}):${stride}:(${north!.toFixed(3)})][(${west!.toFixed(3)}):${stride}:(${east!.toFixed(3)})]`;
+    const url = `${ERDDAP_BASE}.json?${q("u_current")},${q("v_current")}`;
+
     const response = await fetch(url, {
       cache: "no-store",
+      signal: AbortSignal.timeout(12000),
       headers: { "User-Agent": "NavDash/1.3 NOAA current arrows" },
     });
 
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 500);
+      const detail = (await response.text()).slice(0, 800);
+      console.error("NOAA current upstream failure", { status: response.status, timestamp, url, detail });
       throw new Error(`NOAA ERDDAP ${response.status}: ${detail}`);
     }
 
@@ -86,7 +102,7 @@ export async function GET(request: NextRequest) {
       return [{ lat, lon, u, v }];
     });
 
-    const validAt = timeIndex >= 0 && rows.length ? String(rows[0][timeIndex] ?? "") : "";
+    const validAt = timeIndex >= 0 && rows.length ? String(rows[0][timeIndex] ?? timestamp) : timestamp;
 
     return NextResponse.json(
       {
@@ -101,9 +117,8 @@ export async function GET(request: NextRequest) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "NOAA surface currents unavailable" },
-      { status: 502 },
-    );
+    const message = error instanceof Error ? error.message : "NOAA surface currents unavailable";
+    console.error("NOAA current API failure", message);
+    return NextResponse.json({ error: message }, { status: 502 });
   }
 }
