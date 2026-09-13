@@ -170,7 +170,7 @@ function legMetrics(ship: OwnShip, start: Waypoint, end: Waypoint) {
   const wx = shipX - startX;
   const wy = shipY - startY;
   const len2 = vx * vx + vy * vy;
-  if (len2 <= 0.000001) return { ratio: 0, xte: 0, side: "--" };
+  if (len2 <= 1e-16) return { ratio: 0, xte: 0, side: "--" };
 
   const ratio = (wx * vx + wy * vy) / len2;
   const projectionRatio = Math.max(0, Math.min(1, ratio));
