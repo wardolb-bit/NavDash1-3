@@ -6,6 +6,7 @@ import { EncObjectInfo } from "../../components/EncObjectInfo";
 import { EncChartLayerStabilizer } from "../../components/EncChartLayerStabilizer";
 import { EncPopupCloseFix } from "../../components/EncPopupCloseFix";
 import { RouteRestoreOnMapReady } from "../../components/RouteRestoreOnMapReady";
+import { PreviewRouteLineOverlay } from "../../components/PreviewRouteLineOverlay";
 
 export default function BridgePage() {
   return (
@@ -16,6 +17,7 @@ export default function BridgePage() {
       <AisMapReadyRetry />
       <EncChartLayerStabilizer />
       <RouteRestoreOnMapReady />
+      <PreviewRouteLineOverlay />
       <EncObjectInfo />
       <EncPopupCloseFix />
     </>
