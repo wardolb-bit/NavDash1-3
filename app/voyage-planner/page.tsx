@@ -116,7 +116,7 @@ export default function VoyagePlannerPage() {
 
     const targetLegs = rawLegs.slice(0, resolvedTargetWaypointIndex);
     const targetDistance = targetLegs.reduce((sum, leg) => sum + leg.distance, 0);
-    const holdHours = targetLegs.reduce((sum, leg) => sum + leg.holdHours, 0);
+    const holdHours = targetLegs.slice(0, -1).reduce((sum, leg) => sum + leg.holdHours, 0);
     const elapsedHours = (target.getTime() - start.getTime()) / 3600000;
     const availableHours = elapsedHours - holdHours;
 
