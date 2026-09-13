@@ -1,137 +1,109 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const DATASET = "noaacwBLENDEDNRTcurrentsDaily";
-const ERDDAP_BASE = `https://coastwatch.noaa.gov/erddap/griddap/${DATASET}`;
-const LAT_MIN = -89.875;
-const LON_MIN = -179.875;
-const GRID_STEP = 0.25;
-const LAT_SIZE = 720;
-const LON_SIZE = 1440;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-function finite(value: string | null) {
-  const n = value == null ? Number.NaN : Number(value);
-  return Number.isFinite(n) ? n : Number.NaN;
-}
+const DATASET = "noaacwBLENDEDNRTcurrentsDaily";
+const ERDDAP = `https://coastwatch.noaa.gov/erddap/griddap/${DATASET}.json`;
+
+type ErddapJson = {
+  table?: {
+    columnNames?: string[];
+    rows?: unknown[][];
+  };
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
-function latIndex(lat: number) {
-  return clamp(Math.round((lat - LAT_MIN) / GRID_STEP), 0, LAT_SIZE - 1);
-}
-
-function lonIndex(lon: number) {
-  return clamp(Math.round((lon - LON_MIN) / GRID_STEP), 0, LON_SIZE - 1);
-}
-
-async function latestTimeIndex() {
-  const response = await fetch(`${ERDDAP_BASE}.dds`, {
-    cache: "no-store",
-    signal: AbortSignal.timeout(10000),
-    headers: { "User-Agent": "NavDash/1.3 NOAA current arrows" },
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`NOAA DDS ${response.status}: ${text.slice(0, 180)}`);
-  const match = text.match(/time\s*=\s*(\d+)\s*\]/i);
-  if (!match) throw new Error(`Unable to determine NOAA current time dimension. DDS: ${text.slice(0, 220)}`);
-  const size = Number(match[1]);
-  if (!Number.isFinite(size) || size < 1) throw new Error("NOAA current time dimension is invalid.");
-  return size - 1;
+function finite(value: unknown) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 export async function GET(request: NextRequest) {
-  const q = request.nextUrl.searchParams;
-  const south = clamp(finite(q.get("south")), -89.875, 89.875);
-  const north = clamp(finite(q.get("north")), -89.875, 89.875);
-  const west = clamp(finite(q.get("west")), -179.875, 179.875);
-  const east = clamp(finite(q.get("east")), -179.875, 179.875);
+  const search = request.nextUrl.searchParams;
+  let south = finite(search.get("south"));
+  let north = finite(search.get("north"));
+  let west = finite(search.get("west"));
+  let east = finite(search.get("east"));
 
-  if (![south, north, west, east].every(Number.isFinite) || north <= south || east <= west) {
-    return NextResponse.json({ error: "Valid south/north/west/east bounds are required." }, { status: 400 });
+  if (south === null || north === null || west === null || east === null) {
+    return NextResponse.json({ error: "south, north, west and east are required" }, { status: 400 });
   }
 
-  const southI = latIndex(south);
-  const northI = latIndex(north);
-  const westI = lonIndex(west);
-  const eastI = lonIndex(east);
-  const spanCells = Math.max(northI - southI, eastI - westI);
-  const stride = Math.max(1, Math.ceil(spanCells / 18));
+  const requestedSouth = south;
+  const requestedNorth = north;
+  south = clamp(Math.min(requestedSouth, requestedNorth), -89.875, 89.875);
+  north = clamp(Math.max(requestedSouth, requestedNorth), -89.875, 89.875);
+  west = clamp(west, -179.875, 179.875);
+  east = clamp(east, -179.875, 179.875);
+
+  if (east <= west) {
+    return NextResponse.json({ error: "Dateline-spanning current view is not enabled in this preview." }, { status: 400 });
+  }
+
+  const latSpan = Math.max(0.25, north - south);
+  const lonSpan = Math.max(0.25, east - west);
+  const rawCells = Math.max(latSpan * 4, lonSpan * 4);
+  const stride = Math.max(1, Math.ceil(rawCells / 42));
+
+  const q = (v: string) =>
+    `${v}[(last)][(${south!.toFixed(3)}):${stride}:(${north!.toFixed(3)})][(${west!.toFixed(3)}):${stride}:(${east!.toFixed(3)})]`;
+  const url = `${ERDDAP}?${q("u_current")},${q("v_current")}`;
 
   try {
-    const timeI = await latestTimeIndex();
-    const query = [
-      `u_current[${timeI}:1:${timeI}][${southI}:${stride}:${northI}][${westI}:${stride}:${eastI}]`,
-      `v_current[${timeI}:1:${timeI}][${southI}:${stride}:${northI}][${westI}:${stride}:${eastI}]`,
-    ].join(",");
-
-    const url = `${ERDDAP_BASE}.json?${encodeURIComponent(query)}`;
     const response = await fetch(url, {
       cache: "no-store",
-      signal: AbortSignal.timeout(12000),
       headers: { "User-Agent": "NavDash/1.3 NOAA current arrows" },
     });
 
-    const text = await response.text();
-    let payload: any;
-    try {
-      payload = JSON.parse(text);
-    } catch {
-      return NextResponse.json({
-        error: "NOAA current service returned a non-JSON response.",
-        upstreamStatus: response.status,
-        detail: text.slice(0, 500),
-      }, { status: 502 });
-    }
-
     if (!response.ok) {
-      return NextResponse.json({
-        error: "NOAA current request failed.",
-        upstreamStatus: response.status,
-        detail: payload?.message || payload?.error || text.slice(0, 500),
-      }, { status: 502 });
+      const detail = (await response.text()).slice(0, 500);
+      throw new Error(`NOAA ERDDAP ${response.status}: ${detail}`);
     }
 
-    const table = payload?.table;
-    const names: string[] = Array.isArray(table?.columnNames) ? table.columnNames : [];
-    const rows: any[][] = Array.isArray(table?.rows) ? table.rows : [];
-    const idx = (name: string) => names.indexOf(name);
-    const latI = idx("latitude");
-    const lonI = idx("longitude");
-    const uI = idx("u_current");
-    const vI = idx("v_current");
-    const timeCol = idx("time");
+    const payload = (await response.json()) as ErddapJson;
+    const names = payload.table?.columnNames || [];
+    const rows = payload.table?.rows || [];
+    const timeIndex = names.indexOf("time");
+    const latIndex = names.indexOf("latitude");
+    const lonIndex = names.indexOf("longitude");
+    const uIndex = names.indexOf("u_current");
+    const vIndex = names.indexOf("v_current");
 
-    if ([latI, lonI, uI, vI].some((i) => i < 0)) {
-      return NextResponse.json({
-        error: "NOAA current response shape was unexpected.",
-        columns: names,
-      }, { status: 502 });
+    if (latIndex < 0 || lonIndex < 0 || uIndex < 0 || vIndex < 0) {
+      throw new Error("NOAA current response did not contain the expected vector columns.");
     }
 
     const points = rows.flatMap((row) => {
-      const lat = Number(row[latI]);
-      const lon = Number(row[lonI]);
-      const u = Number(row[uI]);
-      const v = Number(row[vI]);
-      if (![lat, lon, u, v].every(Number.isFinite)) return [];
+      const lat = finite(row[latIndex]);
+      const lon = finite(row[lonIndex]);
+      const u = finite(row[uIndex]);
+      const v = finite(row[vIndex]);
+      if (lat === null || lon === null || u === null || v === null || Math.abs(u) > 20 || Math.abs(v) > 20) return [];
       return [{ lat, lon, u, v }];
     });
 
-    return NextResponse.json({
-      provider: "NOAA CoastWatch",
-      product: "Blended Near Real Time Surface Currents",
-      dataset: DATASET,
-      validAt: rows.length && timeCol >= 0 ? String(rows[0][timeCol] || "") : "",
-      units: "m/s",
-      points,
-      stride,
-      grid: { southI, northI, westI, eastI, timeI },
-    });
+    const validAt = timeIndex >= 0 && rows.length ? String(rows[0][timeIndex] ?? "") : "";
+
+    return NextResponse.json(
+      {
+        provider: "NOAA NESDIS CoastWatch",
+        product: "Near-real-time global surface geostrophic currents",
+        dataset: DATASET,
+        validAt,
+        stride,
+        units: "m/s",
+        points,
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    return NextResponse.json({
-      error: "Unable to reach NOAA current service.",
-      detail: error instanceof Error ? error.message : String(error),
-    }, { status: 502 });
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "NOAA surface currents unavailable" },
+      { status: 502 },
+    );
   }
 }
