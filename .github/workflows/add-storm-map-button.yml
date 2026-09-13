@@ -1,0 +1,38 @@
+name: Add storm map button
+on:
+  push:
+    paths:
+      - '.github/workflows/add-storm-map-button.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Patch button and verify build
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/NavDashConsole.tsx')
+          s = p.read_text()
+          old = '''              <button onClick={toggleTheme} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>{day ? "NIGHT MODE" : "DAY MODE"}</button>'''
+          new = '''              <button onClick={() => { window.location.href = "/storm-map"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>STORM MAP</button>\n              <button onClick={toggleTheme} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>{day ? "NIGHT MODE" : "DAY MODE"}</button>'''
+          if old not in s:
+              raise SystemExit('target button not found; refusing broad edit')
+          p.write_text(s.replace(old, new, 1))
+          PY
+          git diff --check
+          npm ci
+          npm run build
+          rm .github/workflows/add-storm-map-button.yml
+          git config user.name 'wardolb-bit'
+          git config user.email 'wardolb@live.com'
+          git add app/NavDashConsole.tsx .github/workflows/add-storm-map-button.yml
+          git commit -m 'Add storm map button to bridge controls'
+          git push origin main
