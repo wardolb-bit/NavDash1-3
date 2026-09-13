@@ -153,17 +153,38 @@ function bearing(a: { lat: number; lon: number }, b: { lat: number; lon: number 
 }
 
 function legMetrics(ship: OwnShip, start: Waypoint, end: Waypoint) {
-  const meanLat = rad((ship.lat + start.lat + end.lat) / 3);
-  const xScale = 60 * Math.max(0.01, Math.cos(meanLat));
-  const vx = lonDelta(end.lon - start.lon) * xScale;
-  const vy = (end.lat - start.lat) * 60;
-  const wx = lonDelta(ship.lon - start.lon) * xScale;
-  const wy = (ship.lat - start.lat) * 60;
+  const mercatorY = (lat: number) => {
+    const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+    return Math.log(Math.tan(Math.PI / 4 + rad(clampedLat) / 2));
+  };
+
+  const startX = rad(start.lon);
+  const startY = mercatorY(start.lat);
+  const endX = startX + rad(lonDelta(end.lon - start.lon));
+  const endY = mercatorY(end.lat);
+  const shipX = startX + rad(lonDelta(ship.lon - start.lon));
+  const shipY = mercatorY(ship.lat);
+
+  const vx = endX - startX;
+  const vy = endY - startY;
+  const wx = shipX - startX;
+  const wy = shipY - startY;
   const len2 = vx * vx + vy * vy;
   if (len2 <= 0.000001) return { ratio: 0, xte: 0, side: "--" };
+
   const ratio = (wx * vx + wy * vy) / len2;
+  const projectionRatio = Math.max(0, Math.min(1, ratio));
+  const closestX = startX + projectionRatio * vx;
+  const closestY = startY + projectionRatio * vy;
+  const closestLat = deg(Math.atan(Math.sinh(closestY)));
+  const closestLon = deg(closestX);
   const cross = vx * wy - vy * wx;
-  return { ratio, xte: Math.abs(cross) / Math.sqrt(len2), side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--" };
+
+  return {
+    ratio,
+    xte: distanceNm(ship, { lat: closestLat, lon: closestLon }),
+    side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--",
+  };
 }
 
 function routeDtg(ship: OwnShip | null, route: Waypoint[], activeIndex: number) {
