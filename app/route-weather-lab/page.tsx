@@ -147,8 +147,9 @@ export default function RouteWeatherLabPage() {
   const [route, setRoute] = useState<Waypoint[]>([]);
   const [routeName, setRouteName] = useState("No route loaded");
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
-  const [status, setStatus] = useState("Load an RTZ route to begin.");
+  const [status, setStatus] = useState("Load an RTZ route or the current NavDash route to begin.");
   const [speedKt, setSpeedKt] = useState(9);
+  const [loadingCurrentRoute, setLoadingCurrentRoute] = useState(false);
   const [departure, setDeparture] = useState(() => {
     const now = new Date();
     const hst = new Date(now.toLocaleString("en-US", { timeZone: "Pacific/Honolulu" }));
@@ -266,21 +267,22 @@ export default function RouteWeatherLabPage() {
         const wave = p.waveHeightFt;
         const wind = p.windKt;
         const color = wave === null ? "#64748b" : wave >= 10 ? "#ef4444" : wave >= 7 ? "#f59e0b" : wave >= 5 ? "#eab308" : "#22c55e";
-        const seaText = wave === null ? "SEA --" : `${wave.toFixed(1)} FT`;
-        const windText = wind === null ? "WIND --" : `${compass(p.windDirectionDeg)} ${wind.toFixed(0)} KT`;
-        const label = [showSeas ? seaText : "", showWind ? windText : ""].filter(Boolean).join(" · ");
-        const icon = L.divIcon({
-          className: "",
-          html: `<div style="transform:translate(-50%,-100%);white-space:nowrap;background:rgba(4,8,12,.92);border:1px solid ${color};color:#e2e8f0;padding:4px 6px;font:800 10px ui-monospace,SFMono-Regular,Menlo,monospace;box-shadow:0 1px 4px rgba(0,0,0,.45)">${label || "ROUTE WX"}</div><div style="width:10px;height:10px;border-radius:50%;background:${color};border:2px solid #071019;transform:translate(-50%,-50%)"></div>`,
-          iconSize: [1, 1],
-          iconAnchor: [0, 0],
-        });
-        L.marker([p.lat, p.lon], { icon, interactive: true }).bindPopup([
+        const details = [
           showSeas ? `<b>Seas:</b> ${wave === null ? "No wave data" : `${wave.toFixed(1)} ft`}` : "",
-          p.wavePeriodSec !== null && showSeas ? `<b>Wave period:</b> ${p.wavePeriodSec.toFixed(0)} s` : "",
-          p.waveDirectionDeg !== null && p.waveDirectionDeg !== undefined && showSeas ? `<b>Wave direction:</b> ${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°` : "",
+          p.wavePeriodSec !== null && showSeas ? `<b>Period:</b> ${p.wavePeriodSec.toFixed(0)} s` : "",
+          p.waveDirectionDeg !== null && p.waveDirectionDeg !== undefined && showSeas ? `<b>Wave dir:</b> ${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°` : "",
           showWind ? `<b>Wind:</b> ${wind === null ? "--" : `${compass(p.windDirectionDeg)} ${wind.toFixed(0)} kt`}` : "",
           p.gustKt !== null && showWind ? `<b>Gust:</b> ${p.gustKt.toFixed(0)} kt` : "",
+          `<b>Along route:</b> ${p.distanceNm.toFixed(0)} NM`,
+        ].filter(Boolean).join("<br/>");
+        L.circleMarker([p.lat, p.lon], {
+          radius: 6,
+          color,
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.35,
+        }).bindTooltip(details, { direction: "top", opacity: 0.96 }).bindPopup([
+          details,
           `<b>Wind source:</b> ${p.source}`,
           p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).addTo(layer);
@@ -301,6 +303,34 @@ export default function RouteWeatherLabPage() {
       setStatus(`${parsed.length} waypoints loaded. Ready to analyze route weather.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not read route.");
+    }
+  }
+
+  async function loadCurrentRoute() {
+    setLoadingCurrentRoute(true);
+    setStatus("Loading current NavDash route…");
+    try {
+      const response = await fetch("/api/route-state", { cache: "no-store" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json?.error || "Could not read current NavDash route.");
+      if (!json?.hasRoute) throw new Error("There is no current shared NavDash route loaded.");
+      const parsed: Waypoint[] = (Array.isArray(json?.waypoints) ? json.waypoints : [])
+        .map((wp: any, index: number) => ({
+          name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `WP${String(index + 1).padStart(2, "0")}`,
+          lat: Number(wp?.lat ?? wp?.latitude),
+          lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+        }))
+        .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+      if (parsed.length < 2) throw new Error("The current NavDash route does not contain enough usable waypoints.");
+      setRoute(parsed);
+      setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route");
+      setWeather(null);
+      setFrameIndex(0);
+      setStatus(`${parsed.length} waypoints loaded from the current NavDash route. Ready to analyze route weather.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not load current NavDash route.");
+    } finally {
+      setLoadingCurrentRoute(false);
     }
   }
 
@@ -371,6 +401,7 @@ export default function RouteWeatherLabPage() {
         <section className="border border-slate-700/50 bg-[#071019] p-2">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && loadRouteFile(e.target.files[0])} /></label>
+            <button type="button" onClick={loadCurrentRoute} disabled={loadingCurrentRoute} className="border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{loadingCurrentRoute ? "LOADING CURRENT ROUTE…" : "LOAD CURRENT ROUTE"}</button>
             <button type="button" disabled={route.length < 2} onClick={analyze} className="border border-emerald-400/40 bg-[#08130f] px-3 py-2 text-[10px] font-black text-emerald-200 disabled:opacity-40">ANALYZE ROUTE</button>
             <button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button>
             <button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button>
@@ -381,7 +412,7 @@ export default function RouteWeatherLabPage() {
             <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">FORECAST VALID</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div>
               <input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} />
-              <div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>NOW</span><span>ALL ROUTE LABELS UPDATE AS YOU SCRUB</span><span>+24 HR</span></div>
+              <div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>NOW</span><span>HOVER ROUTE SAMPLES FOR CURRENT FRAME</span><span>+24 HR</span></div>
             </div>
           )}
         </section>
