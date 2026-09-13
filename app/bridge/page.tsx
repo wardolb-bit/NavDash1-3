@@ -5,6 +5,7 @@ import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";
 import { EncObjectInfo } from "../../components/EncObjectInfo";
 import { EncPopupCloseFix } from "../../components/EncPopupCloseFix";
 import { ArrivalPlannerBridgeButton } from "../../components/ArrivalPlannerBridgeButton";
+import { MapCursorReadout } from "../../components/MapCursorReadout";
 
 export default function BridgePage() {
   return (
@@ -16,6 +17,7 @@ export default function BridgePage() {
       <AisMapReadyRetry />
       <EncObjectInfo />
       <EncPopupCloseFix />
+      <MapCursorReadout />
     </>
   );
 }
