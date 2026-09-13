@@ -22,6 +22,15 @@ function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
 
+function pointKey(point: CurrentPoint) {
+  return `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`;
+}
+
+function encResultsContainLand(results: unknown) {
+  const text = JSON.stringify(results ?? []).toUpperCase();
+  return text.includes("LNDARE") || text.includes("LAND AREA") || text.includes("LANDAREA");
+}
+
 function validTimeLabel(value: string) {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return "LATEST";
@@ -41,8 +50,11 @@ export function NoaaCurrentArrows() {
   const [data, setData] = useState<CurrentResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [maskTick, setMaskTick] = useState(0);
   const mapRef = useRef<any>(null);
   const reloadRef = useRef(0);
+  const waterMaskRef = useRef(new Map<string, boolean>());
+  const pendingMaskRef = useRef(new Set<string>());
 
   useEffect(() => {
     let stopped = false;
@@ -124,6 +136,58 @@ export function NoaaCurrentArrows() {
   }, [enabled, host]);
 
   useEffect(() => {
+    if (!enabled || !data?.points?.length) return;
+    let cancelled = false;
+
+    const unchecked = data.points.filter((point) => {
+      const key = pointKey(point);
+      return !waterMaskRef.current.has(key) && !pendingMaskRef.current.has(key);
+    });
+
+    if (!unchecked.length) return;
+
+    const queue = [...unchecked];
+    const worker = async () => {
+      while (!cancelled && queue.length) {
+        const point = queue.shift();
+        if (!point) return;
+        const key = pointKey(point);
+        pendingMaskRef.current.add(key);
+
+        try {
+          const pad = 0.03;
+          const params = new URLSearchParams({
+            lat: point.lat.toFixed(5),
+            lon: point.lon.toFixed(5),
+            west: (point.lon - pad).toFixed(5),
+            south: (point.lat - pad).toFixed(5),
+            east: (point.lon + pad).toFixed(5),
+            north: (point.lat + pad).toFixed(5),
+            width: "1200",
+            height: "800",
+            tolerance: "2",
+          });
+          const response = await fetch(`/api/noaa-enc-identify?${params.toString()}`, { cache: "no-store" });
+          const payload = await response.json();
+          if (response.ok && !cancelled) {
+            waterMaskRef.current.set(key, !encResultsContainLand(payload?.results));
+            setMaskTick((value) => value + 1);
+          }
+        } catch {
+          // Fail closed: an unverified point remains hidden rather than drawing over possible land.
+        } finally {
+          pendingMaskRef.current.delete(key);
+        }
+      }
+    };
+
+    void Promise.all(Array.from({ length: Math.min(4, queue.length) }, () => worker()));
+    return () => {
+      cancelled = true;
+    };
+  }, [data, enabled]);
+
+  useEffect(() => {
     const map = mapRef.current;
     const mapElement = document.getElementById(MAP_ID) as HTMLElement | null;
     document.getElementById(CANVAS_ID)?.remove();
@@ -154,6 +218,7 @@ export function NoaaCurrentArrows() {
       const bounds = map.getBounds();
 
       const candidates = data.points
+        .filter((p) => waterMaskRef.current.get(pointKey(p)) === true)
         .filter((p) => bounds.contains([p.lat, p.lon]))
         .map((p) => ({ p, screen: map.latLngToContainerPoint([p.lat, p.lon]) }))
         .filter(({ screen }) => screen.x >= 0 && screen.y >= 0 && screen.x <= width && screen.y <= height);
@@ -175,7 +240,6 @@ export function NoaaCurrentArrows() {
         const speedKn = Math.hypot(p.u, p.v) * MPS_TO_KNOTS;
         if (!Number.isFinite(speedKn) || speedKn < 0.03) continue;
 
-        // NOAA u/v are eastward/northward components. Arrow points toward SET.
         const setRad = Math.atan2(p.u, p.v);
         const length = clamp(18 + speedKn * 6, 20, 36);
         const dx = Math.sin(setRad) * length;
@@ -228,7 +292,7 @@ export function NoaaCurrentArrows() {
       map.off("zoomend moveend", redraw);
       canvas.remove();
     };
-  }, [data, enabled]);
+  }, [data, enabled, maskTick]);
 
   useEffect(() => () => {
     window.clearTimeout(reloadRef.current);
