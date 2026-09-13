@@ -105,43 +105,41 @@ export default function VoyagePlannerPage() {
     });
   }, [route, plans, defaultSpeed]);
 
-  const baseTimeline = useMemo(() => {
-    const start = departure ? new Date(departure) : null;
-    if (!start || !Number.isFinite(start.getTime())) return [];
-    let cursor = new Date(start);
-    return rawLegs.map((leg) => {
-      const underwayHours = leg.distance / leg.speed;
-      const depart = new Date(cursor), arrive = new Date(depart.getTime() + underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
-      cursor = resume;
-      return { ...leg, underwayHours, depart, arrive, resume, solvedSpeed: null as number | null };
-    });
-  }, [rawLegs, departure]);
-
   const solveResult = useMemo<SolveResult>(() => {
-    if (!route || resolvedTargetWaypointIndex === null || resolvedTargetWaypointIndex <= 0 || !targetArrival) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+    const start = departure ? new Date(departure) : null;
+    if (!route || !start || !Number.isFinite(start.getTime()) || resolvedTargetWaypointIndex === null || resolvedTargetWaypointIndex <= 0 || !targetArrival) {
+      return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+    }
+
     const target = new Date(targetArrival);
-    if (!Number.isFinite(target.getTime())) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+    if (!Number.isFinite(target.getTime())) return { holdLegIndex: -1, resumeTime: start, remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
 
-    const candidateIndexes = rawLegs.map((leg, index) => ({ index, hold: leg.holdHours })).filter((x) => x.index < resolvedTargetWaypointIndex && x.hold > 0);
-    if (!candidateIndexes.length) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+    const targetLegs = rawLegs.slice(0, resolvedTargetWaypointIndex);
+    const targetDistance = targetLegs.reduce((sum, leg) => sum + leg.distance, 0);
+    const holdHours = targetLegs.reduce((sum, leg) => sum + leg.holdHours, 0);
+    const elapsedHours = (target.getTime() - start.getTime()) / 3600000;
+    const availableHours = elapsedHours - holdHours;
 
-    const holdLegIndex = candidateIndexes[candidateIndexes.length - 1].index;
-    const resumeTime = baseTimeline[holdLegIndex]?.resume;
-    if (!resumeTime) return { holdLegIndex, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
+    if (targetDistance <= 0 || availableHours <= 0) {
+      return { holdLegIndex: -1, resumeTime: start, remainingDistance: targetDistance, availableHours, requiredSpeed: null, status: "impossible" };
+    }
 
-    const remainingDistance = rawLegs.slice(holdLegIndex + 1, resolvedTargetWaypointIndex).reduce((sum, leg) => sum + leg.distance, 0);
-    const downstreamHoldHours = rawLegs.slice(holdLegIndex + 1, resolvedTargetWaypointIndex).reduce((sum, leg) => sum + leg.holdHours, 0);
-    const availableHours = (target.getTime() - resumeTime.getTime()) / 3600000 - downstreamHoldHours;
-    if (remainingDistance <= 0 || availableHours <= 0) return { holdLegIndex, resumeTime, remainingDistance, availableHours, requiredSpeed: null, status: "impossible" };
-    return { holdLegIndex, resumeTime, remainingDistance, availableHours, requiredSpeed: remainingDistance / availableHours, status: "ready" };
-  }, [route, resolvedTargetWaypointIndex, targetArrival, rawLegs, baseTimeline]);
+    return {
+      holdLegIndex: -1,
+      resumeTime: start,
+      remainingDistance: targetDistance,
+      availableHours,
+      requiredSpeed: targetDistance / availableHours,
+      status: "ready",
+    };
+  }, [route, departure, resolvedTargetWaypointIndex, targetArrival, rawLegs]);
 
   const timeline = useMemo(() => {
     const start = departure ? new Date(departure) : null;
     if (!start || !Number.isFinite(start.getTime())) return [];
     let cursor = new Date(start);
     return rawLegs.map((leg) => {
-      const useSolved = solveResult.status === "ready" && solveResult.requiredSpeed !== null && leg.index > solveResult.holdLegIndex && resolvedTargetWaypointIndex !== null && leg.index < resolvedTargetWaypointIndex;
+      const useSolved = solveResult.status === "ready" && solveResult.requiredSpeed !== null && resolvedTargetWaypointIndex !== null && leg.index < resolvedTargetWaypointIndex;
       const effectiveSpeed = useSolved ? solveResult.requiredSpeed! : leg.speed;
       const underwayHours = leg.distance / effectiveSpeed;
       const depart = new Date(cursor), arrive = new Date(depart.getTime() + underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
@@ -218,15 +216,15 @@ export default function VoyagePlannerPage() {
 
             {solveResult.status === "ready" && solveResult.requiredSpeed !== null && (
               <div className={`mt-4 border-2 p-4 ${exceedsLimit ? "border-red-500 bg-red-500/10" : "border-emerald-500 bg-emerald-500/10"}`}>
-                <div className={`text-[10px] font-black uppercase tracking-[.14em] ${exceedsLimit ? "text-red-400" : "text-emerald-500"}`}>Smart Arrival Solver</div>
+                <div className={`text-[10px] font-black uppercase tracking-[.14em] ${exceedsLimit ? "text-red-400" : "text-emerald-500"}`}>Whole Route Arrival Solver</div>
                 <div className="mt-2 text-3xl font-black font-mono">{solveResult.requiredSpeed.toFixed(1)} KT</div>
-                <div className={`mt-1 text-[10px] font-black uppercase ${muted}`}>Required average speed after the last hold to reach {targetWaypoint?.name || "target waypoint"} on time</div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><Metric label="Resume" value={dateTimeText(solveResult.resumeTime)} inset={inset} muted={muted} /><Metric label="Distance Left" value={`${solveResult.remainingDistance.toFixed(1)} nm`} inset={inset} muted={muted} /><Metric label="Time Available" value={durationText(solveResult.availableHours)} inset={inset} muted={muted} /><Metric label="Target" value={dateTimeText(target)} inset={inset} muted={muted} /></div>
+                <div className={`mt-1 text-[10px] font-black uppercase ${muted}`}>Required constant underway speed from departure to reach {targetWaypoint?.name || "target waypoint"} on time</div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><Metric label="Departure" value={dateTimeText(solveResult.resumeTime)} inset={inset} muted={muted} /><Metric label="Distance To Target" value={`${solveResult.remainingDistance.toFixed(1)} nm`} inset={inset} muted={muted} /><Metric label="Underway Time Available" value={durationText(solveResult.availableHours)} inset={inset} muted={muted} /><Metric label="Target" value={dateTimeText(target)} inset={inset} muted={muted} /></div>
                 {exceedsLimit && <div className="mt-3 border border-red-500/60 p-2 text-xs font-black uppercase text-red-400">Required speed exceeds your {limit.toFixed(1)} kt planning limit</div>}
               </div>
             )}
 
-            {solveResult.status === "impossible" && <div className="mt-4 border-2 border-red-500 bg-red-500/10 p-4 text-sm font-black uppercase text-red-400">Target ETA cannot be made after this hold. There is not enough remaining time.</div>}
+            {solveResult.status === "impossible" && <div className="mt-4 border-2 border-red-500 bg-red-500/10 p-4 text-sm font-black uppercase text-red-400">Target ETA cannot be made. The arrival time leaves no usable underway time after planned holds.</div>}
 
             <div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Distance" value={route ? `${totalDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="Underway" value={route ? durationText(totalUnderway) : "--"} inset={inset} muted={muted} /><Metric label="Holding" value={route ? durationText(totalHold) : "--"} inset={inset} muted={muted} /><Metric label="Final Arrival" value={dateTimeText(finalArrival)} inset={inset} muted={muted} /><Metric label="Target WP" value={targetWaypoint ? `${resolvedTargetWaypointIndex! + 1} · ${targetWaypoint.name}` : "--"} inset={inset} muted={muted} /><Metric label="Target WP ETA" value={dateTimeText(targetWaypointArrival)} inset={inset} muted={muted} /></div>
             {targetDeltaHours !== null && <div className={`mt-2 border p-3 ${inset}`}><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Waypoint Arrival Difference</div><div className={`mt-1 font-mono text-lg font-black ${Math.abs(targetDeltaHours) < 0.05 ? "text-emerald-500" : targetDeltaHours > 0 ? "text-red-400" : "text-cyan-400"}`}>{Math.abs(targetDeltaHours) < 0.05 ? "ON TIME" : `${durationText(Math.abs(targetDeltaHours))} ${targetDeltaHours > 0 ? "LATE" : "EARLY"}`}</div></div>}
