@@ -6,9 +6,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
     <>
       <style>{`
         #route-weather-lab-map + * {}
-        .leaflet-marker-icon > div:first-child {
-          display: none !important;
-        }
 
         /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
