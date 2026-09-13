@@ -13,18 +13,9 @@ type CurrentResponse = {
   points: CurrentPoint[];
 };
 
-type GeoJsonGeometry = {
-  type?: string;
-  coordinates?: any;
-};
-
-type LandFeature = {
-  geometry?: GeoJsonGeometry | null;
-};
-
-type LandResponse = {
-  features?: LandFeature[];
-};
+type GeoJsonGeometry = { type?: string; coordinates?: any };
+type MaskFeature = { geometry?: GeoJsonGeometry | null };
+type MaskResponse = { features?: MaskFeature[] };
 
 const MAP_ID = "navmap-main-isolated-v2";
 const TOGGLE_ID = "navdash-current-arrows-toggle";
@@ -43,7 +34,6 @@ function pointInRing(lon: number, lat: number, ring: number[][]) {
     const xj = Number(ring[j]?.[0]);
     const yj = Number(ring[j]?.[1]);
     if (![xi, yi, xj, yj].every(Number.isFinite)) continue;
-
     const intersects = yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi || Number.EPSILON) + xi;
     if (intersects) inside = !inside;
   }
@@ -86,7 +76,7 @@ export function NoaaCurrentArrows() {
   const [data, setData] = useState<CurrentResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [landFeatures, setLandFeatures] = useState<LandFeature[] | null>(null);
+  const [waterFeatures, setWaterFeatures] = useState<MaskFeature[] | null>(null);
   const mapRef = useRef<any>(null);
   const reloadRef = useRef(0);
 
@@ -126,14 +116,14 @@ export function NoaaCurrentArrows() {
 
       if (west < -180 || east > 180 || east <= west) {
         setData(null);
-        setLandFeatures(null);
+        setWaterFeatures(null);
         setError("Current arrows do not yet span the dateline.");
         return;
       }
 
       setLoading(true);
       setError("");
-      setLandFeatures(null);
+      setWaterFeatures(null);
       try {
         const params = new URLSearchParams({
           south: south.toFixed(3),
@@ -142,7 +132,7 @@ export function NoaaCurrentArrows() {
           east: east.toFixed(3),
         });
 
-        const [currentResponse, landResponse] = await Promise.all([
+        const [currentResponse, waterResponse] = await Promise.all([
           fetch(`/api/noaa-current-arrows?${params.toString()}`, { cache: "no-store" }),
           fetch(`/api/noaa-enc-land-polygons?${params.toString()}`, { cache: "no-store" }),
         ]);
@@ -151,15 +141,15 @@ export function NoaaCurrentArrows() {
         if (!currentResponse.ok) throw new Error(currentPayload?.error || "NOAA current arrows unavailable");
         setData(currentPayload);
 
-        if (landResponse.ok) {
-          const landPayload = (await landResponse.json()) as LandResponse;
-          setLandFeatures(Array.isArray(landPayload?.features) ? landPayload.features : []);
+        if (waterResponse.ok) {
+          const waterPayload = (await waterResponse.json()) as MaskResponse;
+          setWaterFeatures(Array.isArray(waterPayload?.features) ? waterPayload.features : []);
         } else {
-          setLandFeatures(null);
+          setWaterFeatures(null);
         }
       } catch (err) {
         setData(null);
-        setLandFeatures(null);
+        setWaterFeatures(null);
         setError(err instanceof Error ? err.message : "NOAA current arrows unavailable");
       } finally {
         setLoading(false);
@@ -174,7 +164,7 @@ export function NoaaCurrentArrows() {
     if (enabled) load();
     else {
       setData(null);
-      setLandFeatures(null);
+      setWaterFeatures(null);
       setError("");
     }
 
@@ -189,7 +179,7 @@ export function NoaaCurrentArrows() {
     const map = mapRef.current;
     const mapElement = document.getElementById(MAP_ID) as HTMLElement | null;
     document.getElementById(CANVAS_ID)?.remove();
-    if (!enabled || !map || !mapElement || !data?.points?.length || landFeatures === null) return;
+    if (!enabled || !map || !mapElement || !data?.points?.length || waterFeatures === null) return;
 
     const canvas = document.createElement("canvas");
     canvas.id = CANVAS_ID;
@@ -216,7 +206,7 @@ export function NoaaCurrentArrows() {
       const bounds = map.getBounds();
 
       const candidates = data.points
-        .filter((p) => !landFeatures.some((feature) => geometryContainsPoint(feature.geometry, p.lon, p.lat)))
+        .filter((p) => waterFeatures.some((feature) => geometryContainsPoint(feature.geometry, p.lon, p.lat)))
         .filter((p) => bounds.contains([p.lat, p.lon]))
         .map((p) => ({ p, screen: map.latLngToContainerPoint([p.lat, p.lon]) }))
         .filter(({ screen }) => screen.x >= 0 && screen.y >= 0 && screen.x <= width && screen.y <= height);
@@ -290,7 +280,7 @@ export function NoaaCurrentArrows() {
       map.off("zoomend moveend", redraw);
       canvas.remove();
     };
-  }, [data, enabled, landFeatures]);
+  }, [data, enabled, waterFeatures]);
 
   useEffect(() => () => {
     window.clearTimeout(reloadRef.current);
@@ -301,7 +291,7 @@ export function NoaaCurrentArrows() {
     ? "NOAA CURRENTS • LOADING"
     : error
       ? "NOAA CURRENTS • UNAVAILABLE"
-      : data && landFeatures === null
+      : data && waterFeatures === null
         ? "NOAA CURRENTS • MASKING"
         : data
           ? `NOAA CURRENTS • ${validTimeLabel(data.validAt)}`
