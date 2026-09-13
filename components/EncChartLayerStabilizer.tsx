@@ -16,6 +16,16 @@ export function EncChartLayerStabilizer() {
     let overlay: any = null;
     let requestSerial = 0;
 
+    const keepOperationalVectorsOnTop = () => {
+      if (!map) return;
+      map.eachLayer((layer: any) => {
+        if (layer?.__navdashSingleNoaaViewport) return;
+        if (typeof layer?.bringToFront === "function" && layer?._path) {
+          try { layer.bringToFront(); } catch {}
+        }
+      });
+    };
+
     const removeConflictingChartLayers = () => {
       if (!map) return;
       const remove: any[] = [];
@@ -90,6 +100,8 @@ export function EncChartLayerStabilizer() {
           if (previous && previous !== overlay) {
             try { map.removeLayer(previous); } catch {}
           }
+          keepOperationalVectorsOnTop();
+          window.setTimeout(keepOperationalVectorsOnTop, 0);
         });
 
         nextOverlay.once("error", () => {
@@ -109,6 +121,12 @@ export function EncChartLayerStabilizer() {
         url.includes("MaritimeChartService/WMSServer")
       ) {
         try { map.removeLayer(layer); } catch {}
+        return;
+      }
+      if (typeof layer?.bringToFront === "function" && layer?._path) {
+        window.setTimeout(() => {
+          try { layer.bringToFront(); } catch {}
+        }, 0);
       }
     };
 
@@ -134,6 +152,7 @@ export function EncChartLayerStabilizer() {
       removeConflictingChartLayers();
       map.on("moveend zoomend resize", refresh);
       map.on("layeradd", onLayerAdd);
+      keepOperationalVectorsOnTop();
       refresh();
     };
 
