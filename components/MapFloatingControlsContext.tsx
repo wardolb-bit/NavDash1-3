@@ -65,7 +65,7 @@ function menuTheme() {
 
 function styleMenuPanel(panel: HTMLElement) {
   const theme = menuTheme();
-  panel.style.cssText = "position:fixed;z-index:1800;min-width:218px;padding:6px;border-radius:7px;box-shadow:0 10px 28px rgba(0,0,0,.34);backdrop-filter:blur(8px);user-select:none;-webkit-user-select:none";
+  panel.style.cssText = "position:absolute;z-index:1800;min-width:218px;padding:6px;border-radius:7px;box-shadow:0 10px 28px rgba(0,0,0,.34);backdrop-filter:blur(8px);user-select:none;-webkit-user-select:none";
   panel.style.background = theme.background;
   panel.style.border = `1px solid ${theme.border}`;
 }
@@ -154,28 +154,27 @@ function openSubmenu(anchor: HTMLElement, build: (panel: HTMLElement) => void) {
   panel.setAttribute("role", "menu");
   styleMenuPanel(panel);
   build(panel);
-
-  // Keep the submenu inside the root menu's DOM tree. The root context-menu
-  // handler treats clicks outside the root as a request to close, so this
-  // prevents sliders and other interactive submenu controls from disappearing
-  // on pointer-down while preserving the existing outside-click behavior.
   rootMenu.appendChild(panel);
 
   const anchorRect = anchor.getBoundingClientRect();
+  const rootRect = rootMenu.getBoundingClientRect();
   const panelRect = panel.getBoundingClientRect();
   const gap = 5;
-  const roomRight = window.innerWidth - anchorRect.right;
-  let left = roomRight >= panelRect.width + gap
-    ? anchorRect.right + gap
-    : anchorRect.left - panelRect.width - gap;
-  left = Math.max(6, Math.min(left, window.innerWidth - panelRect.width - 6));
 
-  let top = anchorRect.top;
-  if (top + panelRect.height > window.innerHeight - 6) top = window.innerHeight - panelRect.height - 6;
-  top = Math.max(6, top);
+  const rightViewport = anchorRect.right + gap;
+  const leftViewport = anchorRect.left - panelRect.width - gap;
+  const viewportLeft = rightViewport + panelRect.width <= window.innerWidth - 6
+    ? rightViewport
+    : Math.max(6, leftViewport);
 
-  panel.style.left = `${left}px`;
-  panel.style.top = `${top}px`;
+  let viewportTop = anchorRect.top;
+  if (viewportTop + panelRect.height > window.innerHeight - 6) {
+    viewportTop = window.innerHeight - panelRect.height - 6;
+  }
+  viewportTop = Math.max(6, viewportTop);
+
+  panel.style.left = `${viewportLeft - rootRect.left}px`;
+  panel.style.top = `${viewportTop - rootRect.top}px`;
 }
 
 function categoryRow(menu: HTMLElement, label: string, build: (panel: HTMLElement) => void) {
@@ -222,6 +221,7 @@ function buildCategorizedMenu() {
   menu.innerHTML = "";
   menu.dataset.categorized = "true";
   menu.style.minWidth = "190px";
+  menu.style.overflow = "visible";
 
   categoryRow(menu, "MEASURE", (panel) => {
     [pan, fromShip, twoPoints, clearMeasure].forEach((button) => {
@@ -311,24 +311,14 @@ export function MapFloatingControlsContext() {
       }
     };
 
-    const closeSubmenuOnOutside = (event: PointerEvent) => {
-      const submenu = document.getElementById("navdash-map-context-submenu");
-      const root = document.getElementById("navdash-map-context-menu");
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (submenu && !submenu.contains(target) && (!root || !root.contains(target))) submenu.remove();
-    };
-
     sync();
     const observer = new MutationObserver(sync);
     observer.observe(document.body, { childList: true, subtree: true });
     const timer = window.setInterval(sync, 500);
-    document.addEventListener("pointerdown", closeSubmenuOnOutside, true);
 
     return () => {
       observer.disconnect();
       window.clearInterval(timer);
-      document.removeEventListener("pointerdown", closeSubmenuOnOutside, true);
       document.getElementById("navdash-map-context-submenu")?.remove();
     };
   }, []);
