@@ -1,0 +1,59 @@
+name: Promote preview features
+
+on:
+  push:
+    paths:
+      - '.github/workflows/promote-preview-features.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Promote selected preview features
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin preview/noaa-enc-object-info
+          git checkout origin/preview/noaa-enc-object-info -- \
+            app/api/noaa-enc-identify/route.ts \
+            app/storm-map/page.tsx \
+            components/EncObjectInfo.tsx \
+            components/EncPopupCloseFix.tsx
+
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/bridge/page.tsx')
+          s = p.read_text()
+          import_anchor = 'import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";\n'
+          imports = import_anchor + 'import { EncObjectInfo } from "../../components/EncObjectInfo";\nimport { EncPopupCloseFix } from "../../components/EncPopupCloseFix";\n'
+          if 'EncObjectInfo' not in s:
+              if import_anchor not in s:
+                  raise SystemExit('bridge import anchor not found')
+              s = s.replace(import_anchor, imports, 1)
+          mount_anchor = '      <AisMapReadyRetry />\n'
+          mounts = mount_anchor + '      <EncObjectInfo />\n      <EncPopupCloseFix />\n'
+          if '<EncObjectInfo />' not in s:
+              if mount_anchor not in s:
+                  raise SystemExit('bridge mount anchor not found')
+              s = s.replace(mount_anchor, mounts, 1)
+          p.write_text(s)
+          PY
+
+          git diff --check
+          npm ci
+          npm run build
+
+          git config user.name 'wardolb-bit'
+          git config user.email 'wardolb@live.com'
+          git add app/api/noaa-enc-identify/route.ts app/storm-map/page.tsx components/EncObjectInfo.tsx components/EncPopupCloseFix.tsx app/bridge/page.tsx
+          git commit -m 'Promote ENC info and storm map to production'
+          git push origin HEAD:main
