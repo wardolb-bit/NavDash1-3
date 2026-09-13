@@ -7,6 +7,8 @@ import { EncPopupCloseFix } from "../../components/EncPopupCloseFix";
 import { ArrivalPlannerBridgeButton } from "../../components/ArrivalPlannerBridgeButton";
 import { MapCursorReadout } from "../../components/MapCursorReadout";
 import { MapFloatingControlsContext } from "../../components/MapFloatingControlsContext";
+import { NoaaCurrentArrows } from "../../components/NoaaCurrentArrows";
+import { NoaaCurrentMenuAction } from "../../components/NoaaCurrentMenuAction";
 
 export default function BridgePage() {
   return (
@@ -19,7 +21,9 @@ export default function BridgePage() {
       <EncObjectInfo />
       <EncPopupCloseFix />
       <MapCursorReadout />
+      <NoaaCurrentArrows />
       <MapFloatingControlsContext />
+      <NoaaCurrentMenuAction />
     </>
   );
 }
