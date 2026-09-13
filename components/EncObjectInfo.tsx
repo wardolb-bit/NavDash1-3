@@ -254,25 +254,25 @@ export function EncObjectInfo() {
       const style = document.createElement("style");
       style.id = "navdash-enc-info-style";
       style.textContent = `
+        .leaflet-pane.navdash-enc-popup-pane{z-index:2000!important;pointer-events:none}
+        .leaflet-pane.navdash-enc-popup-pane .leaflet-popup{pointer-events:auto}
         .navdash-enc-control{display:block;border:1px solid rgba(105,215,235,.55);background:rgba(7,16,25,.92);color:#d9fbff;border-radius:4px;padding:7px 9px;font:800 11px/1 system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28)}
         .navdash-enc-control[data-active="true"]{border-color:#f1d56b;color:#f1d56b;background:rgba(29,25,10,.96)}
         .navdash-enc-popup .leaflet-popup-content-wrapper{background:#071019;color:#dbe8ef;border:1px solid rgba(105,215,235,.42);border-radius:7px;box-shadow:0 8px 24px rgba(0,0,0,.42)}
         .navdash-enc-popup .leaflet-popup-tip{background:#071019}
         .navdash-enc-popup .leaflet-popup-content{margin:13px 15px;min-width:280px;max-width:390px}
-        .navdash-enc-kicker{font:800 9px/1.15 system-ui,sans-serif;letter-spacing:.13em;color:#69d7eb;margin-bottom:3px}
-        .navdash-enc-name{font:900 17px/1.15 system-ui,sans-serif;color:#fff;margin-bottom:10px;overflow-wrap:anywhere}
-        .navdash-enc-summary{border-top:1px solid rgba(255,255,255,.13);border-bottom:1px solid rgba(255,255,255,.13);padding:6px 0}
-        .navdash-enc-row{display:grid;grid-template-columns:minmax(100px,.78fr) minmax(145px,1.22fr);gap:10px;padding:4px 0;font:650 11px/1.25 system-ui,sans-serif;align-items:start}
-        .navdash-enc-row span{color:#8ba5b3}.navdash-enc-row strong{color:#e7f0f5;text-align:right;overflow-wrap:anywhere;font-weight:800}
-        .navdash-enc-row.is-emphasis{padding:6px 0}.navdash-enc-row.is-emphasis span{color:#f1d56b}.navdash-enc-row.is-emphasis strong{font-size:15px;color:#fff;letter-spacing:.02em}
-        .navdash-enc-source{font:700 8px/1.25 system-ui,sans-serif;letter-spacing:.05em;color:#718995;margin:8px 0 2px;text-transform:uppercase}
+        .navdash-enc-kicker{font:800 9px/1.2 system-ui,sans-serif;letter-spacing:.12em;color:#69d7eb;text-transform:uppercase}
+        .navdash-enc-name{font:900 15px/1.25 system-ui,sans-serif;color:#fff;margin:3px 0 10px}
+        .navdash-enc-summary{border-top:1px solid rgba(255,255,255,.12);border-bottom:1px solid rgba(255,255,255,.12);padding:6px 0}
+        .navdash-enc-row{display:grid;grid-template-columns:minmax(105px,.78fr) minmax(140px,1.22fr);gap:8px;padding:3px 0;font:650 10.5px/1.3 system-ui,sans-serif}
+        .navdash-enc-row span{color:#8ba5b3}.navdash-enc-row strong{color:#e7f0f5;text-align:right;overflow-wrap:anywhere}.navdash-enc-row.is-emphasis strong{color:#f1d56b;font-size:12px}
+        .navdash-enc-source{font:700 8px/1.35 system-ui,sans-serif;letter-spacing:.06em;color:#6f8794;margin:8px 0 0}
+        .navdash-enc-raw{margin-top:7px}.navdash-enc-raw summary{cursor:pointer;color:#7e9cab;font:800 9px/1.2 system-ui,sans-serif;letter-spacing:.08em}.navdash-enc-raw section{border-top:1px solid rgba(255,255,255,.09);padding:6px 0}.navdash-enc-raw section>strong{display:block;color:#69d7eb;font:800 9px/1.2 system-ui,sans-serif;margin-bottom:4px}.navdash-enc-raw section>div{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:1px 0;font:600 9px/1.25 system-ui,sans-serif}.navdash-enc-raw span{color:#748b97}.navdash-enc-raw b{color:#cfdbe1;text-align:right;overflow-wrap:anywhere}
         .navdash-enc-empty,.navdash-enc-error,.navdash-enc-loading{font:600 11px/1.35 system-ui,sans-serif;color:#a9bbc5;padding:4px 0}
-        .navdash-enc-raw{margin-top:7px;border-top:1px solid rgba(255,255,255,.08);padding-top:7px}.navdash-enc-raw summary{cursor:pointer;font:800 9px/1.2 system-ui,sans-serif;letter-spacing:.08em;color:#78909c;user-select:none}.navdash-enc-raw section{padding:7px 0;border-top:1px dotted rgba(255,255,255,.09)}.navdash-enc-raw section>strong{display:block;color:#69d7eb;font:800 10px/1.2 system-ui,sans-serif;margin-bottom:3px}.navdash-enc-raw section div{display:grid;grid-template-columns:80px 1fr;gap:6px;font:600 9px/1.2 system-ui,sans-serif;padding:1px 0}.navdash-enc-raw section div span{color:#718995}.navdash-enc-raw section div b{color:#b8c7ce;text-align:right;overflow-wrap:anywhere}
         html[data-navdash-theme="day"] .navdash-enc-control{background:rgba(255,255,255,.96);color:#16323f;border-color:rgba(25,99,120,.45)}
         html[data-navdash-theme="day"] .navdash-enc-control[data-active="true"]{background:#fff8d8;color:#765e00;border-color:#b89000}
         html[data-navdash-theme="day"] .navdash-enc-popup .leaflet-popup-content-wrapper,html[data-navdash-theme="day"] .navdash-enc-popup .leaflet-popup-tip{background:#fff;color:#15222a}
-        html[data-navdash-theme="day"] .navdash-enc-name,html[data-navdash-theme="day"] .navdash-enc-row strong,html[data-navdash-theme="day"] .navdash-enc-row.is-emphasis strong{color:#15222a}
-        html[data-navdash-theme="day"] .navdash-enc-summary{border-color:rgba(0,0,0,.12)}
+        html[data-navdash-theme="day"] .navdash-enc-name,html[data-navdash-theme="day"] .navdash-enc-row strong{color:#15222a}
       `;
       document.head.appendChild(style);
     };
@@ -289,13 +289,20 @@ export function EncObjectInfo() {
       const bounds = map.getBounds();
       const size = map.getSize();
       const params = new URLSearchParams({
-        lat: String(lat), lon: String(lon), west: String(bounds.getWest()), south: String(bounds.getSouth()),
-        east: String(bounds.getEast()), north: String(bounds.getNorth()), width: String(size.x), height: String(size.y), tolerance: "10",
+        lat: String(lat),
+        lon: String(lon),
+        west: String(bounds.getWest()),
+        south: String(bounds.getSouth()),
+        east: String(bounds.getEast()),
+        north: String(bounds.getNorth()),
+        width: String(size.x),
+        height: String(size.y),
+        tolerance: "10",
       });
 
-      const popup = L.popup({ className: "navdash-enc-popup", maxWidth: 420, closeButton: true })
+      const popup = L.popup({ className: "navdash-enc-popup", maxWidth: 420, closeButton: true, pane: "navdashEncPopupPane" })
         .setLatLng(event.latlng)
-        .setContent('<div class="navdash-enc-kicker">NOAA ENC</div><div class="navdash-enc-loading">Reading chart object…</div>')
+        .setContent('<div class="navdash-enc-loading">Querying NOAA ENC…</div>')
         .openOn(map);
 
       try {
@@ -305,19 +312,19 @@ export function EncObjectInfo() {
 
         const results = Array.isArray(payload.results) ? payload.results : [];
         if (!results.length) {
-          popup.setContent('<div class="navdash-enc-kicker">NOAA ENC</div><div class="navdash-enc-empty">No charted object found at that point. Tap directly on the symbol, light sector, buoy, beacon, wreck, or charted feature.</div>');
+          popup.setContent('<div class="navdash-enc-empty">No encoded ENC feature found at that point. Try tapping directly on a chart symbol or label.</div>');
           return;
         }
 
         const unique = results.filter((result, index, all) => {
-          const signature = `${result.layerId}|${JSON.stringify(result.attributes || {})}`;
-          return all.findIndex((candidate) => `${candidate.layerId}|${JSON.stringify(candidate.attributes || {})}` === signature) === index;
+          const signature = `${result.layerId}|${result.layerName}|${result.value}|${JSON.stringify(result.attributes || {})}`;
+          return all.findIndex((candidate) => `${candidate.layerId}|${candidate.layerName}|${candidate.value}|${JSON.stringify(candidate.attributes || {})}` === signature) === index;
         }).slice(0, 10);
 
         popup.setContent(renderBridgeCard(unique, lat, lon));
       } catch (error) {
         if ((error as Error)?.name === "AbortError") return;
-        popup.setContent(`<div class="navdash-enc-kicker">NOAA ENC</div><div class="navdash-enc-error">${escapeHtml(error instanceof Error ? error.message : "ENC query failed.")}</div>`);
+        popup.setContent(`<div class="navdash-enc-error">${escapeHtml(error instanceof Error ? error.message : "ENC query failed.")}</div>`);
       }
     };
 
@@ -325,18 +332,26 @@ export function EncObjectInfo() {
       if (cancelled) return;
       const element = document.getElementById(MAP_ELEMENT_ID) as any;
       map = element?.__navdashLeafletMap;
-      if (!map) { timer = window.setTimeout(attach, 100); return; }
+      if (!map) {
+        timer = window.setTimeout(attach, 100);
+        return;
+      }
 
       L = await import("leaflet");
       if (cancelled || !map) return;
       ensureStyles();
+
+      let popupPane = map.getPane("navdashEncPopupPane");
+      if (!popupPane) popupPane = map.createPane("navdashEncPopupPane");
+      popupPane.classList.add("navdash-enc-popup-pane");
+      popupPane.style.zIndex = "2000";
 
       control = L.control({ position: "topleft" });
       control.onAdd = () => {
         const button = L.DomUtil.create("button", "navdash-enc-control") as HTMLButtonElement;
         button.type = "button";
         button.textContent = "ENC INFO";
-        button.title = "Read live NOAA ENC chart objects";
+        button.title = "Interrogate live NOAA ENC chart objects";
         button.setAttribute("data-active", "false");
         L.DomEvent.disableClickPropagation(button);
         L.DomEvent.on(button, "click", (event: Event) => {
