@@ -1,0 +1,39 @@
+name: Fix XTE radian epsilon
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fix-xte-radian-epsilon.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Patch XTE radian epsilon
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/NavDashConsole.tsx')
+          s = p.read_text()
+          old = '  if (len2 <= 0.000001) return { ratio: 0, xte: 0, side: "--" };'
+          new = '  if (len2 <= 1e-16) return { ratio: 0, xte: 0, side: "--" };'
+          assert old in s, 'XTE zero-length cutoff not found'
+          p.write_text(s.replace(old, new, 1))
+          PY
+          rm .github/workflows/fix-xte-radian-epsilon.yml
+          git diff --check
+          npm ci
+          npm run build
+          git diff -- app/NavDashConsole.tsx
+          git config user.name "wardolb-bit"
+          git config user.email "wardolb@live.com"
+          git add app/NavDashConsole.tsx .github/workflows/fix-xte-radian-epsilon.yml
+          git commit -m "Fix XTE zero-length threshold for Mercator radians"
+          git push
