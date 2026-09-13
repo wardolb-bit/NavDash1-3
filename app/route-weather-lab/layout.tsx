@@ -131,19 +131,19 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           filter: drop-shadow(0 0 4px rgba(34,211,238,.7));
         }
 
-        /* Map wind markers: draw a proper arrow with a shaft so direction is obvious.
-           The parent div already rotates to the wind-flow compass bearing. */
+        /* Map wind markers: long shaft + small head makes flow direction obvious. */
         .leaflet-marker-icon > div[style*="color:#7dd3fc"][style*="transform:rotate"] {
           position: relative;
           font-size: 0 !important;
+          overflow: visible !important;
         }
         .leaflet-marker-icon > div[style*="color:#7dd3fc"][style*="transform:rotate"]::before {
           content: "";
           position: absolute;
-          left: 10px;
-          top: 7px;
-          width: 4px;
-          height: 14px;
+          left: 11px;
+          top: 8px;
+          width: 3px;
+          height: 18px;
           border-radius: 2px;
           background: #7dd3fc;
           box-shadow: 0 1px 3px #000, 0 0 4px rgba(125,211,252,.55);
@@ -151,13 +151,13 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
         .leaflet-marker-icon > div[style*="color:#7dd3fc"][style*="transform:rotate"]::after {
           content: "";
           position: absolute;
-          left: 5px;
+          left: 7px;
           top: 1px;
           width: 0;
           height: 0;
-          border-left: 7px solid transparent;
-          border-right: 7px solid transparent;
-          border-bottom: 10px solid #7dd3fc;
+          border-left: 5px solid transparent;
+          border-right: 5px solid transparent;
+          border-bottom: 9px solid #7dd3fc;
           filter: drop-shadow(0 1px 2px #000) drop-shadow(0 0 3px rgba(125,211,252,.5));
         }
 
