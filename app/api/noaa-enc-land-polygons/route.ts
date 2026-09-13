@@ -3,11 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const LAND_LAYERS = [
-  { service: "enc_overview", layer: 93, name: "Overview.Land_Area" },
-  { service: "enc_general", layer: 121, name: "General.Land_Area" },
-  { service: "enc_coastal", layer: 171, name: "Coastal.Land_Area" },
-  { service: "enc_harbour", layer: 233, name: "Harbor.Land_Area" },
+const WATER_LAYERS = [
+  { service: "enc_overview", layer: 89, name: "Overview.Depth_Area" },
+  { service: "enc_general", layer: 117, name: "General.Depth_Area" },
+  { service: "enc_coastal", layer: 166, name: "Coastal.Depth_Area" },
+  { service: "enc_harbour", layer: 227, name: "Harbor.Depth_Area" },
+  { service: "enc_berthing", layer: 100, name: "Berthing.Depth_Area" },
 ] as const;
 
 function finite(value: string | null) {
@@ -43,7 +44,7 @@ async function fetchLayer(
   const response = await fetch(`${base}?${params.toString()}`, {
     cache: "no-store",
     signal: AbortSignal.timeout(9000),
-    headers: { "User-Agent": "NavDash/1.3 NOAA ENC land polygon mask" },
+    headers: { "User-Agent": "NavDash/1.3 NOAA ENC confirmed-water mask" },
   });
 
   const text = await response.text();
@@ -70,12 +71,12 @@ export async function GET(request: NextRequest) {
   const north = clamp(Math.max(southRaw, northRaw), -85, 85);
 
   if (east <= west) {
-    return NextResponse.json({ error: "Dateline-spanning ENC land masks are not enabled." }, { status: 400 });
+    return NextResponse.json({ error: "Dateline-spanning ENC water masks are not enabled." }, { status: 400 });
   }
 
   try {
     const results = await Promise.allSettled(
-      LAND_LAYERS.map((entry) => fetchLayer(entry.service, entry.layer, west, south, east, north)),
+      WATER_LAYERS.map((entry) => fetchLayer(entry.service, entry.layer, west, south, east, north)),
     );
 
     const features: any[] = [];
@@ -84,17 +85,18 @@ export async function GET(request: NextRequest) {
     results.forEach((result, index) => {
       if (result.status === "fulfilled") {
         features.push(...result.value);
-        sources.push(LAND_LAYERS[index].name);
+        sources.push(WATER_LAYERS[index].name);
       }
     });
 
-    if (!sources.length) {
-      throw new Error("All NOAA ENC land polygon layers failed.");
+    if (!sources.length || !features.length) {
+      throw new Error("NOAA ENC returned no confirmed water polygons for this view.");
     }
 
     return NextResponse.json(
       {
         source: "NOAA Office of Coast Survey ENC Direct",
+        policy: "confirmed-water-only",
         sources,
         bounds: { west, south, east, north },
         type: "FeatureCollection",
@@ -103,8 +105,8 @@ export async function GET(request: NextRequest) {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : "NOAA ENC land polygons unavailable";
-    console.error("NOAA ENC land polygon mask failure", message);
+    const message = error instanceof Error ? error.message : "NOAA ENC water polygons unavailable";
+    console.error("NOAA ENC confirmed-water mask failure", message);
     return NextResponse.json({ error: message }, { status: 502 });
   }
 }
