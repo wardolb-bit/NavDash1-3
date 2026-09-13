@@ -3,6 +3,7 @@ import { MainMapAisTargets } from "../../components/MainMapAisTargets";
 import { MobileBridgeRedirect } from "../../components/MobileBridgeRedirect";
 import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";
 import { EncObjectInfo } from "../../components/EncObjectInfo";
+import { EncChartLayerStabilizer } from "../../components/EncChartLayerStabilizer";
 
 export default function BridgePage() {
   return (
@@ -11,6 +12,7 @@ export default function BridgePage() {
       <NavDashConsole />
       <MainMapAisTargets />
       <AisMapReadyRetry />
+      <EncChartLayerStabilizer />
       <EncObjectInfo />
     </>
   );
