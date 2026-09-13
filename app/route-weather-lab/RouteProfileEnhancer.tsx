@@ -68,11 +68,61 @@ function addBandTitle(group: SVGGElement, x: number, y: number, text: string, co
   group.append(label);
 }
 
+function deconflictWaypointLabels(svg: SVGSVGElement) {
+  const groups = Array.from(svg.children)
+    .filter((node): node is SVGGElement => node instanceof SVGGElement && !node.classList.contains("route-profile-enhancements"))
+    .filter((group) => group.querySelectorAll(":scope > text").length >= 2 && group.querySelector(":scope > line") && !group.querySelector("circle"));
+
+  if (groups.length < 2) return;
+
+  const labels = groups.map((group, index) => {
+    group.style.display = "";
+    const texts = group.querySelectorAll<SVGTextElement>(":scope > text");
+    const line = group.querySelector<SVGLineElement>(":scope > line");
+    const name = texts[0]?.textContent?.trim() || "";
+    const x = Number(line?.getAttribute("x1") ?? texts[0]?.getAttribute("x") ?? 0);
+    const anchor = texts[0]?.getAttribute("text-anchor") || "middle";
+    const width = Math.max(68, Math.min(190, name.length * 8.2 + 18));
+    let left = x - width / 2;
+    let right = x + width / 2;
+    if (anchor === "start") {
+      left = x;
+      right = x + width;
+    } else if (anchor === "end") {
+      left = x - width;
+      right = x;
+    }
+    return { group, index, left, right };
+  }).filter((item) => Number.isFinite(item.left) && Number.isFinite(item.right));
+
+  if (labels.length < 2) return;
+
+  const padding = 18;
+  const first = labels[0];
+  const last = labels[labels.length - 1];
+  let previousRight = first.right;
+
+  for (let i = 1; i < labels.length - 1; i += 1) {
+    const item = labels[i];
+    const clearOfPrevious = item.left > previousRight + padding;
+    const clearOfLast = item.right < last.left - padding;
+    if (clearOfPrevious && clearOfLast) {
+      previousRight = item.right;
+    } else {
+      item.group.style.display = "none";
+    }
+  }
+
+  first.group.style.display = "";
+  last.group.style.display = "";
+}
+
 function enhance() {
   const svg = document.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
   if (!svg) return;
 
   svg.querySelector("g.route-profile-enhancements")?.remove();
+  deconflictWaypointLabels(svg);
 
   const sampleGroups = Array.from(svg.querySelectorAll<SVGGElement>('g[style*="cursor"]'))
     .filter((g) => g.querySelectorAll("circle").length >= 2);
@@ -162,8 +212,9 @@ function enhance() {
 
     if (maxSeaIndex >= 0 && Number.isFinite(seaValues[maxSeaIndex])) {
       const p = samples[maxSeaIndex];
-      enhancement.append(svgEl("line", { x1: p.x, y1: p.seaY, x2: p.x, y2: Math.max(20, p.seaY - 14), stroke: "#f1d56b", "stroke-width": 1, opacity: .8 }));
-      addLabel(enhancement, p.x, Math.max(17, p.seaY - 18), `${seaValues[maxSeaIndex].toFixed(1)} ft`, "#f1d56b", true);
+      const calloutY = Math.min(57, p.seaY + 31);
+      enhancement.append(svgEl("line", { x1: p.x, y1: p.seaY, x2: p.x, y2: Math.min(55, p.seaY + 16), stroke: "#f1d56b", "stroke-width": 1, opacity: .8 }));
+      addLabel(enhancement, p.x, calloutY, `${seaValues[maxSeaIndex].toFixed(1)} ft`, "#f1d56b", true);
     }
 
     if (maxWindIndex >= 0 && Number.isFinite(windValues[maxWindIndex])) {
