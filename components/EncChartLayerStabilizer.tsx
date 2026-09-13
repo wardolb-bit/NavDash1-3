@@ -19,6 +19,7 @@ export function EncChartLayerStabilizer() {
       if (!map) return;
       const remove: any[] = [];
       map.eachLayer((layer: any) => {
+        if (layer?.__navdashSingleNoaaViewport) return;
         const url = String(layer?._url || "");
         if (
           url.includes("tiles.openseamap.org/seamark") ||
@@ -76,6 +77,7 @@ export function EncChartLayerStabilizer() {
           crossOrigin: true,
           pane: "overlayPane",
         });
+        nextOverlay.__navdashSingleNoaaViewport = true;
 
         nextOverlay.once("load", () => {
           if (cancelled || serial !== requestSerial) {
@@ -84,7 +86,6 @@ export function EncChartLayerStabilizer() {
           }
           const previous = overlay;
           overlay = nextOverlay;
-          try { overlay.addTo(map); } catch {}
           if (previous && previous !== overlay) {
             try { map.removeLayer(previous); } catch {}
           }
@@ -94,15 +95,15 @@ export function EncChartLayerStabilizer() {
           try { map.removeLayer(nextOverlay); } catch {}
         });
 
-        // Add immediately so the browser starts loading it. The previous image
-        // remains in place until the new viewport image finishes loading.
+        // Start loading the next full-viewport chart image while the previous
+        // one remains visible. Once the new image loads, swap them atomically.
         try { nextOverlay.addTo(map); } catch {}
       }, 140);
     };
 
     const onLayerAdd = (event: any) => {
       const layer = event?.layer;
-      if (!layer || layer === overlay) return;
+      if (!layer || layer?.__navdashSingleNoaaViewport) return;
       const url = String(layer?._url || "");
       if (
         url.includes("tiles.openseamap.org/seamark") ||
