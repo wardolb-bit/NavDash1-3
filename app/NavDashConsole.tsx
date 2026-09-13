@@ -292,7 +292,7 @@ export default function NavDashConsole() {
         return;
       }
       const line = extractNmea(msg);
-      const decoded = line ? decodeOwnShip(line) : ownShipFromParsedMessage(msg);
+      const decoded = line ? decodeOwnShip(line) : null;
       if (decoded) { setOwnShip(decoded); setAisStatus("GPS LIVE"); }
     };
     return () => { if (routeSocketRef.current === ws) routeSocketRef.current = null; ws.close(); };
