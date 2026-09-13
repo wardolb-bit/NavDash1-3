@@ -12,7 +12,7 @@ type WavePoint = {
 };
 type WaveFrame = { validAt: string; points: WavePoint[] };
 
-const BASE = "https://erddap.aoml.noaa.gov/hdb/erddap/griddap/WaveWatch_2026.json";
+const BASE = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_global.json";
 const UA = "NavDash route weather preview (wardmaritimegroup.com)";
 
 function to360(lon: number) {
@@ -65,7 +65,8 @@ export async function POST(request: Request) {
     const t0 = start.toISOString().replace(".000Z", "Z");
     const t1 = end.toISOString().replace(".000Z", "Z");
 
-    const slice = `[(%s):(%e)][(${minLat.toFixed(2)}):(${maxLat.toFixed(2)})][(${minLon.toFixed(2)}):(${maxLon.toFixed(2)})]`;
+    // Live PacIOOS WW3 dimensions are time, depth, latitude, longitude.
+    const slice = `[(%s):(%e)][(0.0)][(${minLat.toFixed(2)}):(${maxLat.toFixed(2)})][(${minLon.toFixed(2)}):(${maxLon.toFixed(2)})]`;
     const query = ["Thgt", "Tper", "Tdir"]
       .map((name) => `${name}${slice.replace("%s", t0).replace("%e", t1)}`)
       .join(",");
@@ -140,17 +141,20 @@ export async function POST(request: Request) {
           waveHeightFt: mToFt(best?.h ?? null),
           wavePeriodSec: best?.p === null || best?.p === undefined ? null : Number(best.p.toFixed(0)),
           waveDirectionDeg: best?.d === null || best?.d === undefined ? null : Number(best.d.toFixed(0)),
-          source: "NOAA ERDDAP / PacIOOS WaveWatch III (GFS-forced)",
+          source: "PacIOOS WaveWatch III global (NOAA/NCEP GFS-forced)",
         };
       });
 
       return { validAt: validAt.toISOString(), points: resultPoints };
     });
 
+    const populated = frames.reduce((count, frame) => count + frame.points.filter((p) => p.waveHeightFt !== null).length, 0);
+
     return NextResponse.json({
-      provider: "NOAA ERDDAP / PacIOOS",
-      product: "WaveWatch III global wave model (GFS-forced)",
+      provider: "PacIOOS / NOAA IOOS",
+      product: "WaveWatch III global wave model (NOAA/NCEP GFS-forced)",
       generatedAt: new Date().toISOString(),
+      populatedPointCount: populated,
       frames,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
