@@ -565,7 +565,12 @@ function IsolatedMainMap() {
         try { const response = await fetch("/api/route-state", { cache: "no-store" }); if (response.ok) nextRoute = normalizeRoutePayload(await response.json()); } catch {}
       }
       const signature = routeSignature(nextRoute);
-      if (signature !== routeSignatureRef.current) { routeSignatureRef.current = signature; setRoute(nextRoute); }
+      if (signature !== routeSignatureRef.current) {
+        routeSignatureRef.current = signature;
+        setRoute(nextRoute);
+      } else if (nextRoute.length >= 2 && mapRef.current && !routeLayerRef.current) {
+        setRoute([...nextRoute]);
+      }
       timer = window.setTimeout(refresh, 1500);
     };
     refresh();
