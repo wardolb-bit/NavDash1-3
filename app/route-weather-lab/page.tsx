@@ -61,6 +61,27 @@ function routeLengthNm(route: Waypoint[]) {
   return total;
 }
 
+function pointAtDistance(route: Waypoint[], targetNm: number) {
+  if (!route.length) return null;
+  if (route.length === 1 || targetNm <= 0) return route[0];
+  let travelled = 0;
+  for (let i = 1; i < route.length; i += 1) {
+    const a = route[i - 1];
+    const b = route[i];
+    const leg = nmBetween(a, b);
+    if (travelled + leg >= targetNm) {
+      const ratio = leg <= 0 ? 0 : (targetNm - travelled) / leg;
+      return {
+        name: "Expected vessel position",
+        lat: a.lat + (b.lat - a.lat) * ratio,
+        lon: a.lon + (b.lon - a.lon) * ratio,
+      };
+    }
+    travelled += leg;
+  }
+  return route[route.length - 1];
+}
+
 function parseRtz(text: string): Waypoint[] {
   const doc = new DOMParser().parseFromString(text, "application/xml");
   return Array.from(doc.querySelectorAll("waypoint")).map((node, index) => {
@@ -88,6 +109,14 @@ function compass(deg: number | null | undefined) {
   if (deg === null || deg === undefined || !Number.isFinite(deg)) return "--";
   const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
   return dirs[Math.round((((deg % 360) + 360) % 360) / 22.5) % 16];
+}
+
+function seaColor(wave: number | null | undefined) {
+  if (wave === null || wave === undefined || !Number.isFinite(wave)) return "#64748b";
+  if (wave >= 10) return "#ef4444";
+  if (wave >= 7) return "#f59e0b";
+  if (wave >= 5) return "#eab308";
+  return "#22c55e";
 }
 
 function maxBy(points: ForecastPoint[], key: "waveHeightFt" | "windKt" | "gustKt") {
@@ -164,6 +193,7 @@ export default function RouteWeatherLabPage() {
   const [showWind, setShowWind] = useState(true);
   const [showSeas, setShowSeas] = useState(true);
   const [mode, setMode] = useState<"encounter" | "time">("encounter");
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 
   const totalNm = useMemo(() => routeLengthNm(route), [route]);
 
@@ -205,7 +235,7 @@ export default function RouteWeatherLabPage() {
       layer.clearLayers();
       if (route.length < 2) return;
       const latlngs = route.map((wp) => [wp.lat, wp.lon] as [number, number]);
-      L.polyline(latlngs, { color: "#22d3ee", weight: 3, opacity: 0.95 }).addTo(layer);
+      L.polyline(latlngs, { color: "#22d3ee", weight: weather ? 2 : 3, opacity: weather ? 0.4 : 0.95 }).addTo(layer);
       route.forEach((wp, i) => {
         L.circleMarker([wp.lat, wp.lon], {
           radius: 4,
@@ -218,7 +248,7 @@ export default function RouteWeatherLabPage() {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [28, 28] });
     }
     drawRoute();
-  }, [route]);
+  }, [route, weather]);
 
   const encounter = useMemo<EncounterPoint[]>(() => {
     if (!weather?.frames?.length || !Number.isFinite(speedKt) || speedKt <= 0) return [];
@@ -256,6 +286,8 @@ export default function RouteWeatherLabPage() {
   const maxWind = useMemo(() => maxBy(encounter, "windKt") as EncounterPoint | null, [encounter]);
   const maxGust = useMemo(() => maxBy(encounter, "gustKt") as EncounterPoint | null, [encounter]);
   const selectedFrame = weather?.frames?.[frameIndex];
+  const profileMaxSea = useMemo(() => Math.max(1, ...displayedPoints.map((p) => p.waveHeightFt || 0)), [displayedPoints]);
+  const profileMaxWind = useMemo(() => Math.max(1, ...displayedPoints.map((p) => p.windKt || 0)), [displayedPoints]);
 
   useEffect(() => {
     async function drawWeather() {
@@ -263,10 +295,42 @@ export default function RouteWeatherLabPage() {
       if (!mapRef.current || !layer) return;
       const L = await import("leaflet");
       layer.clearLayers();
-      displayedPoints.forEach((p) => {
+      if (!displayedPoints.length) return;
+
+      if (showSeas) {
+        for (let i = 0; i < displayedPoints.length - 1; i += 1) {
+          const a = displayedPoints[i];
+          const b = displayedPoints[i + 1];
+          const wave = a.waveHeightFt;
+          const color = seaColor(wave);
+          const details = [
+            `<b>${mode === "encounter" ? "Route encounter" : "Weather time"}</b>`,
+            `<b>Seas:</b> ${wave === null ? "No wave data" : `${wave.toFixed(1)} ft`}`,
+            a.wavePeriodSec !== null ? `<b>Period:</b> ${a.wavePeriodSec.toFixed(0)} s` : "",
+            a.waveDirectionDeg !== null && a.waveDirectionDeg !== undefined ? `<b>Wave dir:</b> ${compass(a.waveDirectionDeg)} ${a.waveDirectionDeg.toFixed(0)}°` : "",
+            a.windKt !== null ? `<b>Wind:</b> ${compass(a.windDirectionDeg)} ${a.windKt.toFixed(0)} kt` : "",
+            `<b>Along route:</b> ${a.distanceNm.toFixed(0)} NM`,
+          ].filter(Boolean).join("<br/>");
+
+          L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {
+            color,
+            weight: 9,
+            opacity: 0.7,
+            lineCap: "round",
+          }).bindTooltip(details, { sticky: true, opacity: 0.97 }).addTo(layer);
+
+          L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {
+            color: "#e2e8f0",
+            weight: 1,
+            opacity: 0.35,
+            interactive: false,
+          }).addTo(layer);
+        }
+      }
+
+      displayedPoints.forEach((p, index) => {
         const wave = p.waveHeightFt;
         const wind = p.windKt;
-        const color = wave === null ? "#64748b" : wave >= 10 ? "#ef4444" : wave >= 7 ? "#f59e0b" : wave >= 5 ? "#eab308" : "#22c55e";
         const details = [
           showSeas ? `<b>Seas:</b> ${wave === null ? "No wave data" : `${wave.toFixed(1)} ft`}` : "",
           p.wavePeriodSec !== null && showSeas ? `<b>Period:</b> ${p.wavePeriodSec.toFixed(0)} s` : "",
@@ -275,21 +339,61 @@ export default function RouteWeatherLabPage() {
           p.gustKt !== null && showWind ? `<b>Gust:</b> ${p.gustKt.toFixed(0)} kt` : "",
           `<b>Along route:</b> ${p.distanceNm.toFixed(0)} NM`,
         ].filter(Boolean).join("<br/>");
+
         L.circleMarker([p.lat, p.lon], {
-          radius: 6,
-          color,
-          weight: 2,
-          fillColor: color,
-          fillOpacity: 0.35,
+          radius: focusedIndex === index ? 8 : 4,
+          color: focusedIndex === index ? "#f8fafc" : seaColor(wave),
+          weight: focusedIndex === index ? 3 : 1,
+          fillColor: seaColor(wave),
+          fillOpacity: focusedIndex === index ? 0.95 : 0.7,
         }).bindTooltip(details, { direction: "top", opacity: 0.96 }).bindPopup([
           details,
           `<b>Wind source:</b> ${p.source}`,
           p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).addTo(layer);
+
+        if (showWind && wind !== null && p.windDirectionDeg !== null && p.windDirectionDeg !== undefined) {
+          const flowDirection = (p.windDirectionDeg + 180) % 360;
+          const arrow = L.divIcon({
+            className: "",
+            html: `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:#7dd3fc;font-size:18px;font-weight:900;text-shadow:0 1px 3px #000;transform:rotate(${flowDirection}deg)">➤</div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
+          });
+          L.marker([p.lat, p.lon], { icon: arrow, interactive: false }).addTo(layer);
+        }
       });
+
+      if (mode === "time" && selectedFrame && route.length >= 2) {
+        const dep = new Date(`${departure}:00-10:00`);
+        const valid = new Date(selectedFrame.validAt);
+        const elapsedHours = Math.max(0, (valid.getTime() - dep.getTime()) / 3600000);
+        const expectedNm = Math.min(totalNm, elapsedHours * speedKt);
+        const position = pointAtDistance(route, expectedNm);
+        if (position) {
+          L.circleMarker([position.lat, position.lon], {
+            radius: 9,
+            color: "#f8fafc",
+            weight: 2,
+            fillColor: "#22d3ee",
+            fillOpacity: 0.95,
+          }).bindTooltip(`<b>EXPECTED VESSEL POSITION</b><br/>${expectedNm.toFixed(0)} NM along route<br/>${formatWhen(valid)}`, {
+            direction: "top",
+            opacity: 0.98,
+          }).addTo(layer);
+          L.circleMarker([position.lat, position.lon], {
+            radius: 15,
+            color: "#22d3ee",
+            weight: 1,
+            fillOpacity: 0,
+            opacity: 0.45,
+            interactive: false,
+          }).addTo(layer);
+        }
+      }
     }
     drawWeather();
-  }, [displayedPoints, showWind, showSeas]);
+  }, [displayedPoints, showWind, showSeas, mode, selectedFrame, route, departure, speedKt, totalNm, focusedIndex]);
 
   async function loadRouteFile(file: File) {
     try {
@@ -300,6 +404,7 @@ export default function RouteWeatherLabPage() {
       setRouteName(file.name);
       setWeather(null);
       setFrameIndex(0);
+      setFocusedIndex(null);
       setStatus(`${parsed.length} waypoints loaded. Ready to analyze route weather.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not read route.");
@@ -326,6 +431,7 @@ export default function RouteWeatherLabPage() {
       setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route");
       setWeather(null);
       setFrameIndex(0);
+      setFocusedIndex(null);
       setStatus(`${parsed.length} waypoints loaded from the current NavDash route. Ready to analyze route weather.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not load current NavDash route.");
@@ -372,6 +478,7 @@ export default function RouteWeatherLabPage() {
       }
       setWeather(merged);
       setFrameIndex(0);
+      setFocusedIndex(null);
       if (merged.frames.some((frame) => frame.points.some((point) => point.waveHeightFt !== null))) {
         setStatus(`Route weather loaded. Waves: GFS-forced WaveWatch III. Winds: ${windJson.product}.`);
       } else {
@@ -387,14 +494,29 @@ export default function RouteWeatherLabPage() {
     return `Occurs ${point.distanceNm.toFixed(0)} NM along route • ETA ${formatWhen(point.eta)}`;
   }
 
+  function profileX(index: number) {
+    if (displayedPoints.length <= 1) return 0;
+    return (index / (displayedPoints.length - 1)) * 1000;
+  }
+
+  const seaProfile = displayedPoints.map((p, i) => {
+    const y = 58 - ((p.waveHeightFt || 0) / profileMaxSea) * 36;
+    return `${profileX(i)},${y}`;
+  }).join(" ");
+
+  const windProfile = displayedPoints.map((p, i) => {
+    const y = 108 - ((p.windKt || 0) / profileMaxWind) * 32;
+    return `${profileX(i)},${y}`;
+  }).join(" ");
+
   return (
     <main className="min-h-screen bg-[#04080c] p-2 text-slate-100">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border border-amber-500/25 bg-[#071019] px-3 py-2">
         <div>
-          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c9a227]">NAVDASH ROUTE WEATHER LAB</div>
-          <div className="text-sm font-black">Route-specific weather encounter preview</div>
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c9a227]">NAVDASH ROUTE WEATHER</div>
+          <div className="text-sm font-black">Route encounter and Weather Time</div>
         </div>
-        <Link href="/" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">NAV CONSOLE</Link>
+        <Link href="https://wardlab.dev/" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">NAV CONSOLE</Link>
       </div>
 
       <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -403,16 +525,82 @@ export default function RouteWeatherLabPage() {
             <label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && loadRouteFile(e.target.files[0])} /></label>
             <button type="button" onClick={loadCurrentRoute} disabled={loadingCurrentRoute} className="border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{loadingCurrentRoute ? "LOADING CURRENT ROUTE…" : "LOAD CURRENT ROUTE"}</button>
             <button type="button" disabled={route.length < 2} onClick={analyze} className="border border-emerald-400/40 bg-[#08130f] px-3 py-2 text-[10px] font-black text-emerald-200 disabled:opacity-40">ANALYZE ROUTE</button>
-            <button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button>
-            <button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button>
+            <button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button>
+            <button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button>
           </div>
-          <div ref={mapEl} style={{ width: "100%", height: "62vh", minHeight: 500, background: "#0a141d" }} />
+
+          {weather && (
+            <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-4">
+              <div className="border border-slate-800 bg-[#050a0f] px-3 py-2">
+                <div className="text-[8px] font-black tracking-widest text-slate-500">MODE</div>
+                <div className="mt-1 text-xs font-black text-cyan-200">{mode === "encounter" ? "ROUTE ENCOUNTER" : "WEATHER TIME"}</div>
+              </div>
+              <div className="border border-slate-800 bg-[#050a0f] px-3 py-2">
+                <div className="text-[8px] font-black tracking-widest text-slate-500">MAX SEAS</div>
+                <div className="mt-1 text-lg font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "--" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div>
+              </div>
+              <div className="border border-slate-800 bg-[#050a0f] px-3 py-2">
+                <div className="text-[8px] font-black tracking-widest text-slate-500">MAX WIND</div>
+                <div className="mt-1 text-lg font-black text-cyan-300">{maxWind?.windKt == null ? "--" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div>
+              </div>
+              <div className="border border-slate-800 bg-[#050a0f] px-3 py-2">
+                <div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div>
+                <div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : `${totalNm.toFixed(0)} NM`}</div>
+              </div>
+            </div>
+          )}
+
+          <div className="relative overflow-hidden border border-slate-800">
+            <div ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />
+            {weather && (
+              <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">
+                Thick route ribbon = forecast seas • arrows = wind flow • hover for details
+              </div>
+            )}
+          </div>
 
           {weather && mode === "time" && (
             <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">FORECAST VALID</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div>
               <input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} />
-              <div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>NOW</span><span>HOVER ROUTE SAMPLES FOR CURRENT FRAME</span><span>+24 HR</span></div>
+              <div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>NOW</span><span>GHOST VESSEL SHOWS EXPECTED POSITION</span><span>+24 HR</span></div>
+            </div>
+          )}
+
+          {weather && displayedPoints.length > 1 && (
+            <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
+              <div className="mb-1 flex items-center justify-between">
+                <div>
+                  <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">ROUTE PROFILE</div>
+                  <div className="text-[9px] text-slate-600">Hover a sample to highlight the same point on the map.</div>
+                </div>
+                <div className="text-right text-[9px] font-bold text-slate-500">
+                  <span className="text-[#f1d56b]">SEAS</span> / <span className="text-cyan-300">WIND</span>
+                </div>
+              </div>
+              <svg viewBox="0 0 1000 120" className="h-[120px] w-full" onMouseLeave={() => setFocusedIndex(null)}>
+                <line x1="0" y1="60" x2="1000" y2="60" stroke="#334155" strokeWidth="1" />
+                <line x1="0" y1="112" x2="1000" y2="112" stroke="#334155" strokeWidth="1" />
+                <polyline points={seaProfile} fill="none" stroke="#f1d56b" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
+                <polyline points={windProfile} fill="none" stroke="#67e8f9" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+                {displayedPoints.map((p, i) => {
+                  const x = profileX(i);
+                  const seaY = 58 - ((p.waveHeightFt || 0) / profileMaxSea) * 36;
+                  const windY = 108 - ((p.windKt || 0) / profileMaxWind) * 32;
+                  return (
+                    <g key={`profile-${i}`} onMouseEnter={() => setFocusedIndex(i)} style={{ cursor: "pointer" }}>
+                      <rect x={Math.max(0, x - 28)} y="0" width="56" height="120" fill="transparent" />
+                      <circle cx={x} cy={seaY} r={focusedIndex === i ? 7 : 4} fill={seaColor(p.waveHeightFt)} stroke="#f8fafc" strokeWidth={focusedIndex === i ? 2 : 0} />
+                      <circle cx={x} cy={windY} r={focusedIndex === i ? 6 : 3} fill="#67e8f9" />
+                      {focusedIndex === i && (
+                        <text x={Math.min(900, Math.max(8, x - 70))} y="14" fill="#e2e8f0" fontSize="18" fontWeight="700">
+                          {`${p.distanceNm.toFixed(0)} NM • ${p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`} • ${p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}`}
+                        </text>
+                      )}
+                    </g>
+                  );
+                })}
+              </svg>
             </div>
           )}
         </section>
@@ -449,7 +637,7 @@ export default function RouteWeatherLabPage() {
 
           <section className="border border-slate-700/50 bg-[#071019] p-3">
             <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">LAYERS</div>
-            <div className="mt-2 flex gap-4 text-xs font-bold"><label><input type="checkbox" checked={showSeas} onChange={(e) => setShowSeas(e.target.checked)} className="mr-2" />Seas</label><label><input type="checkbox" checked={showWind} onChange={(e) => setShowWind(e.target.checked)} className="mr-2" />Wind</label></div>
+            <div className="mt-2 flex gap-4 text-xs font-bold"><label><input type="checkbox" checked={showSeas} onChange={(e) => setShowSeas(e.target.checked)} className="mr-2" />Seas ribbon</label><label><input type="checkbox" checked={showWind} onChange={(e) => setShowWind(e.target.checked)} className="mr-2" />Wind arrows</label></div>
           </section>
 
           <section className="border border-slate-700/50 bg-[#071019] p-3">
