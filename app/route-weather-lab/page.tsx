@@ -600,10 +600,10 @@ export default function RouteWeatherLabPage() {
           {weather && displayedPoints.length > 1 && (
             <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">ROUTE PROFILE</div><div className="text-[9px] text-slate-600">Distance-based, using names from the loaded route. Hover a sample to highlight it on the map.</div></div>
+                <div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">ROUTE PROFILE</div><div className="text-[9px] text-slate-600">Distance-based, using names from the loaded route. Tap or hover a sample to highlight it on the map.</div></div>
                 <div className="text-right text-[9px] font-bold text-slate-500"><span className="text-[#f1d56b]">SEA HEIGHT</span> / <span className="text-cyan-300">WIND</span></div>
               </div>
-              <svg viewBox="0 0 1000 160" className="h-[160px] w-full" onMouseLeave={() => setFocusedIndex(null)}>
+              <svg viewBox="0 0 1000 160" className="h-[160px] w-full" onMouseLeave={() => {}}>
                 <line x1="0" y1="62" x2="1000" y2="62" stroke="#334155" strokeWidth="1" />
                 <line x1="0" y1="112" x2="1000" y2="112" stroke="#334155" strokeWidth="1" />
                 <polyline points={seaProfile} fill="none" stroke="#f1d56b" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" />
@@ -617,8 +617,8 @@ export default function RouteWeatherLabPage() {
 
                 {expectedVesselNm !== null && (
                   <g>
-                    <line x1={profileXDistance(expectedVesselNm)} y1="4" x2={profileXDistance(expectedVesselNm)} y2="124" stroke="#22d3ee" strokeWidth="2" strokeDasharray="5 4" />
-                    <path d={`M ${profileXDistance(expectedVesselNm) - 7} 8 L ${profileXDistance(expectedVesselNm) + 7} 8 L ${profileXDistance(expectedVesselNm)} 20 Z`} fill="#22d3ee" stroke="#f8fafc" strokeWidth="1" />
+                    <line x1={profileXDistance(expectedVesselNm)} y1="46" x2={profileXDistance(expectedVesselNm)} y2="124" stroke="#22d3ee" strokeWidth="2" strokeDasharray="5 4" />
+                    <path d={`M ${profileXDistance(expectedVesselNm) - 7} 38 L ${profileXDistance(expectedVesselNm) + 7} 38 L ${profileXDistance(expectedVesselNm)} 50 Z`} fill="#22d3ee" stroke="#f8fafc" strokeWidth="1" />
                   </g>
                 )}
 
@@ -626,12 +626,19 @@ export default function RouteWeatherLabPage() {
                   const x = profileXDistance(p.distanceNm);
                   const seaY = 58 - ((p.waveHeightFt || 0) / profileMaxSea) * 36;
                   const windY = 108 - ((p.windKt || 0) / profileMaxWind) * 32;
+                  const selectedText = `${p.distanceNm.toFixed(0)} NM • ${p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`} • ${p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}`;
+                  const selectedWidth = Math.max(180, Math.min(350, selectedText.length * 7 + 24));
                   return (
-                    <g key={`profile-${i}`} onMouseEnter={() => setFocusedIndex(i)} style={{ cursor: "pointer" }}>
+                    <g key={`profile-${i}`} onMouseEnter={() => setFocusedIndex(i)} onClick={() => setFocusedIndex((current) => current === i ? null : i)} style={{ cursor: "pointer" }}>
                       <rect x={Math.max(0, x - 24)} y="0" width="48" height="116" fill="transparent" />
                       <circle cx={x} cy={seaY} r={focusedIndex === i ? 7 : 4} fill={seaColor(p.waveHeightFt)} stroke="#f8fafc" strokeWidth={focusedIndex === i ? 2 : 0} />
                       <circle cx={x} cy={windY} r={focusedIndex === i ? 6 : 3} fill="#67e8f9" />
-                      {focusedIndex === i && <text x={Math.min(890, Math.max(8, x - 80))} y="15" fill="#e2e8f0" fontSize="17" fontWeight="700">{`${p.distanceNm.toFixed(0)} NM • ${p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`} • ${p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}`}</text>}
+                      {focusedIndex === i && (
+                        <g pointerEvents="none">
+                          <rect x="8" y="3" width={selectedWidth} height="24" rx="5" fill="#03070b" fillOpacity="0.97" stroke="#64748b" strokeWidth="1" />
+                          <text x="20" y="19" fill="#e2e8f0" fontSize="13" fontWeight="800">{selectedText}</text>
+                        </g>
+                      )}
                     </g>
                   );
                 })}
