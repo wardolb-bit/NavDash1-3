@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 
-const NOAA_ENC_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer";
+const NOAA_CHART_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer";
 const MAP_ID = "route-weather-lab-map";
 
 type OwnShip = {
@@ -103,6 +103,7 @@ export default function WeatherChartLayer() {
     let vesselLayer: any = null;
     let vesselMarker: any = null;
     let lastOwnShip: OwnShip | null = null;
+    let baseLayersRemoved = false;
 
     const install = async () => {
       if (disposed) return;
@@ -129,19 +130,32 @@ export default function WeatherChartLayer() {
         pane.style.zIndex = "690";
       }
 
-      chartLayer = L.tileLayer.wms(NOAA_ENC_WMS, {
-        layers: "S57",
+      chartLayer = L.tileLayer.wms(NOAA_CHART_WMS, {
+        layers: "0,1,2,3,4,5,6,7",
         format: "image/png",
-        transparent: true,
+        transparent: false,
         version: "1.3.0",
         uppercase: true,
-        opacity: 0.96,
+        opacity: 1,
         pane: "route-weather-noaa-enc",
         maxZoom: 18,
         updateWhenIdle: true,
         keepBuffer: 2,
-      }).addTo(map);
+      });
 
+      chartLayer.once("tileload", () => {
+        if (disposed || baseLayersRemoved || !map) return;
+        baseLayersRemoved = true;
+        const remove: any[] = [];
+        map.eachLayer((layer: any) => {
+          if (layer !== chartLayer && layer instanceof L.TileLayer) remove.push(layer);
+        });
+        remove.forEach((layer) => {
+          try { map.removeLayer(layer); } catch {}
+        });
+      });
+
+      chartLayer.addTo(map);
       vesselLayer = L.layerGroup([], { pane: "route-weather-ownship" } as any).addTo(map);
     };
 
