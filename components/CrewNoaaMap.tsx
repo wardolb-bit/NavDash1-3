@@ -6,12 +6,18 @@ type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
 type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: number | null } | null;
 
-function s52DisplayParams(colorScheme: 1 | 3) {
+function s52DisplayParams(colorScheme: 0 | 5) {
   return JSON.stringify({
-    ECDISParameters: {
-      version: "10.9",
-      DynamicParameters: {
-        Parameter: [{ name: "ColorScheme", value: colorScheme }],
+    DisplayParameters: {
+      ECDISParameters: {
+        version: "10.9",
+        DynamicParameters: {
+          Parameter: [
+            { name: "ColorScheme", value: colorScheme },
+            { name: "DisplayFrames", value: 2 },
+            { name: "DisplayFrameText", value: 0 },
+          ],
+        },
       },
     },
   });
@@ -59,11 +65,11 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       }).setView(center, 10);
 
       const chartLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
-        layers: "1,2,3,4,5,6,7,12",
+        layers: "1,2,3,4,5,6,7",
         format: "image/png",
         transparent: false,
-        version: "1.3.0",
-        display_params: s52DisplayParams(nightMode ? 3 : 1),
+        version: "1.1.1",
+        display_params: s52DisplayParams(nightMode ? 5 : 0),
         maxZoom: 15,
         keepBuffer: 6,
         updateWhenIdle: false,
@@ -87,7 +93,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
     if (!chartLayer) return;
 
     chartLayer.setParams({
-      display_params: s52DisplayParams(nightMode ? 3 : 1),
+      display_params: s52DisplayParams(nightMode ? 5 : 0),
     }, false);
     chartLayer.redraw();
   }, [nightMode]);
