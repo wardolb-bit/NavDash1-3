@@ -76,7 +76,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
     if (!tilePane) return;
 
     tilePane.style.filter = nightMode
-      ? "brightness(0.34) contrast(1.25) saturate(0.72)"
+      ? "brightness(0.18) contrast(1.18) saturate(0.55)"
       : "none";
     tilePane.style.transition = "filter 160ms ease";
   }, [nightMode]);
