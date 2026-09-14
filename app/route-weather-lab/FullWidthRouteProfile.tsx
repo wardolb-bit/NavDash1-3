@@ -9,7 +9,7 @@ export default function FullWidthRouteProfile() {
     let originalNextSibling: ChildNode | null = null;
 
     const moveProfile = () => {
-      if (movedPanel?.isConnected) return;
+      if (movedPanel?.isConnected && movedPanel.parentElement?.tagName === "MAIN") return;
 
       const main = document.querySelector("main");
       if (!(main instanceof HTMLElement)) return;
@@ -29,28 +29,33 @@ export default function FullWidthRouteProfile() {
       const panel = profileLabel.closest("div.mt-2.border");
       if (!(panel instanceof HTMLElement)) return;
 
-      originalParent = panel.parentElement;
-      originalNextSibling = panel.nextSibling;
+      if (!originalParent) {
+        originalParent = panel.parentElement;
+        originalNextSibling = panel.nextSibling;
+      }
       movedPanel = panel;
 
       panel.dataset.navdashFullWidthProfile = "true";
-      panel.style.width = "100%";
-      panel.style.maxWidth = "none";
-      panel.style.gridColumn = "1 / -1";
+      panel.style.setProperty("width", "calc(100vw - 16px)", "important");
+      panel.style.setProperty("max-width", "calc(100vw - 16px)", "important");
+      panel.style.setProperty("box-sizing", "border-box", "important");
+      panel.style.setProperty("margin-left", "0", "important");
+      panel.style.setProperty("margin-right", "0", "important");
+
       workspace.insertAdjacentElement("afterend", panel);
     };
 
     moveProfile();
     const observer = new MutationObserver(moveProfile);
     observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("resize", moveProfile);
 
     return () => {
       observer.disconnect();
+      window.removeEventListener("resize", moveProfile);
       if (!movedPanel || !originalParent) return;
       delete movedPanel.dataset.navdashFullWidthProfile;
-      movedPanel.style.removeProperty("width");
-      movedPanel.style.removeProperty("max-width");
-      movedPanel.style.removeProperty("grid-column");
+      ["width", "max-width", "box-sizing", "margin-left", "margin-right"].forEach((property) => movedPanel?.style.removeProperty(property));
       if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
         originalParent.insertBefore(movedPanel, originalNextSibling);
       } else {
