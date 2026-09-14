@@ -119,6 +119,7 @@ function enhance() {
   if (!svg) return;
 
   svg.querySelector("g.route-profile-enhancements")?.remove();
+  svg.querySelector("g.route-profile-selection-overlay")?.remove();
   deconflictWaypointLabels(svg);
 
   const sampleGroups = Array.from(svg.querySelectorAll<SVGGElement>('g[style*="cursor"]'))
@@ -149,6 +150,7 @@ function enhance() {
   }
 
   const enhancement = svgEl("g", { class: "route-profile-enhancements", "pointer-events": "none" }) as SVGGElement;
+  const selectionOverlay = svgEl("g", { class: "route-profile-selection-overlay", "pointer-events": "none" }) as SVGGElement;
   const defs = svgEl("defs");
 
   const seaGradient = svgEl("linearGradient", { id: "routeSeaFill", x1: 0, y1: 0, x2: 0, y2: 1 });
@@ -229,7 +231,7 @@ function enhance() {
         const bx = (1000 - width) / 2;
         const by = 55;
 
-        enhancement.append(svgEl("rect", {
+        selectionOverlay.append(svgEl("rect", {
           x: bx - 8,
           y: by - 6,
           width: width + 16,
@@ -239,7 +241,7 @@ function enhance() {
           "fill-opacity": 1,
           stroke: "none",
         }));
-        enhancement.append(svgEl("rect", {
+        selectionOverlay.append(svgEl("rect", {
           x: bx,
           y: by,
           width,
@@ -260,7 +262,7 @@ function enhance() {
           "font-weight": 850,
         });
         text.textContent = readout;
-        enhancement.append(text);
+        selectionOverlay.append(text);
       }
     }
 
@@ -339,6 +341,7 @@ function enhance() {
   const firstPolyline = svg.querySelector("polyline");
   if (firstPolyline) svg.insertBefore(enhancement, firstPolyline);
   else svg.prepend(enhancement);
+  if (selectionOverlay.childNodes.length > 0) svg.append(selectionOverlay);
 }
 
 export default function RouteProfileEnhancer() {
