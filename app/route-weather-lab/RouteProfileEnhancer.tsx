@@ -118,6 +118,28 @@ function enhance() {
   const svg = document.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
   if (!svg) return;
 
+  if (svg.dataset.profileBandTracking !== "1") {
+    svg.dataset.profileBandTracking = "1";
+    svg.addEventListener("pointerdown", (event) => {
+      const target = event.target;
+      if (!(target instanceof SVGElement)) return;
+      const group = target.closest<SVGGElement>('g[style*="cursor"]');
+      if (!group) return;
+      const circles = group.querySelectorAll<SVGCircleElement>("circle");
+      if (circles.length < 2) return;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const point = svg.createSVGPoint();
+      point.x = event.clientX;
+      point.y = event.clientY;
+      const local = point.matrixTransform(matrix.inverse());
+      const seaY = Number(circles[0].getAttribute("cy"));
+      const windY = Number(circles[1].getAttribute("cy"));
+      if (!Number.isFinite(seaY) || !Number.isFinite(windY)) return;
+      svg.dataset.profileBand = Math.abs(local.y - windY) < Math.abs(local.y - seaY) ? "wind" : "sea";
+    });
+  }
+
   svg.querySelector("g.route-profile-enhancements")?.remove();
   deconflictWaypointLabels(svg);
 
@@ -227,16 +249,19 @@ function enhance() {
         const readout = `${distText}  •  ${seaText}  •  ${windText}`;
         const width = Math.max(190, Math.min(350, readout.length * 6.4 + 24));
         const bx = Math.max(6, Math.min(994 - width, point.x - width / 2));
-        const by = Math.max(2, point.seaY - 34);
+        const selectedBand = svg.dataset.profileBand === "wind" ? "wind" : "sea";
+        const anchorY = selectedBand === "wind" ? point.windY : point.seaY;
+        const by = Math.max(2, anchorY - 34);
         const bottom = by + 24;
+        const accent = selectedBand === "wind" ? "#67e8f9" : "#f1d56b";
         enhancement.append(svgEl("line", {
           x1: point.x,
           y1: bottom,
           x2: point.x,
-          y2: Math.max(bottom + 2, point.seaY - 6),
-          stroke: "#94a3b8",
+          y2: Math.max(bottom + 2, anchorY - 6),
+          stroke: accent,
           "stroke-width": 1,
-          opacity: .75,
+          opacity: .8,
         }));
         enhancement.append(svgEl("rect", {
           x: bx,
@@ -246,7 +271,7 @@ function enhance() {
           rx: 5,
           fill: "#03070b",
           "fill-opacity": .97,
-          stroke: "#64748b",
+          stroke: accent,
           "stroke-width": 1,
         }));
         const text = svgEl("text", {
