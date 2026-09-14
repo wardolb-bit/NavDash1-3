@@ -125,6 +125,12 @@ function enhance() {
     .filter((g) => g.querySelectorAll("circle").length >= 2);
   if (sampleGroups.length < 2) return;
 
+  sampleGroups.forEach((group) => {
+    group.querySelectorAll<SVGGElement>(":scope > g").forEach((child) => {
+      child.style.display = "";
+    });
+  });
+
   const samples = sampleGroups.map((g) => {
     const circles = g.querySelectorAll<SVGCircleElement>("circle");
     return {
@@ -137,6 +143,11 @@ function enhance() {
   if (samples.length < 2) return;
 
   const selectedIndex = samples.findIndex((p) => p.selected);
+  if (selectedIndex >= 0) {
+    const originalPopup = sampleGroups[selectedIndex]?.querySelector<SVGGElement>(":scope > g");
+    if (originalPopup) originalPopup.style.display = "none";
+  }
+
   const enhancement = svgEl("g", { class: "route-profile-enhancements", "pointer-events": "none" }) as SVGGElement;
   const defs = svgEl("defs");
 
@@ -205,6 +216,51 @@ function enhance() {
         enhancement.append(arrow);
       }
     });
+
+    if (selectedIndex >= 0) {
+      const point = samples[selectedIndex];
+      const cells = tableRows[selectedIndex]?.querySelectorAll<HTMLTableCellElement>("td");
+      if (point && cells && cells.length >= 6) {
+        const distText = cells[0]?.textContent?.trim() || "--";
+        const windText = cells[3]?.textContent?.trim() || "--";
+        const seaText = cells[5]?.textContent?.trim() || "--";
+        const readout = `${distText}  •  ${seaText}  •  ${windText}`;
+        const width = Math.max(190, Math.min(350, readout.length * 6.4 + 24));
+        const bx = Math.max(6, Math.min(994 - width, point.x - width / 2));
+        const by = Math.max(2, point.seaY - 34);
+        const bottom = by + 24;
+        enhancement.append(svgEl("line", {
+          x1: point.x,
+          y1: bottom,
+          x2: point.x,
+          y2: Math.max(bottom + 2, point.seaY - 6),
+          stroke: "#94a3b8",
+          "stroke-width": 1,
+          opacity: .75,
+        }));
+        enhancement.append(svgEl("rect", {
+          x: bx,
+          y: by,
+          width,
+          height: 24,
+          rx: 5,
+          fill: "#03070b",
+          "fill-opacity": .97,
+          stroke: "#64748b",
+          "stroke-width": 1,
+        }));
+        const text = svgEl("text", {
+          x: bx + width / 2,
+          y: by + 16,
+          "text-anchor": "middle",
+          fill: "#e2e8f0",
+          "font-size": 13,
+          "font-weight": 800,
+        });
+        text.textContent = readout;
+        enhancement.append(text);
+      }
+    }
 
     const seaValues = tableRows.slice(0, samples.length).map((row) => parseNumber(row.querySelectorAll("td")[5]?.textContent || "") ?? -Infinity);
     const windValues = tableRows.slice(0, samples.length).map((row) => parseNumber(row.querySelectorAll("td")[3]?.textContent || "") ?? -Infinity);
