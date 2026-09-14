@@ -55,10 +55,15 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           background-color: var(--nd-panel-alt) !important;
         }
 
-        /* Darker wind cyan for Day mode readability only. */
+        /* Darker cyan/teal values for Day mode readability on this page only. */
+        html[data-navdash-theme="day"] main [class*="text-cyan-200"],
+        html[data-navdash-theme="day"] main [class*="text-cyan-300"] {
+          color: #0b6872 !important;
+        }
+
         html[data-navdash-theme="day"] main aside > section:nth-child(3) [class*="text-cyan"],
         html[data-navdash-theme="day"] main table [class*="text-cyan"] {
-          color: #007985 !important;
+          color: #0b6872 !important;
         }
 
         /* OpsStatusStrip is injected after first paint and rebuilt every second with inline night colors.
@@ -76,6 +81,11 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           background: var(--nd-panel-alt) !important;
           background-color: var(--nd-panel-alt) !important;
           border-color: rgba(122,91,0,.38) !important;
+        }
+
+        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:#67e8f9"],
+        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: #67e8f9"] {
+          color: #0b6872 !important;
         }
       `}</style>
       <WeatherChartLayer />
