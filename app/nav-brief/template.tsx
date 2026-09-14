@@ -1,23 +1,33 @@
 "use client";
 
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 
 type WxWaypoint = { id?: string; name?: string; lat: number; lon: number };
 type WxRoute = { routeName?: string; waypoints: WxWaypoint[] };
-type WxRow = {
-  valid?: string;
+type ForecastPoint = {
+  lat?: number;
+  lon?: number;
+  distanceNm?: number;
   windKt?: number | null;
-  windDir?: number | null;
+  windDirectionDeg?: number | null;
   gustKt?: number | null;
-  seasFt?: number | null;
-  swellPeriod?: number | null;
-  forecast?: string;
+  waveHeightFt?: number | null;
+  wavePeriodSec?: number | null;
+  waveDirectionDeg?: number | null;
 };
-type WxObservation = { waypoint: WxWaypoint; eta: Date; row: WxRow; sourcePoint?: string };
+type WeatherFrame = { validAt: string; points: ForecastPoint[] };
+type WardLabWeather = {
+  ok?: boolean;
+  source?: string;
+  product?: string;
+  provider?: string;
+  waveOverlay?: boolean;
+  frames?: WeatherFrame[];
+  error?: string;
+};
+type WeatherPlan = { departure: Date; speedKt: number; source: string };
+type RouteSample = { point: ForecastPoint; eta: Date; distanceNm: number };
 
-const WX_ROUTE_CACHE_KEY = "navdash-wx-routing-route";
-const WX_GRIB_CACHE_KEY = "navdash-wx-routing-grib";
-const WX_SOURCE_KEY = "navdash-wx-routing-source";
 const NAV_ROUTE_STORAGE_KEY = "navconsole-saved-route";
 
 function formatCoord(value: number, isLat: boolean) {
@@ -124,8 +134,7 @@ function addWaypointEtas() {
     const headRow = table.querySelector("thead tr");
     if (!headRow) continue;
 
-    let etaIndex = headers.indexOf("ETA @ TO");
-    if (etaIndex < 0) {
+    if (!headers.includes("ETA @ TO")) {
       const referenceHeader = headRow.querySelector("th:last-child");
       const etaHeader = document.createElement("th");
       etaHeader.textContent = "ETA @ TO";
@@ -133,7 +142,6 @@ function addWaypointEtas() {
       etaHeader.className = referenceHeader?.className || "border border-white/10 px-2 py-2 text-left";
       headRow.appendChild(etaHeader);
       headers = tableHeaders(table);
-      etaIndex = headers.indexOf("ETA @ TO");
     }
 
     const distIndex = headers.indexOf("DIST");
@@ -164,118 +172,122 @@ function addWaypointEtas() {
   }
 }
 
-function readJson(storage: Storage, key: string) {
-  try { const raw = storage.getItem(key); return raw ? JSON.parse(raw) : null; } catch { return null; }
+function enhancePrintTables() {
+  formatWeatherPositions();
+  clarifyWeatherGusts();
+  simplifyAmiIssuedLine();
+  addWaypointEtas();
 }
 
-function normalizeWxRoute(payload: any): WxRoute | null {
-  const raw = Array.isArray(payload?.waypoints) ? payload.waypoints : Array.isArray(payload?.route?.waypoints) ? payload.route.waypoints : [];
+function normalizeRoute(payload: any): WxRoute | null {
+  const raw = Array.isArray(payload?.waypoints)
+    ? payload.waypoints
+    : Array.isArray(payload?.route?.waypoints)
+      ? payload.route.waypoints
+      : [];
   const waypoints = raw.map((wp: any, index: number) => ({
     id: String(wp?.id || `WP${index + 1}`),
     name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`),
     lat: Number(wp?.lat ?? wp?.latitude),
     lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
   })).filter((wp: WxWaypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
-  return waypoints.length >= 2 ? { routeName: String(payload?.routeName || payload?.name || "NavDash Route"), waypoints } : null;
+  return waypoints.length >= 2
+    ? { routeName: String(payload?.routeName || payload?.name || payload?.route?.routeName || "Nav Brief Route"), waypoints }
+    : null;
 }
 
-function currentWxRoute() {
-  return normalizeWxRoute(readJson(window.sessionStorage, WX_ROUTE_CACHE_KEY))
-    || normalizeWxRoute(readJson(window.localStorage, NAV_ROUTE_STORAGE_KEY));
+function getAttr(node: Element | null, names: string[]) {
+  if (!node) return null;
+  for (const name of names) {
+    const value = node.getAttribute(name);
+    if (value) return value;
+  }
+  return null;
 }
 
-function toRad(value: number) { return value * Math.PI / 180; }
-function routeDistanceNm(a: WxWaypoint, b: WxWaypoint) {
-  const r = 3440.065;
-  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon), lat1 = toRad(a.lat), lat2 = toRad(b.lat);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.asin(Math.sqrt(h));
-}
-function totalRouteDistance(route: WxRoute) {
-  return route.waypoints.slice(1).reduce((sum, waypoint, index) => sum + routeDistanceNm(route.waypoints[index], waypoint), 0);
-}
-function nearestByPosition<T extends { lat: number; lon: number }>(items: T[], point: WxWaypoint) {
-  if (!items.length) return null;
-  return items.reduce((best, item) => routeDistanceNm(item, point) < routeDistanceNm(best, point) ? item : best, items[0]);
-}
-function parseWxTime(value?: string) {
-  if (!value) return null;
-  const normalized = /UTC$/i.test(value) ? value.replace(/\s+UTC$/i, "Z").replace(" ", "T") : value;
-  const date = new Date(normalized);
-  return Number.isFinite(date.getTime()) ? date : null;
-}
-function nearestTimelineRow(rows: WxRow[], eta: Date) {
-  const valid = rows.filter(row => parseWxTime(row.valid));
-  if (!valid.length) return rows[0] || null;
-  return valid.reduce((best, row) => {
-    const rowTime = parseWxTime(row.valid)?.getTime() ?? Number.POSITIVE_INFINITY;
-    const bestTime = parseWxTime(best.valid)?.getTime() ?? Number.POSITIVE_INFINITY;
-    return Math.abs(rowTime - eta.getTime()) < Math.abs(bestTime - eta.getTime()) ? row : best;
-  }, valid[0]);
-}
-function compass(value?: number | null) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "";
-  const points = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  return points[Math.round((((value % 360) + 360) % 360) / 45) % 8];
-}
-function windText(row?: WxRow | null) {
-  if (!row) return "--";
-  const wind = Number(row.windKt);
-  const gust = Number(row.gustKt);
-  const direction = compass(row.windDir);
-  if (!Number.isFinite(wind) && !Number.isFinite(gust)) return "--";
-  const base = Number.isFinite(wind) ? `${direction ? `${direction} ` : ""}${Math.round(wind)} kt` : `${Math.round(gust)} kt`;
-  return Number.isFinite(gust) && gust > wind ? `${base} G ${Math.round(gust)}` : base;
-}
-function seaText(row?: WxRow | null) {
-  const seas = Number(row?.seasFt);
-  if (!Number.isFinite(seas) || seas <= 0) return "--";
-  const period = Number(row?.swellPeriod);
-  return `${seas.toFixed(1)} ft${Number.isFinite(period) && period > 0 ? ` @ ${period.toFixed(0)} s` : ""}`;
-}
-function localWxTime(date: Date) {
-  return date.toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+function parseCoordinate(raw: string | null, isLat: boolean) {
+  if (!raw) return NaN;
+  const text = raw.trim();
+  const decimal = Number(text);
+  if (Number.isFinite(decimal)) return decimal;
+  const hemi = text.match(/[NSEW]/i)?.[0]?.toUpperCase();
+  const nums = text.match(/-?\d+(?:\.\d+)?/g)?.map(Number) || [];
+  if (!nums.length) return NaN;
+  let value = nums.length >= 3
+    ? Math.abs(nums[0]) + nums[1] / 60 + nums[2] / 3600
+    : nums.length >= 2
+      ? Math.abs(nums[0]) + nums[1] / 60
+      : nums[0];
+  if (hemi === "S" || hemi === "W" || (!hemi && nums[0] < 0)) value *= -1;
+  if (isLat && Math.abs(value) > 90) return NaN;
+  if (!isLat && Math.abs(value) > 180) return NaN;
+  return value;
 }
 
-function gribObservations(route: WxRoute, summary: any, departure: Date, speed: number): WxObservation[] {
-  const points = Array.isArray(summary?.routeForecast?.routePoints) ? summary.routeForecast.routePoints : [];
-  if (!points.length) return [];
-  let cumulative = 0;
-  return route.waypoints.map((waypoint, index) => {
-    if (index > 0) cumulative += routeDistanceNm(route.waypoints[index - 1], waypoint);
-    const eta = new Date(departure.getTime() + cumulative / speed * 3600000);
-    const point = nearestByPosition(points, waypoint) as any;
-    const row = point ? nearestTimelineRow(Array.isArray(point.timeline) ? point.timeline : [], eta) : null;
-    return row ? { waypoint, eta, row, sourcePoint: point?.name || point?.id || "" } : null;
-  }).filter(Boolean) as WxObservation[];
-}
-
-function noaaObservations(route: WxRoute, data: any, departure: Date, speed: number): WxObservation[] {
-  const frames = Array.isArray(data?.frames) ? data.frames : [];
-  if (!frames.length) return [];
-  let cumulative = 0;
-  return route.waypoints.map((waypoint, index) => {
-    if (index > 0) cumulative += routeDistanceNm(route.waypoints[index - 1], waypoint);
-    const eta = new Date(departure.getTime() + cumulative / speed * 3600000);
-    const frame = frames.reduce((best: any, candidate: any) => {
-      const bestTime = new Date(best?.validAt || 0).getTime();
-      const nextTime = new Date(candidate?.validAt || 0).getTime();
-      return Math.abs(nextTime - eta.getTime()) < Math.abs(bestTime - eta.getTime()) ? candidate : best;
-    }, frames[0]);
-    const points = Array.isArray(frame?.points) ? frame.points : [];
-    const point = nearestByPosition(points.map((p: any) => ({ ...p, lon: Number(p.lon), lat: Number(p.lat) })), waypoint) as any;
-    if (!point) return null;
-    const row: WxRow = {
-      valid: frame?.validAt,
-      windKt: Number.isFinite(Number(point.windKt)) ? Number(point.windKt) : null,
-      windDir: Number.isFinite(Number(point.windDirectionDeg)) ? Number(point.windDirectionDeg) : null,
-      gustKt: Number.isFinite(Number(point.gustKt)) ? Number(point.gustKt) : null,
-      seasFt: Number.isFinite(Number(point.waveHeightFt)) && Number(point.waveHeightFt) > 0 ? Number(point.waveHeightFt) : null,
-      swellPeriod: Number.isFinite(Number(point.wavePeriodSec)) ? Number(point.wavePeriodSec) : null,
-      forecast: point.source || data?.product || "NOAA / NWS",
+function parseRtz(text: string): WxRoute | null {
+  const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.querySelector("parsererror")) return null;
+  const routeNode = doc.querySelector("route,Route") || doc.documentElement;
+  const routeInfo = doc.querySelector("routeInfo,RouteInfo");
+  const routeName = getAttr(routeInfo, ["routeName", "RouteName", "name", "Name"])
+    || getAttr(routeNode, ["routeName", "RouteName", "name", "Name", "id", "ID"])
+    || "Loaded RTZ Route";
+  const waypoints = Array.from(doc.querySelectorAll("waypoint,Waypoint,wp,WP")).map((node, index) => {
+    const pos = node.querySelector("position,Position,pos") || node;
+    const lat = parseCoordinate(getAttr(pos, ["lat", "Lat", "latitude", "Latitude"]) || getAttr(node, ["lat", "Lat", "latitude", "Latitude"]), true);
+    const lon = parseCoordinate(getAttr(pos, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]) || getAttr(node, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]), false);
+    return {
+      id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${index + 1}`,
+      name: getAttr(node, ["name", "Name", "waypointName", "WaypointName"]) || node.querySelector("name,Name,waypointName,WaypointName")?.textContent?.trim() || `Waypoint ${index + 1}`,
+      lat,
+      lon,
     };
-    return { waypoint, eta, row, sourcePoint: point.source || "NOAA sample" };
-  }).filter(Boolean) as WxObservation[];
+  }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  return waypoints.length >= 2 ? { routeName, waypoints } : null;
+}
+
+function localNavDashRoute() {
+  try {
+    const raw = window.localStorage.getItem(NAV_ROUTE_STORAGE_KEY);
+    return raw ? normalizeRoute(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function remoteNavDashRoute() {
+  try {
+    const response = await fetch("/api/route-state", { cache: "no-store" });
+    return response.ok ? normalizeRoute(await response.json()) : null;
+  } catch {
+    return null;
+  }
+}
+
+function navBriefPlan(): WeatherPlan | null {
+  const page = document.querySelector(".navdash-navbrief-console");
+  const departureInput = page?.querySelector('input[type="datetime-local"]') as HTMLInputElement | null;
+  const speedInput = page?.querySelector('input[type="number"]') as HTMLInputElement | null;
+  const departure = departureInput?.value ? new Date(departureInput.value) : null;
+  const speedKt = Number(speedInput?.value);
+  if (departure && Number.isFinite(departure.getTime()) && Number.isFinite(speedKt) && speedKt > 0) {
+    return { departure, speedKt, source: "NAV BRIEF PLAN" };
+  }
+  return null;
+}
+
+async function sharedWeatherPlan(): Promise<WeatherPlan | null> {
+  try {
+    const response = await fetch("/api/weather-plan-state", { cache: "no-store" });
+    if (!response.ok) return null;
+    const json = await response.json();
+    const departure = json?.departure ? new Date(json.departure) : null;
+    const speedKt = Number(json?.speedKt);
+    if (departure && Number.isFinite(departure.getTime()) && Number.isFinite(speedKt) && speedKt > 0) {
+      return { departure, speedKt, source: "WX.WARDLAB.DEV PLAN" };
+    }
+  } catch {}
+  return null;
 }
 
 function ensureWeatherCard() {
@@ -293,7 +305,7 @@ function ensureWeatherCard() {
   return card;
 }
 
-function setWeatherCardMessage(message: string) {
+function setWeatherMessage(message: string) {
   const card = ensureWeatherCard();
   if (!card) return;
   card.replaceChildren();
@@ -306,103 +318,225 @@ function setWeatherCardMessage(message: string) {
   card.append(heading, detail);
 }
 
-function renderWeatherCard(source: string, observations: WxObservation[]) {
-  const card = ensureWeatherCard();
-  if (!card || !observations.length) return;
-  const departure = observations[0];
-  const arrival = observations[observations.length - 1];
-  const maxWind = observations.reduce((best, item) => Math.max(item.row.windKt || 0, item.row.gustKt || 0) > Math.max(best.row.windKt || 0, best.row.gustKt || 0) ? item : best, observations[0]);
-  const maxSeas = observations.reduce((best, item) => (item.row.seasFt || 0) > (best.row.seasFt || 0) ? item : best, observations[0]);
+function compass(value?: number | null) {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "";
+  const points = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+  const normalized = ((Number(value) % 360) + 360) % 360;
+  return points[Math.round(normalized / 22.5) % 16];
+}
 
+function windText(point: ForecastPoint) {
+  const wind = Number(point.windKt);
+  const gust = Number(point.gustKt);
+  const dir = compass(point.windDirectionDeg);
+  const hasWind = Number.isFinite(wind);
+  const hasGust = Number.isFinite(gust);
+  if (!hasWind && !hasGust) return "Wind --";
+  const base = hasWind ? `${dir ? `${dir} ` : ""}${wind.toFixed(0)} kt` : `${gust.toFixed(0)} kt`;
+  return hasGust && (!hasWind || gust > wind) ? `${base} gust ${gust.toFixed(0)} kt` : base;
+}
+
+function seaText(point: ForecastPoint) {
+  const height = Number(point.waveHeightFt);
+  const period = Number(point.wavePeriodSec);
+  const dir = compass(point.waveDirectionDeg);
+  if (!Number.isFinite(height) || height <= 0) return "Seas --";
+  return `Seas ${height.toFixed(1)} ft${Number.isFinite(period) && period > 0 ? ` @ ${period.toFixed(0)} s` : ""}${dir ? ` ${dir}` : ""}`;
+}
+
+function routeZone(route: WxRoute) {
+  const first = route.waypoints[0];
+  if (first && first.lat >= 18 && first.lat <= 23.5 && first.lon >= -161.5 && first.lon <= -154) return { timeZone: "Pacific/Honolulu", label: "HST" };
+  if (first && first.lat >= 12 && first.lat <= 22 && first.lon >= 143 && first.lon <= 146.5) return { timeZone: "Pacific/Guam", label: "ChST" };
+  return null;
+}
+
+function timeText(date: Date, route: WxRoute) {
+  const zone = routeZone(route);
+  if (zone) {
+    return `${new Intl.DateTimeFormat("en-US", { timeZone: zone.timeZone, month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(date)} ${zone.label}`;
+  }
+  return date.toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function nearestFrame(frames: WeatherFrame[], eta: Date) {
+  return frames.reduce((best, frame) => {
+    const bestDelta = Math.abs(new Date(best.validAt).getTime() - eta.getTime());
+    const nextDelta = Math.abs(new Date(frame.validAt).getTime() - eta.getTime());
+    return nextDelta < bestDelta ? frame : best;
+  }, frames[0]);
+}
+
+function voyageSamples(weather: WardLabWeather, plan: WeatherPlan): RouteSample[] {
+  const frames = Array.isArray(weather.frames) ? weather.frames.filter(frame => Array.isArray(frame.points) && frame.points.length) : [];
+  if (!frames.length) return [];
+  const reference = frames[0].points;
+  return reference.map((referencePoint, index) => {
+    const distanceNm = Number(referencePoint.distanceNm);
+    const distance = Number.isFinite(distanceNm) ? distanceNm : 0;
+    const eta = new Date(plan.departure.getTime() + (distance / plan.speedKt) * 3600000);
+    const frame = nearestFrame(frames, eta);
+    const point = frame.points[index] || frame.points.reduce((best, candidate) => {
+      const candidateDistance = Number(candidate.distanceNm);
+      const bestDistance = Number(best.distanceNm);
+      const candidateDelta = Math.abs((Number.isFinite(candidateDistance) ? candidateDistance : 0) - distance);
+      const bestDelta = Math.abs((Number.isFinite(bestDistance) ? bestDistance : 0) - distance);
+      return candidateDelta < bestDelta ? candidate : best;
+    }, frame.points[0]);
+    return point ? { point, eta, distanceNm: distance } : null;
+  }).filter(Boolean) as RouteSample[];
+}
+
+function renderWeatherCard(weather: WardLabWeather, route: WxRoute, plan: WeatherPlan) {
+  const samples = voyageSamples(weather, plan);
+  if (!samples.length) {
+    setWeatherMessage("The current WardLab weather feed returned no route samples for this RTZ.");
+    return;
+  }
+
+  const departure = samples[0];
+  const arrival = samples[samples.length - 1];
+  const maxWind = samples.reduce((best, sample) => {
+    const sampleWind = Math.max(Number(sample.point.windKt) || 0, Number(sample.point.gustKt) || 0);
+    const bestWind = Math.max(Number(best.point.windKt) || 0, Number(best.point.gustKt) || 0);
+    return sampleWind > bestWind ? sample : best;
+  }, samples[0]);
+  const maxSeas = samples.reduce((best, sample) => (Number(sample.point.waveHeightFt) || 0) > (Number(best.point.waveHeightFt) || 0) ? sample : best, samples[0]);
+
+  const card = ensureWeatherCard();
+  if (!card) return;
   card.replaceChildren();
+
   const headingRow = document.createElement("div");
   headingRow.className = "flex flex-wrap items-baseline justify-between gap-2";
-  const heading = document.createElement("div"); heading.className = "text-[12px] font-black"; heading.textContent = "ROUTE WEATHER";
-  const sourceLabel = document.createElement("div"); sourceLabel.className = "font-mono text-[9px] text-[#42d3c8]"; sourceLabel.textContent = source;
-  headingRow.append(heading, sourceLabel);
+  const heading = document.createElement("div");
+  heading.className = "text-[12px] font-black";
+  heading.textContent = "ROUTE WEATHER";
+  const source = document.createElement("div");
+  source.className = "font-mono text-[9px] text-[#42d3c8]";
+  source.textContent = weather.waveOverlay ? "WX.WARDLAB.DEV · NOAA + GFS WAVE" : "WX.WARDLAB.DEV · NOAA/NWS";
+  headingRow.append(heading, source);
 
-  const detail = document.createElement("div"); detail.className = "mt-2 grid grid-cols-1 gap-x-5 gap-y-1 text-[11px] leading-5 text-[#8294a5] md:grid-cols-2";
+  const planLine = document.createElement("div");
+  planLine.className = "mt-1 text-[9px] uppercase tracking-[.08em] text-[#8294a5]";
+  planLine.textContent = `${plan.source} · ${plan.speedKt.toFixed(1)} KT · DEP ${timeText(plan.departure, route)}`;
+
+  const detail = document.createElement("div");
+  detail.className = "mt-2 grid grid-cols-1 gap-x-5 gap-y-1 text-[11px] leading-5 text-[#8294a5] md:grid-cols-2";
   const lines = [
-    `Departure · ${windText(departure.row)} · Seas ${seaText(departure.row)}`,
-    `Arrival · ${windText(arrival.row)} · Seas ${seaText(arrival.row)}`,
-    `Max wind · ${windText(maxWind.row)} near ${maxWind.waypoint.name || maxWind.waypoint.id || "route"} · ${localWxTime(maxWind.eta)}`,
-    `Max seas · ${seaText(maxSeas.row)} near ${maxSeas.waypoint.name || maxSeas.waypoint.id || "route"} · ${localWxTime(maxSeas.eta)}`,
+    `Departure · ${windText(departure.point)} · ${seaText(departure.point)}`,
+    `Arrival · ${windText(arrival.point)} · ${seaText(arrival.point)}`,
+    `Max wind · ${windText(maxWind.point)} · ${maxWind.distanceNm.toFixed(0)} NM along route · ${timeText(maxWind.eta, route)}`,
+    `Max seas · ${seaText(maxSeas.point)} · ${maxSeas.distanceNm.toFixed(0)} NM along route · ${timeText(maxSeas.eta, route)}`,
   ];
-  for (const line of lines) { const div = document.createElement("div"); div.textContent = line; detail.appendChild(div); }
-  card.append(headingRow, detail);
-}
-
-async function refreshRouteWeather() {
-  const page = document.querySelector(".navdash-navbrief-console");
-  if (!page) return;
-  const route = currentWxRoute();
-  const departureInput = page.querySelector('input[type="datetime-local"]') as HTMLInputElement | null;
-  const speedInput = page.querySelector('input[type="number"]') as HTMLInputElement | null;
-  const departure = departureInput?.value ? new Date(departureInput.value) : null;
-  const speed = Number(speedInput?.value);
-  if (!route) { setWeatherCardMessage("Load the NavDash route or open WX Routing with the route loaded."); return; }
-  if (!departure || !Number.isFinite(departure.getTime()) || !Number.isFinite(speed) || speed <= 0) { setWeatherCardMessage("Set departure time and planning speed to match weather to the voyage timeline."); return; }
-
-  const sourceMode = window.localStorage.getItem(WX_SOURCE_KEY) === "noaa" ? "noaa" : "grib";
-  try {
-    if (sourceMode === "noaa") {
-      const response = await fetch("/api/noaa-route-weather", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ waypoints: route.waypoints }), cache: "no-store" });
-      if (!response.ok) throw new Error(`NOAA route weather returned ${response.status}`);
-      const data = await response.json();
-      const observations = noaaObservations(route, data, departure, speed);
-      if (!observations.length) throw new Error("No NOAA route samples matched this voyage.");
-      renderWeatherCard(String(data?.product || "NOAA / NWS ROUTE WEATHER"), observations);
-      return;
-    }
-
-    let summary = readJson(window.sessionStorage, WX_GRIB_CACHE_KEY);
-    if (!summary?.routeForecast?.routePoints?.length) {
-      const response = await fetch("/api/grib-summary", { cache: "no-store" });
-      if (!response.ok) throw new Error(`Weather summary returned ${response.status}`);
-      summary = await response.json();
-    }
-    const observations = gribObservations(route, summary, departure, speed);
-    if (!observations.length) throw new Error("Open WX Routing once to populate route weather for this route.");
-    renderWeatherCard(String(summary?.sourceNotes || summary?.fileName || "WX ROUTING"), observations);
-  } catch (error) {
-    setWeatherCardMessage(error instanceof Error ? error.message : "Route weather unavailable.");
+  for (const line of lines) {
+    const div = document.createElement("div");
+    div.textContent = line;
+    detail.appendChild(div);
   }
-}
-
-function enhancePrintTables() {
-  formatWeatherPositions();
-  clarifyWeatherGusts();
-  simplifyAmiIssuedLine();
-  addWaypointEtas();
+  card.append(headingRow, planLine, detail);
 }
 
 export default function NavBriefTemplate({ children }: { children: ReactNode }) {
+  const routeRef = useRef<WxRoute | null>(null);
+  const weatherTimerRef = useRef<number>(0);
+  const requestRef = useRef(0);
+
   useEffect(() => {
+    let alive = true;
+
+    const resolveRoute = async () => {
+      if (routeRef.current) return routeRef.current;
+      const local = localNavDashRoute();
+      if (local) {
+        routeRef.current = local;
+        return local;
+      }
+      const remote = await remoteNavDashRoute();
+      if (remote) routeRef.current = remote;
+      return remote;
+    };
+
+    const refreshWeather = async () => {
+      const requestId = ++requestRef.current;
+      const route = await resolveRoute();
+      if (!alive || requestId !== requestRef.current) return;
+      if (!route) {
+        setWeatherMessage("Load the RTZ on this Nav Brief page, or choose Use Current NavDash Route.");
+        return;
+      }
+
+      const plan = navBriefPlan() || await sharedWeatherPlan();
+      if (!alive || requestId !== requestRef.current) return;
+      if (!plan) {
+        setWeatherMessage("Set departure time and planning speed in Nav Brief or on wx.wardlab.dev.");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/nav-brief-route-weather", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+          body: JSON.stringify({ waypoints: route.waypoints }),
+        });
+        const weather = await response.json() as WardLabWeather;
+        if (!alive || requestId !== requestRef.current) return;
+        if (!response.ok || !weather.ok) throw new Error(weather.error || `Weather feed returned ${response.status}`);
+        renderWeatherCard(weather, route, plan);
+      } catch (error) {
+        setWeatherMessage(error instanceof Error ? error.message : "Current WardLab route weather unavailable.");
+      }
+    };
+
+    const scheduleWeather = (delay = 180) => {
+      window.clearTimeout(weatherTimerRef.current);
+      weatherTimerRef.current = window.setTimeout(() => { void refreshWeather(); }, delay);
+    };
+
+    const handleChange = async (event: Event) => {
+      const input = event.target as HTMLInputElement | null;
+      if (!input) return;
+      if (input.type === "file" && input.files?.[0] && (input.accept || "").includes(".rtz")) {
+        try {
+          const parsed = parseRtz(await input.files[0].text());
+          if (parsed) routeRef.current = parsed;
+        } catch {}
+      }
+      enhancePrintTables();
+      scheduleWeather(80);
+    };
+
+    const handleInput = () => {
+      enhancePrintTables();
+      scheduleWeather(120);
+    };
+
+    const handleClick = (event: MouseEvent) => {
+      const button = (event.target as Element | null)?.closest("button");
+      if (button && /use current navdash route/i.test(button.textContent || "")) {
+        routeRef.current = null;
+        window.setTimeout(() => scheduleWeather(0), 180);
+        return;
+      }
+      scheduleWeather(220);
+    };
+
     enhancePrintTables();
-    void refreshRouteWeather();
     const observer = new MutationObserver(enhancePrintTables);
     observer.observe(document.body, { childList: true, subtree: true });
-
-    let weatherTimer = 0;
-    const refresh = () => {
-      enhancePrintTables();
-      window.clearTimeout(weatherTimer);
-      weatherTimer = window.setTimeout(() => { void refreshRouteWeather(); }, 120);
-    };
-    const refreshAfterClick = () => {
-      window.clearTimeout(weatherTimer);
-      weatherTimer = window.setTimeout(() => { enhancePrintTables(); void refreshRouteWeather(); }, 220);
-    };
-    document.addEventListener("input", refresh, true);
-    document.addEventListener("change", refresh, true);
-    document.addEventListener("click", refreshAfterClick, true);
+    document.addEventListener("change", handleChange, true);
+    document.addEventListener("input", handleInput, true);
+    document.addEventListener("click", handleClick, true);
+    scheduleWeather(500);
 
     return () => {
+      alive = false;
       observer.disconnect();
-      window.clearTimeout(weatherTimer);
-      document.removeEventListener("input", refresh, true);
-      document.removeEventListener("change", refresh, true);
-      document.removeEventListener("click", refreshAfterClick, true);
+      window.clearTimeout(weatherTimerRef.current);
+      document.removeEventListener("change", handleChange, true);
+      document.removeEventListener("input", handleInput, true);
+      document.removeEventListener("click", handleClick, true);
     };
   }, []);
 
