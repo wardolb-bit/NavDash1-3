@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import RouteProfileEnhancer from "./RouteProfileEnhancer";
 import WeatherChartLayer from "./WeatherChartLayer";
+import WeatherMainButtonFix from "./WeatherMainButtonFix";
 
 export default function RouteWeatherLabLayout({ children }: { children: ReactNode }) {
   return (
@@ -184,6 +185,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
       `}</style>
       <WeatherChartLayer />
       <RouteProfileEnhancer />
+      <WeatherMainButtonFix />
       {children}
     </>
   );
