@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import FullWidthRouteProfile from "./FullWidthRouteProfile";
 import WeatherChartLayer from "./WeatherChartLayer";
 import WeatherMainButtonFix from "./WeatherMainButtonFix";
 
@@ -8,6 +7,49 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
     <>
       <style>{`
         #route-weather-lab-map + * {}
+
+        /* Desktop: keep map/content left, voyage rail right, and let the native route profile span the full workspace below them. */
+        @media (min-width: 1280px) {
+          main > div.mb-2.grid:has(#route-weather-lab-map) {
+            position: relative !important;
+            display: block !important;
+          }
+
+          main > div.mb-2.grid:has(#route-weather-lab-map) > section {
+            width: 100% !important;
+            min-width: 0 !important;
+          }
+
+          main > div.mb-2.grid:has(#route-weather-lab-map) > section > :not(:has(> svg[viewBox="0 0 1000 160"])) {
+            width: calc(100% - 388px) !important;
+            max-width: calc(100% - 388px) !important;
+            box-sizing: border-box !important;
+          }
+
+          main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) {
+            width: 100% !important;
+            max-width: none !important;
+            box-sizing: border-box !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            overflow: hidden !important;
+          }
+
+          main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) svg {
+            display: block !important;
+            width: 100% !important;
+            max-width: none !important;
+          }
+
+          main > div.mb-2.grid:has(#route-weather-lab-map) > aside {
+            position: absolute !important;
+            top: 0 !important;
+            right: 0 !important;
+            width: 380px !important;
+            max-width: 380px !important;
+            z-index: 2 !important;
+          }
+        }
 
         /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
@@ -32,32 +74,8 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           font-size: 12px !important;
           letter-spacing: -.015em;
         }
-
-        /* Native route profile only. Keep it clean and readable. */
-        [data-navdash-full-width-profile="true"] {
-          box-sizing: border-box !important;
-          width: calc(100vw - 16px) !important;
-          max-width: calc(100vw - 16px) !important;
-          margin-left: 0 !important;
-          margin-right: 0 !important;
-          overflow: hidden !important;
-        }
-
-        [data-navdash-full-width-profile="true"] svg[viewBox="0 0 1000 160"] {
-          display: block;
-          width: 100% !important;
-          max-width: none !important;
-        }
-
-        @media (max-width: 900px) {
-          [data-navdash-full-width-profile="true"] {
-            width: calc(100vw - 16px) !important;
-            max-width: calc(100vw - 16px) !important;
-          }
-        }
       `}</style>
       <WeatherChartLayer />
-      <FullWidthRouteProfile />
       <WeatherMainButtonFix />
       {children}
     </>
