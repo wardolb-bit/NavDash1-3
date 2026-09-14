@@ -6,9 +6,21 @@ type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
 type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: number | null } | null;
 
+function s52DisplayParams(colorScheme: 0 | 5) {
+  return JSON.stringify({
+    ECDISParameters: {
+      version: "10.9",
+      DynamicParameters: {
+        Parameter: [{ name: "ColorScheme", value: colorScheme }],
+      },
+    },
+  });
+}
+
 export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | null; ship: OwnShip; nightMode: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
+  const chartLayerRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
   const fittedRef = useRef(false);
@@ -46,11 +58,12 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         maxZoom: 15,
       }).setView(center, 10);
 
-      L.tileLayer.wms("/api/noaa-charts/wms", {
+      const chartLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
         layers: "1,2,3,4,5,6,7,12",
         format: "image/png",
         transparent: false,
         version: "1.3.0",
+        display_params: s52DisplayParams(nightMode ? 5 : 0),
         maxZoom: 15,
         keepBuffer: 6,
         updateWhenIdle: false,
@@ -58,6 +71,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         attribution: "NOAA Office of Coast Survey ENC Online",
       } as any).addTo(map);
 
+      chartLayerRef.current = chartLayer;
       mapRef.current = map;
       window.setTimeout(() => map.invalidateSize(), 50);
     }
@@ -67,6 +81,15 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const chartLayer = chartLayerRef.current;
+    if (!chartLayer) return;
+
+    chartLayer.setParams({
+      display_params: s52DisplayParams(nightMode ? 5 : 0),
+    });
+  }, [nightMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -154,25 +177,15 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
     return () => {
       mapRef.current?.remove();
       mapRef.current = null;
+      chartLayerRef.current = null;
     };
   }, []);
 
   return (
-    <>
-      <style jsx global>{`
-        .crew-noaa-map-night .leaflet-tile-pane img.leaflet-tile {
-          filter: brightness(0.14) contrast(1.28) saturate(0.45) !important;
-          transition: filter 160ms ease;
-        }
-        .crew-noaa-map-day .leaflet-tile-pane img.leaflet-tile {
-          filter: none !important;
-        }
-      `}</style>
-      <div
-        ref={containerRef}
-        className={`h-full min-h-[430px] w-full ${nightMode ? "crew-noaa-map-night bg-[#03070a]" : "crew-noaa-map-day bg-[#d9e4ea]"} lg:min-h-[720px]`}
-        aria-label="NOAA ENC crew chart"
-      />
-    </>
+    <div
+      ref={containerRef}
+      className={`h-full min-h-[430px] w-full ${nightMode ? "bg-[#03070a]" : "bg-[#d9e4ea]"} lg:min-h-[720px]`}
+      aria-label="NOAA ENC crew chart"
+    />
   );
 }
