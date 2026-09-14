@@ -12,21 +12,23 @@ type WavePoint = {
 };
 type WaveFrame = { validAt: string; points: WavePoint[] };
 
-const BASE = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_hawaii.json";
-const UA = "NavDash route weather preview (wardmaritimegroup.com)";
+type NoaaPoint = {
+  lat: number;
+  lon: number;
+  distanceNm: number;
+  waveHeightFt: number | null;
+  wavePeriodSec: number | null;
+};
+type NoaaFrame = { validAt: string; points: NoaaPoint[] };
 
-function to360(lon: number) {
-  const v = lon < 0 ? lon + 360 : lon;
-  return ((v % 360) + 360) % 360;
-}
-
-function num(v: unknown) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
-function mToFt(v: number | null) {
-  return v === null ? null : Number((v * 3.28084).toFixed(1));
+function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
+  const r = 3440.065;
+  const p1 = aLat * Math.PI / 180;
+  const p2 = bLat * Math.PI / 180;
+  const dp = (bLat - aLat) * Math.PI / 180;
+  const dl = (bLon - aLon) * Math.PI / 180;
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
 export async function POST(request: Request) {
@@ -50,116 +52,95 @@ export async function POST(request: Request) {
       .map((value: unknown) => new Date(String(value)))
       .filter((d: Date) => Number.isFinite(d.getTime()));
 
-    if (!points.length || !validTimes.length) {
+    if (points.length < 2 || !validTimes.length) {
       return NextResponse.json({ error: "Wave request requires route points and forecast valid times." }, { status: 400 });
     }
 
-    const minLat = Math.max(18.0, Math.min(...points.map((p) => p.lat)) - 0.25);
-    const maxLat = Math.min(23.0, Math.max(...points.map((p) => p.lat)) + 0.25);
-    const lons = points.map((p) => to360(p.lon));
-    const minLon = Math.max(199.0, Math.min(...lons) - 0.25);
-    const maxLon = Math.min(208.0, Math.max(...lons) + 0.25);
-
-    const start = new Date(Math.min(...validTimes.map((d) => d.getTime())));
-    const end = new Date(Math.max(...validTimes.map((d) => d.getTime())));
-    const t0 = start.toISOString().replace(".000Z", "Z");
-    const t1 = end.toISOString().replace(".000Z", "Z");
-
-    // PacIOOS Hawaii regional WW3 dimensions are time, depth, latitude, longitude.
-    const slice = `[(%s):(%e)][(0.0)][(${minLat.toFixed(2)}):(${maxLat.toFixed(2)})][(${minLon.toFixed(2)}):(${maxLon.toFixed(2)})]`;
-    const query = ["Thgt", "Tper", "Tdir"]
-      .map((name) => `${name}${slice.replace("%s", t0).replace("%e", t1)}`)
-      .join(",");
-    const url = `${BASE}?${encodeURI(query)}`;
-
-    const response = await fetch(url, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
+    // Route-weather already obtains official NWS/NDFD wave guidance. Do not overwrite
+    // those values with a separate broad-ocean model. Re-sample the same official
+    // NOAA route grid here so the existing merge path remains backward-compatible.
+    const origin = new URL(request.url).origin;
+    const noaaResponse = await fetch(`${origin}/api/noaa-route-weather`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        waypoints: points.map((point, index) => ({
+          lat: point.lat,
+          lon: point.lon,
+          name: `Route sample ${index + 1}`,
+        })),
+      }),
       cache: "no-store",
     });
 
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
+    const noaaJson = await noaaResponse.json();
+    if (!noaaResponse.ok || !Array.isArray(noaaJson?.frames)) {
       return NextResponse.json(
-        { error: `WaveWatch request failed (${response.status}).`, detail: text.slice(0, 240) },
-        { status: 502 },
+        { error: noaaJson?.error || "NOAA/NWS route wave sampling failed." },
+        { status: noaaResponse.ok ? 502 : noaaResponse.status },
       );
     }
 
-    const json = await response.json();
-    const columns: string[] = json?.table?.columnNames || [];
-    const rows: any[][] = json?.table?.rows || [];
-    const idx = {
-      time: columns.indexOf("time"),
-      lat: columns.indexOf("latitude"),
-      lon: columns.indexOf("longitude"),
-      h: columns.indexOf("Thgt"),
-      p: columns.indexOf("Tper"),
-      d: columns.indexOf("Tdir"),
-    };
-
-    if (idx.time < 0 || idx.lat < 0 || idx.lon < 0 || idx.h < 0) {
-      return NextResponse.json({ error: "WaveWatch response did not contain expected fields." }, { status: 502 });
-    }
-
-    const parsed = rows.map((row) => ({
-      time: new Date(row[idx.time]).getTime(),
-      lat: Number(row[idx.lat]),
-      lon: Number(row[idx.lon]),
-      h: num(row[idx.h]),
-      p: idx.p >= 0 ? num(row[idx.p]) : null,
-      d: idx.d >= 0 ? num(row[idx.d]) : null,
-    })).filter((row) =>
-      Number.isFinite(row.time) &&
-      Number.isFinite(row.lat) &&
-      Number.isFinite(row.lon)
-    );
-
+    const noaaFrames: NoaaFrame[] = noaaJson.frames;
     const frames: WaveFrame[] = validTimes.map((validAt) => {
       const targetTime = validAt.getTime();
-      const resultPoints = points.map((point): WavePoint => {
-        const targetLon = to360(point.lon);
-        let best: (typeof parsed)[number] | null = null;
-        let bestScore = Number.POSITIVE_INFINITY;
+      let frame = noaaFrames[0] || null;
+      let frameDelta = frame ? Math.abs(new Date(frame.validAt).getTime() - targetTime) : Number.POSITIVE_INFINITY;
 
-        for (const row of parsed) {
-          const dtHours = Math.abs(row.time - targetTime) / 3600000;
-          if (dtHours > 1.6) continue;
-          const dLat = row.lat - point.lat;
-          const dLon = row.lon - targetLon;
-          const spatial = dLat * dLat + dLon * dLon;
-          const score = spatial + dtHours * 0.02;
-          if (score < bestScore) {
-            best = row;
-            bestScore = score;
+      for (const candidate of noaaFrames) {
+        const delta = Math.abs(new Date(candidate.validAt).getTime() - targetTime);
+        if (delta < frameDelta) {
+          frame = candidate;
+          frameDelta = delta;
+        }
+      }
+
+      const resultPoints = points.map((point): WavePoint => {
+        let nearest: NoaaPoint | null = null;
+        let nearestNm = Number.POSITIVE_INFINITY;
+
+        for (const candidate of frame?.points || []) {
+          const distance = nmBetween(point.lat, point.lon, candidate.lat, candidate.lon);
+          if (distance < nearestNm) {
+            nearest = candidate;
+            nearestNm = distance;
           }
         }
 
+        // Never borrow a wave value from a distant marine grid point. Missing is safer
+        // than confidently displaying a sea state from somewhere else.
+        const usable = nearest && nearestNm <= 18 ? nearest : null;
         return {
           lat: point.lat,
           lon: point.lon,
           distanceNm: point.distanceNm,
-          waveHeightFt: mToFt(best?.h ?? null),
-          wavePeriodSec: best?.p === null || best?.p === undefined ? null : Number(best.p.toFixed(0)),
-          waveDirectionDeg: best?.d === null || best?.d === undefined ? null : Number(best.d.toFixed(0)),
-          source: "PacIOOS WaveWatch III Hawaii regional (~5 km; island-shadowing aware)",
+          waveHeightFt: usable?.waveHeightFt ?? null,
+          wavePeriodSec: usable?.wavePeriodSec ?? null,
+          waveDirectionDeg: null,
+          source: usable
+            ? `NOAA/NWS route marine grid (${nearestNm.toFixed(1)} nm source distance)`
+            : "NOAA/NWS route marine grid - no nearby wave value",
         };
       });
 
       return { validAt: validAt.toISOString(), points: resultPoints };
     });
 
-    const populated = frames.reduce((count, frame) => count + frame.points.filter((p) => p.waveHeightFt !== null).length, 0);
+    const populated = frames.reduce(
+      (count, frame) => count + frame.points.filter((point) => point.waveHeightFt !== null).length,
+      0,
+    );
 
     return NextResponse.json({
-      provider: "PacIOOS / NOAA IOOS",
-      product: "WaveWatch III Hawaii regional wave model (~5 km)",
+      provider: "NOAA / National Weather Service",
+      product: "NWS/NDFD route marine wave grid",
       generatedAt: new Date().toISOString(),
       populatedPointCount: populated,
       frames,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "WaveWatch route sampling failed." },
+      { error: error instanceof Error ? error.message : "NOAA/NWS route wave sampling failed." },
       { status: 500 },
     );
   }
