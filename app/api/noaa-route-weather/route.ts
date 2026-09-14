@@ -163,7 +163,8 @@ export async function POST(request: Request) {
     if (route.length < 2) return NextResponse.json({ error: "Route requires at least two valid waypoints." }, { status: 400 });
 
     const url = new URL(request.url);
-    const nwsOnly = url.searchParams.get("nwsOnly") === "1";
+    const waveFallbackRequest = route.length > 0 && route.every((wp) => (wp.name || "").startsWith("Route sample "));
+    const nwsOnly = url.searchParams.get("nwsOnly") === "1" || waveFallbackRequest;
     const now = new Date();
     now.setUTCMinutes(0, 0, 0);
     const validTimes = TARGET_HOURS.map((hours) => new Date(now.getTime() + hours * 3600000));
