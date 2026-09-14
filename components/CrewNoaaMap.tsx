@@ -69,19 +69,6 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    const tilePane = map.getPane?.("tilePane") as HTMLElement | undefined;
-    if (!tilePane) return;
-
-    tilePane.style.filter = nightMode
-      ? "brightness(0.18) contrast(1.18) saturate(0.55)"
-      : "none";
-    tilePane.style.transition = "filter 160ms ease";
-  }, [nightMode]);
-
-  useEffect(() => {
     let cancelled = false;
 
     async function redraw() {
@@ -170,5 +157,22 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
     };
   }, []);
 
-  return <div ref={containerRef} className={`h-full min-h-[430px] w-full ${nightMode ? "bg-[#05090d]" : "bg-[#d9e4ea]"} lg:min-h-[720px]`} aria-label="NOAA ENC crew chart" />;
+  return (
+    <>
+      <style jsx global>{`
+        .crew-noaa-map-night .leaflet-tile-pane img.leaflet-tile {
+          filter: brightness(0.14) contrast(1.28) saturate(0.45) !important;
+          transition: filter 160ms ease;
+        }
+        .crew-noaa-map-day .leaflet-tile-pane img.leaflet-tile {
+          filter: none !important;
+        }
+      `}</style>
+      <div
+        ref={containerRef}
+        className={`h-full min-h-[430px] w-full ${nightMode ? "crew-noaa-map-night bg-[#03070a]" : "crew-noaa-map-day bg-[#d9e4ea]"} lg:min-h-[720px]`}
+        aria-label="NOAA ENC crew chart"
+      />
+    </>
+  );
 }
