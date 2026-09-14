@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import FullWidthRouteProfile from "./FullWidthRouteProfile";
 import WeatherChartLayer from "./WeatherChartLayer";
 import WeatherMainButtonFix from "./WeatherMainButtonFix";
 
@@ -7,6 +6,14 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
   return (
     <>
       <style>{`
+        /* Hide the voyage profile. Route-leg hover on the map remains the weather detail view. */
+        main svg[viewBox="0 0 1000 160"] {
+          display: none !important;
+        }
+        main div:has(> svg[viewBox="0 0 1000 160"]) {
+          display: none !important;
+        }
+
         /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
           grid-template-columns: minmax(0, 1fr) !important;
@@ -32,7 +39,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
         }
       `}</style>
       <WeatherChartLayer />
-      <FullWidthRouteProfile />
       <WeatherMainButtonFix />
       {children}
     </>
