@@ -9,6 +9,19 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
       <style>{`
         #route-weather-lab-map + * {}
 
+        /* Use the full weather workspace on wide screens so the voyage/profile chart is not squeezed by the side rail. */
+        @media (min-width: 1280px) {
+          main > div.mb-2.grid {
+            grid-template-columns: minmax(0, 1fr) !important;
+          }
+          main > div.mb-2.grid > aside {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: .5rem;
+            align-items: start;
+          }
+        }
+
         /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
           grid-template-columns: minmax(0, 1fr) !important;
