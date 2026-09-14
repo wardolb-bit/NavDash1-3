@@ -114,7 +114,7 @@
     const height = number(point?.waveHeightFt);
     const period = number(point?.wavePeriodSec);
     const dir = compass(point?.waveDirectionDeg);
-    if (height === null || height <= 0) return "Seas --";
+    if (height === null || height <= 0) return period !== null && period > 0 ? `Seas -- @ ${period.toFixed(0)} s${dir ? ` ${dir}` : ""}` : "Seas --";
     return `Seas ${height.toFixed(1)} ft${period !== null && period > 0 ? ` @ ${period.toFixed(0)} s` : ""}${dir ? ` ${dir}` : ""}`;
   }
 
@@ -173,17 +173,21 @@
       return sampleWind > bestWind ? sample : best;
     }, samples[0]);
     const maxSeas = samples.reduce((best, sample) => (number(sample.point?.waveHeightFt) ?? 0) > (number(best.point?.waveHeightFt) ?? 0) ? sample : best, samples[0]);
+    const longestPeriod = samples.reduce((best, sample) => (number(sample.point?.wavePeriodSec) ?? 0) > (number(best.point?.wavePeriodSec) ?? 0) ? sample : best, samples[0]);
 
     const card = ensureCard();
     if (!card) return;
     card.dataset.currentWeather = "1";
-    const source = weather.waveOverlay ? "WX.WARDLAB.DEV · NOAA + GFS WAVE" : "WX.WARDLAB.DEV · NOAA/NWS";
+    const source = weather.waveOverlay ? "WX.WARDLAB.DEV · GFS ATMOS + GFS WAVE GRIB" : "WX.WARDLAB.DEV · NOAA/NWS";
     const lines = [
       `Departure · ${windText(departure.point)} · ${seaText(departure.point)}`,
       `Arrival · ${windText(arrival.point)} · ${seaText(arrival.point)}`,
       `Max wind · ${windText(maxWind.point)} · ${maxWind.distanceNm.toFixed(0)} NM along route · ${timeText(maxWind.eta, route)}`,
       `Max seas · ${seaText(maxSeas.point)} · ${maxSeas.distanceNm.toFixed(0)} NM along route · ${timeText(maxSeas.eta, route)}`,
-    ];
+      number(longestPeriod.point?.wavePeriodSec) !== null && number(longestPeriod.point?.wavePeriodSec) > 0
+        ? `Longest wave period · ${seaText(longestPeriod.point)} · ${longestPeriod.distanceNm.toFixed(0)} NM along route · ${timeText(longestPeriod.eta, route)}`
+        : null,
+    ].filter(Boolean);
 
     card.innerHTML = `
       <div class="flex flex-wrap items-baseline justify-between gap-2">
