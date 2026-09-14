@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 
 export type BridgeTheme = "bridge-night" | "day";
 
@@ -29,7 +29,7 @@ export function useBridgeTheme() {
   const [theme, setTheme] = useState<BridgeTheme>("bridge-night");
   const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const storedTheme = readStoredTheme();
     setTheme(storedTheme);
     publishTheme(storedTheme);
