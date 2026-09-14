@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import RouteProfileEnhancer from "./RouteProfileEnhancer";
+import RouteProfileDistanceUnitFix from "./RouteProfileDistanceUnitFix";
 import WeatherChartLayer from "./WeatherChartLayer";
 import WeatherMainButtonFix from "./WeatherMainButtonFix";
 
@@ -185,6 +186,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
       `}</style>
       <WeatherChartLayer />
       <RouteProfileEnhancer />
+      <RouteProfileDistanceUnitFix />
       <WeatherMainButtonFix />
       {children}
     </>
