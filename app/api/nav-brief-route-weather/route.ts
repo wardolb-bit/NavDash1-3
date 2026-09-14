@@ -21,8 +21,6 @@ type WaveResponse = { frames?: Array<{ validAt: string; points: ForecastPoint[] 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const WX_ORIGIN = "https://wx.wardlab.dev";
-
 function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherResponse {
   if (!base.frames?.length || !wave?.frames?.length) return base;
 
@@ -83,7 +81,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "Route unavailable" }, { status: 400 });
     }
 
-    const windResponse = await fetch(`${WX_ORIGIN}/api/noaa-route-weather`, {
+    const origin = new URL(request.url).origin;
+    const windResponse = await fetch(`${origin}/api/noaa-route-weather`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
@@ -91,7 +90,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!windResponse.ok) {
-      return NextResponse.json({ ok: false, error: `WardLab route weather returned ${windResponse.status}` }, { status: 502 });
+      return NextResponse.json({ ok: false, error: `NavDash route weather returned ${windResponse.status}` }, { status: 502 });
     }
 
     const windJson = (await windResponse.json()) as WeatherResponse;
@@ -102,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     if (basePoints.length && validTimes.length) {
       try {
-        const waveResponse = await fetch(`${WX_ORIGIN}/api/gfs-wave-route`, {
+        const waveResponse = await fetch(`${origin}/api/gfs-wave-route`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           cache: "no-store",
@@ -117,14 +116,14 @@ export async function POST(request: NextRequest) {
           waveOverlay = true;
         }
       } catch {
-        // Keep current WardLab NOAA/NWS route weather if wave guidance is unavailable.
+        // Keep current NOAA/NWS route weather if wave guidance is unavailable.
       }
     }
 
     return NextResponse.json({
       ok: true,
-      source: "wx.wardlab.dev",
-      product: merged.product || windJson.product || "WardLab route weather",
+      source: "NavDash production weather",
+      product: merged.product || windJson.product || "NavDash route weather",
       provider: merged.provider || windJson.provider || "NOAA / NWS",
       waveOverlay,
       frames: merged.frames || [],
