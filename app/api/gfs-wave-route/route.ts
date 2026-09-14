@@ -1,4 +1,14 @@
 import { NextResponse } from "next/server";
+import {
+  decodeFieldValues,
+  nearestGridpoint,
+  parseFields,
+  parseGrid,
+  splitMessages,
+} from "@azohra/meteo.grib";
+
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type Point = { lat: number; lon: number; distanceNm: number };
 type WavePoint = {
@@ -21,14 +31,12 @@ type NoaaPoint = {
 };
 type NoaaFrame = { validAt: string; points: NoaaPoint[] };
 
-type ErddapRow = {
-  time: Date;
-  waveHeightFt: number | null;
-  wavePeriodSec: number | null;
-  waveDirectionDeg: number | null;
-};
+type ModelRun = { date: string; cycle: string; cycleTime: Date };
+type Bounds = { left: number; right: number; top: number; bottom: number };
 
-const ERDDAP_BASE = "https://erddap.aoml.noaa.gov/hdb/erddap/griddap";
+const NOMADS = "https://nomads.ncep.noaa.gov";
+const USER_AGENT = "NavDash GFS Wave GRIB route sampler (wardmaritimegroup.com)";
+const M_TO_FT = 3.28084;
 
 function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   const r = 3440.065;
@@ -40,74 +48,168 @@ function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function to360(lon: number) {
-  const value = lon % 360;
-  return value < 0 ? value + 360 : value;
-}
-
 function rounded(value: number | null, digits = 1) {
   return value === null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 }
 
-function parseErddapJson(json: any): ErddapRow[] {
-  const table = json?.table;
-  const columns: string[] = Array.isArray(table?.columnNames) ? table.columnNames : [];
-  const rows: any[][] = Array.isArray(table?.rows) ? table.rows : [];
-  const timeIndex = columns.indexOf("time");
-  const hIndex = columns.indexOf("Thgt");
-  const pIndex = columns.indexOf("Tper");
-  const dIndex = columns.indexOf("Tdir");
-  if (timeIndex < 0 || hIndex < 0) return [];
-
-  return rows.map((row) => {
-    const time = new Date(String(row[timeIndex]));
-    const h = Number(row[hIndex]);
-    const p = pIndex >= 0 ? Number(row[pIndex]) : NaN;
-    const d = dIndex >= 0 ? Number(row[dIndex]) : NaN;
-    return {
-      time,
-      waveHeightFt: Number.isFinite(h) ? h * 3.28084 : null,
-      wavePeriodSec: Number.isFinite(p) ? p : null,
-      waveDirectionDeg: Number.isFinite(d) ? d : null,
-    };
-  }).filter((row) => Number.isFinite(row.time.getTime()));
+function ymd(date: Date) {
+  return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
 }
 
-async function fetchGlobalWw3AtPoint(point: Point, validTimes: Date[]) {
-  if (!validTimes.length) return [] as ErddapRow[];
-  const datasetYear = validTimes[0].getUTCFullYear();
-  const dataset = `WaveWatch_${datasetYear}`;
-  const start = validTimes[0].toISOString();
-  const end = validTimes[validTimes.length - 1].toISOString();
-  const lon = to360(point.lon);
-  const axis = `[(${start}):1:(${end})][(${point.lat.toFixed(4)})][(${lon.toFixed(4)})]`;
-  const query = `Thgt${axis},Tper${axis},Tdir${axis}`;
-  const url = `${ERDDAP_BASE}/${dataset}.json?${query}`;
-
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "NavDash route wave coverage" },
-      cache: "no-store",
+function candidateRuns(now = new Date()) {
+  const anchor = new Date(now);
+  anchor.setUTCMinutes(0, 0, 0);
+  const hour = anchor.getUTCHours();
+  anchor.setUTCHours(Math.floor(hour / 6) * 6);
+  const runs: ModelRun[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const cycleTime = new Date(anchor.getTime() - i * 6 * 3600000);
+    runs.push({
+      date: ymd(cycleTime),
+      cycle: String(cycleTime.getUTCHours()).padStart(2, "0"),
+      cycleTime,
     });
-    if (!response.ok) return [];
-    return parseErddapJson(await response.json());
-  } catch {
-    return [];
   }
+  return runs;
 }
 
-function nearestErddap(rows: ErddapRow[], target: Date) {
-  let best: ErddapRow | null = null;
+function gribFileName(run: ModelRun, forecastHour: number) {
+  return `gfswave.t${run.cycle}z.global.0p25.f${String(forecastHour).padStart(3, "0")}.grib2`;
+}
+
+function gribDirectory(run: ModelRun) {
+  return `/gfs.${run.date}/${run.cycle}/wave/gridded`;
+}
+
+function directGribUrl(run: ModelRun, forecastHour: number) {
+  return `${NOMADS}/pub/data/nccf/com/gfs/prod${gribDirectory(run)}/${gribFileName(run, forecastHour)}`;
+}
+
+async function latestModelRun() {
+  for (const run of candidateRuns()) {
+    try {
+      const response = await fetch(`${directGribUrl(run, 0)}.idx`, {
+        headers: { "User-Agent": USER_AGENT, Accept: "text/plain" },
+        cache: "no-store",
+      });
+      if (!response.ok) continue;
+      const text = await response.text();
+      if (text.includes(":HTSGW:")) return run;
+    } catch {
+      // Try the previous cycle.
+    }
+  }
+  throw new Error("No current NOAA GFS Wave model cycle is available from NOMADS.");
+}
+
+function routeBounds(points: Point[]): Bounds {
+  const margin = 1.5;
+  const lats = points.map((point) => point.lat);
+  const signedLons = points.map((point) => point.lon);
+  const lon360 = signedLons.map((lon) => ((lon % 360) + 360) % 360);
+  const signedSpan = Math.max(...signedLons) - Math.min(...signedLons);
+  const span360 = Math.max(...lon360) - Math.min(...lon360);
+  const use360 = span360 < signedSpan;
+  const chosen = use360 ? lon360 : signedLons;
+
+  let left = Math.min(...chosen) - margin;
+  let right = Math.max(...chosen) + margin;
+  if (use360) {
+    left = Math.max(0, left);
+    right = Math.min(360, right);
+  } else {
+    left = Math.max(-180, left);
+    right = Math.min(180, right);
+  }
+
+  return {
+    left,
+    right,
+    top: Math.min(90, Math.max(...lats) + margin),
+    bottom: Math.max(-90, Math.min(...lats) - margin),
+  };
+}
+
+function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds) {
+  const params = new URLSearchParams();
+  params.set("file", gribFileName(run, forecastHour));
+  params.set("var_HTSGW", "on");
+  params.set("lev_surface", "on");
+  params.set("subregion", "");
+  params.set("leftlon", String(bounds.left));
+  params.set("rightlon", String(bounds.right));
+  params.set("toplat", String(bounds.top));
+  params.set("bottomlat", String(bounds.bottom));
+  params.set("dir", gribDirectory(run));
+  return `${NOMADS}/cgi-bin/filter_gfswave.pl?${params.toString()}`;
+}
+
+async function fetchHeightField(run: ModelRun, forecastHour: number, bounds: Bounds) {
+  const url = filterUrl(run, forecastHour, bounds);
+  const response = await fetch(url, {
+    headers: { "User-Agent": USER_AGENT, Accept: "application/octet-stream" },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`NOMADS GRIB download failed (${response.status}) for f${String(forecastHour).padStart(3, "0")}.`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.length < 16 || String.fromCharCode(...bytes.slice(0, 4)) !== "GRIB") {
+    throw new Error(`NOMADS returned a non-GRIB response for f${String(forecastHour).padStart(3, "0")}.`);
+  }
+  const messages = splitMessages(bytes);
+  if (!messages.length) throw new Error("Downloaded GRIB2 contained no messages.");
+  const fields = parseFields(messages[0]);
+  if (!fields.length) throw new Error("Downloaded GRIB2 contained no decodable fields.");
+  const field = fields[0];
+  const grid = parseGrid(field.section3);
+  const { values } = decodeFieldValues(field);
+  return { grid, values };
+}
+
+function sampleHeightMeters(
+  grid: ReturnType<typeof parseGrid>,
+  values: Float64Array | number[],
+  point: Point,
+) {
+  const offsets = [
+    [0, 0],
+    [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25],
+    [0.25, 0.25], [0.25, -0.25], [-0.25, 0.25], [-0.25, -0.25],
+    [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5],
+  ];
+
+  let best: { value: number; distanceNm: number } | null = null;
+  for (const [dLat, dLon] of offsets) {
+    const sample = nearestGridpoint(grid, point.lat + dLat, point.lon + dLon);
+    const value = Number(values[sample.index]);
+    if (!Number.isFinite(value) || value < 0) continue;
+    const distanceNm = nmBetween(point.lat, point.lon, sample.latitude, sample.longitude);
+    if (distanceNm > 35) continue;
+    if (!best || distanceNm < best.distanceNm) best = { value, distanceNm };
+  }
+  return best;
+}
+
+function nearestNoaaFrame(frames: NoaaFrame[], validAt: Date) {
+  let best: NoaaFrame | null = null;
   let bestDelta = Number.POSITIVE_INFINITY;
-  for (const row of rows) {
-    if (row.waveHeightFt === null) continue;
-    const delta = Math.abs(row.time.getTime() - target.getTime());
+  for (const frame of frames) {
+    const delta = Math.abs(new Date(frame.validAt).getTime() - validAt.getTime());
     if (delta < bestDelta) {
-      best = row;
+      best = frame;
       bestDelta = delta;
     }
   }
-  return bestDelta <= 2 * 3600000 ? best : null;
+  return best;
+}
+
+function nearestNoaaPoint(frame: NoaaFrame | null, point: Point) {
+  let best: { point: NoaaPoint; distanceNm: number } | null = null;
+  for (const candidate of frame?.points || []) {
+    if (candidate.waveHeightFt === null && candidate.wavePeriodSec === null) continue;
+    const distanceNm = nmBetween(point.lat, point.lon, candidate.lat, candidate.lon);
+    if (distanceNm <= 18 && (!best || distanceNm < best.distanceNm)) best = { point: candidate, distanceNm };
+  }
+  return best;
 }
 
 export async function POST(request: Request) {
@@ -129,80 +231,74 @@ export async function POST(request: Request) {
 
     const validTimes = (Array.isArray(body?.validTimes) ? body.validTimes : [])
       .map((value: unknown) => new Date(String(value)))
-      .filter((d: Date) => Number.isFinite(d.getTime()));
+      .filter((date: Date) => Number.isFinite(date.getTime()));
 
     if (points.length < 2 || !validTimes.length) {
       return NextResponse.json({ error: "Wave request requires route points and forecast valid times." }, { status: 400 });
     }
 
-    const origin = new URL(request.url).origin;
-    const noaaResponsePromise = fetch(`${origin}/api/noaa-route-weather`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        waypoints: points.map((point, index) => ({
-          lat: point.lat,
-          lon: point.lon,
-          name: `Route sample ${index + 1}`,
-        })),
+    const [run, noaaResponse] = await Promise.all([
+      latestModelRun(),
+      fetch(`${new URL(request.url).origin}/api/noaa-route-weather`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          waypoints: points.map((point, index) => ({ lat: point.lat, lon: point.lon, name: `Route sample ${index + 1}` })),
+        }),
+        cache: "no-store",
       }),
-      cache: "no-store",
-    });
+    ]);
 
-    const ww3ByPointPromise = Promise.all(points.map((point) => fetchGlobalWw3AtPoint(point, validTimes)));
-    const [noaaResponse, ww3ByPoint] = await Promise.all([noaaResponsePromise, ww3ByPointPromise]);
+    let noaaFrames: NoaaFrame[] = [];
+    try {
+      const noaaJson = await noaaResponse.json();
+      if (noaaResponse.ok && Array.isArray(noaaJson?.frames)) noaaFrames = noaaJson.frames;
+    } catch {
+      noaaFrames = [];
+    }
 
-    const noaaJson = await noaaResponse.json();
-    const noaaFrames: NoaaFrame[] = noaaResponse.ok && Array.isArray(noaaJson?.frames) ? noaaJson.frames : [];
+    const bounds = routeBounds(points);
+    const frames: WaveFrame[] = [];
+    let gribFailures = 0;
 
-    const frames: WaveFrame[] = validTimes.map((validAt) => {
-      const targetTime = validAt.getTime();
-      let frame = noaaFrames[0] || null;
-      let frameDelta = frame ? Math.abs(new Date(frame.validAt).getTime() - targetTime) : Number.POSITIVE_INFINITY;
-
-      for (const candidate of noaaFrames) {
-        const delta = Math.abs(new Date(candidate.validAt).getTime() - targetTime);
-        if (delta < frameDelta) {
-          frame = candidate;
-          frameDelta = delta;
-        }
+    for (const validAt of validTimes) {
+      const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
+      const forecastHour = Math.max(0, Math.min(120, rawHour));
+      let heightField: Awaited<ReturnType<typeof fetchHeightField>> | null = null;
+      try {
+        heightField = await fetchHeightField(run, forecastHour, bounds);
+      } catch {
+        gribFailures += 1;
       }
 
-      const resultPoints = points.map((point, pointIndex): WavePoint => {
-        let nearest: NoaaPoint | null = null;
-        let nearestNm = Number.POSITIVE_INFINITY;
+      const localFrame = nearestNoaaFrame(noaaFrames, validAt);
+      const resultPoints = points.map((point): WavePoint => {
+        const local = nearestNoaaPoint(localFrame, point);
+        const gribSample = heightField ? sampleHeightMeters(heightField.grid, heightField.values, point) : null;
 
-        for (const candidate of frame?.points || []) {
-          if (candidate.waveHeightFt === null) continue;
-          const distance = nmBetween(point.lat, point.lon, candidate.lat, candidate.lon);
-          if (distance < nearestNm) {
-            nearest = candidate;
-            nearestNm = distance;
-          }
-        }
-
-        if (nearest && nearestNm <= 18) {
+        if (gribSample) {
           return {
             lat: point.lat,
             lon: point.lon,
             distanceNm: point.distanceNm,
-            waveHeightFt: nearest.waveHeightFt,
-            wavePeriodSec: nearest.wavePeriodSec,
+            waveHeightFt: rounded(gribSample.value * M_TO_FT, 1),
+            wavePeriodSec: rounded(local?.point.wavePeriodSec ?? null, 0),
             waveDirectionDeg: null,
-            source: `NOAA/NWS route marine grid (${nearestNm.toFixed(1)} nm source distance)`,
+            source: gribSample.distanceNm <= 1
+              ? `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} exact-grid sample`
+              : `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} nearest-water sample (${gribSample.distanceNm.toFixed(1)} nm)`,
           };
         }
 
-        const ww3 = nearestErddap(ww3ByPoint[pointIndex] || [], validAt);
-        if (ww3) {
+        if (local?.point.waveHeightFt !== null && local?.point.waveHeightFt !== undefined) {
           return {
             lat: point.lat,
             lon: point.lon,
             distanceNm: point.distanceNm,
-            waveHeightFt: rounded(ww3.waveHeightFt, 1),
-            wavePeriodSec: rounded(ww3.wavePeriodSec, 0),
-            waveDirectionDeg: rounded(ww3.waveDirectionDeg, 0),
-            source: "NOAA ERDDAP / PacIOOS global WaveWatch III",
+            waveHeightFt: local.point.waveHeightFt,
+            wavePeriodSec: local.point.wavePeriodSec,
+            waveDirectionDeg: null,
+            source: `NOAA/NWS marine grid fallback (${local.distanceNm.toFixed(1)} nm source distance)`,
           };
         }
 
@@ -211,25 +307,25 @@ export async function POST(request: Request) {
           lon: point.lon,
           distanceNm: point.distanceNm,
           waveHeightFt: null,
-          wavePeriodSec: null,
+          wavePeriodSec: local?.point.wavePeriodSec ?? null,
           waveDirectionDeg: null,
-          source: "No NOAA/NWS or NOAA-hosted WW3 wave value available",
+          source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
         };
       });
 
-      return { validAt: validAt.toISOString(), points: resultPoints };
-    });
+      frames.push({ validAt: validAt.toISOString(), points: resultPoints });
+    }
 
-    const populated = frames.reduce(
-      (count, frame) => count + frame.points.filter((point) => point.waveHeightFt !== null).length,
-      0,
-    );
+    const populated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.waveHeightFt !== null).length, 0);
     const total = frames.reduce((count, frame) => count + frame.points.length, 0);
 
     return NextResponse.json({
-      provider: "NOAA / NWS + NOAA ERDDAP",
-      product: "NWS marine grids with global WaveWatch III fallback",
+      provider: "NOAA / NCEP GFS Wave GRIB2",
+      product: "GFS Wave 0.25° significant wave height with NWS marine-grid fallback",
       generatedAt: new Date().toISOString(),
+      modelRun: run.cycleTime.toISOString(),
+      modelCycle: `${run.date} ${run.cycle}Z`,
+      gribFailures,
       populatedPointCount: populated,
       totalPointCount: total,
       coveragePercent: total ? Math.round((populated / total) * 100) : 0,
@@ -237,7 +333,7 @@ export async function POST(request: Request) {
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Route wave sampling failed." },
+      { error: error instanceof Error ? error.message : "NOAA GFS Wave GRIB route sampling failed." },
       { status: 500 },
     );
   }
