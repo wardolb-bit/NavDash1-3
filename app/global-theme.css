@@ -47,6 +47,11 @@ html[data-navdash-theme="day"] main [class*="bg-black/"],
 html[data-navdash-theme="day"] main [class*="bg-[#071019]"],
 html[data-navdash-theme="day"] main [class*="bg-[#08111a]"],
 html[data-navdash-theme="day"] main [class*="bg-[#05090e]"],
+html[data-navdash-theme="day"] main [class*="bg-[#050a0f]"],
+html[data-navdash-theme="day"] main [class*="bg-[#08131b]"],
+html[data-navdash-theme="day"] main [class*="bg-[#08130f]"],
+html[data-navdash-theme="day"] main [class*="bg-[#101820]"],
+html[data-navdash-theme="day"] main [class*="bg-[#17130a]"],
 html[data-navdash-theme="day"] main [class*="bg-white/[0."] {
   background: var(--nd-panel) !important;
   background-color: var(--nd-panel) !important;
@@ -101,6 +106,38 @@ html[data-navdash-theme="day"] main textarea {
 html[data-navdash-theme="day"] main input::placeholder,
 html[data-navdash-theme="day"] main textarea::placeholder {
   color: #71808c !important;
+}
+
+/* Route Weather ops/status strip is generated with inline night colors. Override only in Day mode. */
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] > div,
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] div[style*="background:#050a0f"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] div[style*="background: #050a0f"] {
+  background: var(--nd-panel) !important;
+  background-color: var(--nd-panel) !important;
+  color: var(--nd-text) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] button {
+  background: var(--nd-control-bg) !important;
+  background-color: var(--nd-control-bg) !important;
+  color: var(--nd-control-text) !important;
+  border-color: var(--nd-border) !important;
+}
+
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:#e2e8f0"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: #e2e8f0"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:#cbd5e1"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: #cbd5e1"] {
+  color: var(--nd-text) !important;
+}
+
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:#64748b"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: #64748b"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:#475569"],
+html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: #475569"] {
+  color: var(--nd-muted) !important;
 }
 
 html[data-navdash-theme="day"] .leaflet-container,
