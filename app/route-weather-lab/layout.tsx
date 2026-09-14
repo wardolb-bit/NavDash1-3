@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import FullWidthRouteProfile from "./FullWidthRouteProfile";
 import RouteProfileEnhancer from "./RouteProfileEnhancer";
 import WeatherChartLayer from "./WeatherChartLayer";
 import WeatherMainButtonFix from "./WeatherMainButtonFix";
@@ -8,23 +9,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
     <>
       <style>{`
         #route-weather-lab-map + * {}
-
-        /* Keep the normal map + right-hand voyage information layout intact. */
-        @media (min-width: 1280px) {
-          main > div.mb-2.grid:has(section > div > svg[viewBox="0 0 1000 160"]) {
-            position: relative;
-            padding-bottom: 224px;
-          }
-          main > div.mb-2.grid > section > div:has(> svg[viewBox="0 0 1000 160"]) {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            width: 100%;
-            margin-top: 0 !important;
-            box-sizing: border-box;
-          }
-        }
 
         /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
@@ -202,6 +186,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
       `}</style>
       <WeatherChartLayer />
       <RouteProfileEnhancer />
+      <FullWidthRouteProfile />
       <WeatherMainButtonFix />
       {children}
     </>
