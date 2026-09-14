@@ -6,6 +6,7 @@ function requestDetails(input: RequestInfo | URL, init?: RequestInit) {
   const request = input instanceof Request ? input : null;
   const url = new URL(request ? request.url : String(input), window.location.href);
   return {
+    url,
     path: url.pathname,
     method: String(init?.method || request?.method || "GET").toUpperCase(),
   };
@@ -16,7 +17,7 @@ export default function CrewRouteWeatherBridge() {
     const nativeFetch = window.fetch.bind(window);
 
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-      const { path, method } = requestDetails(input, init);
+      const { url, path, method } = requestDetails(input, init);
       if (path !== "/api/wx" || method !== "GET") return nativeFetch(input, init);
 
       try {
@@ -27,6 +28,9 @@ export default function CrewRouteWeatherBridge() {
           return nativeFetch(input, init);
         }
 
+        const shipLat = Number(url.searchParams.get("lat"));
+        const shipLon = Number(url.searchParams.get("lon"));
+
         const weatherResponse = await nativeFetch("/api/crew-route-weather", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -34,6 +38,8 @@ export default function CrewRouteWeatherBridge() {
           body: JSON.stringify({
             waypoints: route.waypoints,
             activeWaypointIndex: route.activeWaypointIndex,
+            shipLat: Number.isFinite(shipLat) ? shipLat : null,
+            shipLon: Number.isFinite(shipLon) ? shipLon : null,
           }),
         });
 
