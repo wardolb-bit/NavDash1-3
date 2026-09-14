@@ -12,15 +12,32 @@ type ForecastPoint = {
   gustKt: number | null;
   waveHeightFt: number | null;
   wavePeriodSec: number | null;
+  airTempF?: number | null;
+  relativeHumidityPct?: number | null;
+  pressureHpa?: number | null;
+  precipMm?: number | null;
+  cloudCoverPct?: number | null;
   source: string;
 };
-
-type MarkerFrame = {
-  validAt: string;
-  points: ForecastPoint[];
+type MarkerFrame = { validAt: string; points: ForecastPoint[] };
+type AtmosPoint = SamplePoint & {
+  windKt: number | null;
+  windDirectionDeg: number | null;
+  gustKt: number | null;
+  airTempF: number | null;
+  relativeHumidityPct: number | null;
+  pressureHpa: number | null;
+  precipMm: number | null;
+  cloudCoverPct: number | null;
+  source: string;
 };
-
-type NdfdSeries = { times: Date[]; values: Array<number | null> };
+type AtmosResponse = {
+  frames?: Array<{ validAt: string; points: AtmosPoint[] }>;
+  product?: string;
+  provider?: string;
+  modelRun?: string;
+  coveragePercent?: number;
+};
 
 const UA = "NavDash NOAA route weather (wardmaritimegroup.com)";
 const TARGET_HOURS = [0, 3, 6, 9, 12, 18, 24];
@@ -93,7 +110,7 @@ async function fetchJson(url: string) {
   return response.json();
 }
 
-async function samplePointForecast(point: SamplePoint, validTimes: Date[]) {
+async function sampleNwsPoint(point: SamplePoint, validTimes: Date[]) {
   try {
     const meta = await fetchJson(`https://api.weather.gov/points/${point.lat.toFixed(4)},${point.lon.toFixed(4)}`);
     const gridUrl = meta?.properties?.forecastGridData;
@@ -117,138 +134,24 @@ async function samplePointForecast(point: SamplePoint, validTimes: Date[]) {
   }
 }
 
-function xmlDecode(value: string) {
-  return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
-}
-
-function attr(tag: string, name: string) {
-  const match = new RegExp(`${name}=["']([^"']+)["']`, "i").exec(tag);
-  return match ? xmlDecode(match[1]) : "";
-}
-
-function valuesFromXml(block: string) {
-  const values: Array<number | null> = [];
-  const re = /<value\b[^>]*\/>|<value\b[^>]*>([\s\S]*?)<\/value>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(block))) {
-    const raw = typeof match[1] === "string" ? match[1].replace(/<[^>]+>/g, "").trim() : "";
-    const value = Number(raw);
-    values.push(raw !== "" && Number.isFinite(value) ? value : null);
-  }
-  return values;
-}
-
-function parseTimeLayouts(xml: string) {
-  const layouts = new Map<string, Date[]>();
-  const re = /<time-layout\b[^>]*>([\s\S]*?)<\/time-layout>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(xml))) {
-    const block = match[1];
-    const key = /<layout-key\b[^>]*>([\s\S]*?)<\/layout-key>/i.exec(block)?.[1]?.trim();
-    if (!key) continue;
-    const times: Date[] = [];
-    const timeRe = /<start-valid-time\b[^>]*>([\s\S]*?)<\/start-valid-time>/gi;
-    let timeMatch: RegExpExecArray | null;
-    while ((timeMatch = timeRe.exec(block))) {
-      const time = new Date(timeMatch[1].trim());
-      if (Number.isFinite(time.getTime())) times.push(time);
+function nearestAtmosFrame(frames: NonNullable<AtmosResponse["frames"]>, validAt: Date) {
+  let best = frames[0];
+  let bestDelta = Math.abs(new Date(best.validAt).getTime() - validAt.getTime());
+  for (const candidate of frames) {
+    const delta = Math.abs(new Date(candidate.validAt).getTime() - validAt.getTime());
+    if (delta < bestDelta) {
+      best = candidate;
+      bestDelta = delta;
     }
-    layouts.set(key, times);
   }
-  return layouts;
+  return best;
 }
 
-function extractSeries(parameters: string, layouts: Map<string, Date[]>, tagName: string, type?: string): NdfdSeries | null {
-  const re = new RegExp(`<${tagName}\\b([^>]*)>([\\s\\S]*?)<\\/${tagName}>`, "gi");
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(parameters))) {
-    const opening = `<${tagName}${match[1]}>`;
-    if (type && attr(opening, "type").toLowerCase() !== type.toLowerCase()) continue;
-    const layoutKey = attr(opening, "time-layout");
-    const times = layouts.get(layoutKey) || [];
-    const values = valuesFromXml(match[2]);
-    if (times.length && values.length) return { times, values };
-  }
-  return null;
-}
-
-function nearestSeriesValue(series: NdfdSeries | null, target: Date) {
-  if (!series) return null;
-  let best: number | null = null;
-  let bestDelta = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < series.times.length; i += 1) {
-    const value = series.values[i];
-    if (value === null || value === undefined) continue;
-    const delta = Math.abs(series.times[i].getTime() - target.getTime());
-    if (delta < bestDelta) { best = value; bestDelta = delta; }
-  }
-  return bestDelta <= 7 * 3600000 ? best : null;
-}
-
-async function sampleOceanicNdfd(points: SamplePoint[], validTimes: Date[]) {
-  if (!points.length) return [] as Array<ForecastPoint[] | null>;
-  try {
-    const params = new URLSearchParams();
-    params.set("listLatLon", points.map((point) => `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`).join(" "));
-    params.set("product", "time-series");
-    params.set("begin", validTimes[0].toISOString());
-    params.set("end", validTimes[validTimes.length - 1].toISOString());
-    params.set("Unit", "e");
-    params.set("wspd", "wspd");
-    params.set("wdir", "wdir");
-    params.set("wgust", "wgust");
-    params.set("waveh", "waveh");
-    params.set("XMLformat", "DWML");
-
-    const response = await fetch(`https://digital.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?${params.toString()}`, {
-      headers: { "User-Agent": UA, Accept: "application/xml,text/xml" },
-      cache: "no-store",
-    });
-    if (!response.ok) return points.map(() => null);
-    const xml = await response.text();
-    if (!/<dwml\b/i.test(xml)) return points.map(() => null);
-
-    const layouts = parseTimeLayouts(xml);
-    const blocks = new Map<string, string>();
-    const paramRe = /<parameters\b([^>]*)>([\s\S]*?)<\/parameters>/gi;
-    let paramMatch: RegExpExecArray | null;
-    while ((paramMatch = paramRe.exec(xml))) {
-      const opening = `<parameters${paramMatch[1]}>`;
-      const locationKey = attr(opening, "applicable-location");
-      if (locationKey) blocks.set(locationKey, paramMatch[2]);
-    }
-
-    const locationKeys: string[] = [];
-    const locationRe = /<location\b[^>]*>([\s\S]*?)<\/location>/gi;
-    let locationMatch: RegExpExecArray | null;
-    while ((locationMatch = locationRe.exec(xml))) {
-      const key = /<location-key\b[^>]*>([\s\S]*?)<\/location-key>/i.exec(locationMatch[1])?.[1]?.trim();
-      if (key) locationKeys.push(key);
-    }
-
-    return points.map((point, index) => {
-      const block = blocks.get(locationKeys[index]) || Array.from(blocks.values())[index];
-      if (!block) return null;
-      const wind = extractSeries(block, layouts, "wind-speed", "sustained");
-      const gust = extractSeries(block, layouts, "wind-speed", "gust");
-      const direction = extractSeries(block, layouts, "direction", "wind");
-      const wave = extractSeries(block, layouts, "wave-height");
-      const rows = validTimes.map((validAt): ForecastPoint => ({
-        lat: point.lat,
-        lon: point.lon,
-        distanceNm: point.distanceNm,
-        windKt: rounded(nearestSeriesValue(wind, validAt)),
-        windDirectionDeg: rounded(nearestSeriesValue(direction, validAt)),
-        gustKt: rounded(nearestSeriesValue(gust, validAt)),
-        waveHeightFt: rounded(nearestSeriesValue(wave, validAt), 1),
-        wavePeriodSec: null,
-        source: "NDFD Oceanic",
-      }));
-      return rows.some((row) => row.windKt !== null || row.gustKt !== null || row.waveHeightFt !== null) ? rows : null;
-    });
-  } catch {
-    return points.map(() => null);
-  }
+function nearestAtmosPoint(points: AtmosPoint[], sample: SamplePoint) {
+  return points.reduce<AtmosPoint | null>((best, candidate) => {
+    if (!best) return candidate;
+    return Math.abs(candidate.distanceNm - sample.distanceNm) < Math.abs(best.distanceNm - sample.distanceNm) ? candidate : best;
+  }, null);
 }
 
 export async function POST(request: Request) {
@@ -263,43 +166,61 @@ export async function POST(request: Request) {
     now.setUTCMinutes(0, 0, 0);
     const validTimes = TARGET_HOURS.map((hours) => new Date(now.getTime() + hours * 3600000));
     const samples = routeSamples(route);
+    const origin = new URL(request.url).origin;
 
-    const pointResults = await Promise.all(samples.map((point) => samplePointForecast(point, validTimes)));
-    const missingIndexes = pointResults.map((result, index) => result ? -1 : index).filter((index) => index >= 0);
-    if (missingIndexes.length) {
-      const oceanic = await sampleOceanicNdfd(missingIndexes.map((index) => samples[index]), validTimes);
-      missingIndexes.forEach((sampleIndex, fallbackIndex) => {
-        if (oceanic[fallbackIndex]) pointResults[sampleIndex] = oceanic[fallbackIndex];
+    const [nwsResults, atmosResult] = await Promise.all([
+      Promise.all(samples.map((point) => sampleNwsPoint(point, validTimes))),
+      fetch(`${origin}/api/gfs-atmos-route`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
+      }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
+    ]);
+
+    const atmos = atmosResult.ok ? atmosResult.json as AtmosResponse : null;
+    const atmosFrames = Array.isArray(atmos?.frames) ? atmos!.frames! : [];
+
+    const frames: MarkerFrame[] = validTimes.map((validAt, frameIndex) => {
+      const atmosFrame = atmosFrames.length ? nearestAtmosFrame(atmosFrames, validAt) : null;
+      const points = samples.map((sample, sampleIndex): ForecastPoint => {
+        const nws = nwsResults[sampleIndex]?.[frameIndex] || null;
+        const grib = atmosFrame ? nearestAtmosPoint(atmosFrame.points, sample) : null;
+        return {
+          lat: sample.lat,
+          lon: sample.lon,
+          distanceNm: sample.distanceNm,
+          windKt: grib?.windKt ?? nws?.windKt ?? null,
+          windDirectionDeg: grib?.windDirectionDeg ?? nws?.windDirectionDeg ?? null,
+          gustKt: grib?.gustKt ?? nws?.gustKt ?? null,
+          waveHeightFt: nws?.waveHeightFt ?? null,
+          wavePeriodSec: nws?.wavePeriodSec ?? null,
+          airTempF: grib?.airTempF ?? null,
+          relativeHumidityPct: grib?.relativeHumidityPct ?? null,
+          pressureHpa: grib?.pressureHpa ?? null,
+          precipMm: grib?.precipMm ?? null,
+          cloudCoverPct: grib?.cloudCoverPct ?? null,
+          source: grib?.source || nws?.source || "Weather data unavailable",
+        };
       });
-    }
+      return { validAt: validAt.toISOString(), points };
+    });
 
-    const usable = pointResults.filter((result): result is ForecastPoint[] => Array.isArray(result));
-    const frames: MarkerFrame[] = validTimes.map((validAt, frameIndex) => ({
-      validAt: validAt.toISOString(),
-      points: usable.map((rows) => rows[frameIndex]).filter(Boolean),
-    }));
-
-    const usedOceanic = usable.some((rows) => rows.some((row) => row.source === "NDFD Oceanic"));
-    const usedPointGrid = usable.some((rows) => rows.some((row) => row.source !== "NDFD Oceanic"));
-    const product = usedOceanic && usedPointGrid
-      ? "NWS point grids + NDFD Oceanic marine grids"
-      : usedOceanic
-        ? "NDFD Oceanic marine grids"
-        : "NWS Digital Forecast Database route sampling";
+    const covered = frames[0]?.points.filter((point) => point.windKt !== null).length || 0;
+    const usingGrib = atmosFrames.length > 0;
 
     return NextResponse.json({
-      version: 2,
-      provider: "NOAA / National Weather Service",
-      product,
+      version: 3,
+      provider: usingGrib ? "NOAA / NCEP GFS GRIB2 + NWS marine fallback" : "NOAA / National Weather Service",
+      product: usingGrib ? (atmos?.product || "GFS 0.25° atmospheric GRIB2") : "NWS Digital Forecast Database route sampling",
       generatedAt: new Date().toISOString(),
+      modelRun: atmos?.modelRun || null,
       sampleCount: samples.length,
-      coveredSampleCount: usable.length,
+      coveredSampleCount: covered,
       frames,
-      note: usable.length < samples.length
-        ? "Some route points were outside available NOAA/NWS gridded forecast coverage and were omitted."
-        : usedOceanic
-          ? "Offshore points are using the NDFD Oceanic marine forecast grid."
-          : null,
+      note: usingGrib
+        ? "GFS atmospheric GRIB2 is the primary route weather source; NWS point grids remain available for marine-wave fallback."
+        : "GFS atmospheric GRIB2 was unavailable; using available NWS point-grid data.",
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA route weather failed." }, { status: 500 });
