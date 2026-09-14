@@ -6,7 +6,7 @@ type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
 type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: number | null } | null;
 
-function s52DisplayParams(colorScheme: 0 | 5) {
+function s52DisplayParams(colorScheme: 1 | 3) {
   return JSON.stringify({
     ECDISParameters: {
       version: "10.9",
@@ -63,7 +63,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         format: "image/png",
         transparent: false,
         version: "1.3.0",
-        display_params: s52DisplayParams(nightMode ? 5 : 0),
+        display_params: s52DisplayParams(nightMode ? 3 : 1),
         maxZoom: 15,
         keepBuffer: 6,
         updateWhenIdle: false,
@@ -87,8 +87,9 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
     if (!chartLayer) return;
 
     chartLayer.setParams({
-      display_params: s52DisplayParams(nightMode ? 5 : 0),
-    });
+      display_params: s52DisplayParams(nightMode ? 3 : 1),
+    }, false);
+    chartLayer.redraw();
   }, [nightMode]);
 
   useEffect(() => {
