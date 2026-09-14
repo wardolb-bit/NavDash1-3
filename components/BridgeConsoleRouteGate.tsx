@@ -10,6 +10,7 @@ import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 import { MainMapDisplayControls } from "./MainMapDisplayControls";
 import { EncScaleAwareLayer } from "./EncScaleAwareLayer";
+import { BridgeEncBrightnessMenu } from "./BridgeEncBrightnessMenu";
 import { NavMapZoomLimit } from "./NavMapZoomLimit";
 import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 import { CelestialConsoleSkin } from "./CelestialConsoleSkin";
@@ -44,6 +45,7 @@ export function BridgeConsoleRouteGate() {
         <NavMapMainOverlayV2 />
         <MainMapDisplayControls />
         <EncScaleAwareLayer />
+        <BridgeEncBrightnessMenu />
         <BridgeMapWakeup />
         <NavMapZoomLimit />
         <NoaaLeafletPaneWeatherOverlay />
