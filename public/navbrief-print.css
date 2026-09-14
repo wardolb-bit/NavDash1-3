@@ -1,25 +1,44 @@
 @media print {
-  @page { margin: .42in; }
+  @page {
+    size: auto;
+    margin: .38in .42in .42in;
+  }
 
   body:has(.navdash-navbrief-console) {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     background: #ffffff !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+
+  .navdash-navbrief-console {
+    background: #ffffff !important;
+    color: #17212b !important;
   }
 
   .navdash-navbrief-console .print-panel {
-    border: 2px solid #17324d !important;
-    border-top: 8px solid #17324d !important;
+    position: relative !important;
+    margin: 0 !important;
+    padding: 0 0 10px !important;
+    border: 1px solid #aeb9c3 !important;
+    border-top: 0 !important;
     background: #ffffff !important;
-    color: #14212b !important;
+    color: #17212b !important;
     box-shadow: none !important;
+    font-size: 9.5px !important;
+    line-height: 1.42 !important;
   }
 
+  /* Document masthead */
   .navdash-navbrief-console .print-panel > div:first-child {
-    margin: -10px -10px 12px !important;
-    padding: 12px 14px 10px !important;
-    background: #17324d !important;
-    border-bottom: 3px solid #c7a54b !important;
+    position: relative !important;
+    margin: 0 !important;
+    padding: 15px 17px 13px !important;
+    min-height: 64px !important;
+    align-items: center !important;
+    background: linear-gradient(135deg, #14293c 0%, #1d3b53 100%) !important;
+    border: 0 !important;
+    border-bottom: 4px solid #c6a24a !important;
     color: #ffffff !important;
   }
 
@@ -29,100 +48,201 @@
   }
 
   .navdash-navbrief-console .print-panel > div:first-child h2 {
-    font-size: 22px !important;
-    letter-spacing: .01em !important;
+    margin-top: 2px !important;
+    font-size: 23px !important;
+    line-height: 1.05 !important;
+    font-weight: 800 !important;
+    letter-spacing: -.015em !important;
   }
 
-  .navdash-navbrief-console .print-panel > div:first-child div:first-child {
-    color: #e3c46b !important;
-    letter-spacing: .18em !important;
+  .navdash-navbrief-console .print-panel > div:first-child > div:first-child > div:first-child {
+    color: #e6c96f !important;
+    font-size: 8.5px !important;
+    font-weight: 800 !important;
+    letter-spacing: .22em !important;
   }
 
+  .navdash-navbrief-console .print-panel > div:first-child > div:last-child {
+    align-self: flex-end !important;
+    padding-bottom: 2px !important;
+    color: #d7e0e7 !important;
+    font-size: 8px !important;
+    letter-spacing: .04em !important;
+  }
+
+  /* Main document body */
+  .navdash-navbrief-console .print-panel > .mt-3 {
+    margin: 0 !important;
+    padding: 12px 12px 0 !important;
+  }
+
+  /* Four voyage summary cells */
+  .navdash-navbrief-console .print-panel > .mt-3 > .grid:first-child {
+    gap: 0 !important;
+    border: 1px solid #91a1ae !important;
+    background: #ffffff !important;
+  }
+
+  .navdash-navbrief-console .print-panel > .mt-3 > .grid:first-child .print-sub {
+    min-height: 58px !important;
+    padding: 9px 10px !important;
+    border: 0 !important;
+    border-right: 1px solid #b8c3cb !important;
+    background: #f5f7f9 !important;
+  }
+
+  .navdash-navbrief-console .print-panel > .mt-3 > .grid:first-child .print-sub:last-child {
+    border-right: 0 !important;
+  }
+
+  .navdash-navbrief-console .print-panel > .mt-3 > .grid:first-child .print-sub > div:first-child {
+    color: #667786 !important;
+    font-size: 7.5px !important;
+    font-weight: 800 !important;
+    letter-spacing: .15em !important;
+  }
+
+  .navdash-navbrief-console .print-panel > .mt-3 > .grid:first-child .print-sub > div:last-child {
+    margin-top: 4px !important;
+    color: #15283a !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+  }
+
+  /* Information cards */
   .navdash-navbrief-console .print-sub {
-    background: #f4f8fb !important;
-    border: 1px solid #9fb2c1 !important;
-    border-left: 4px solid #2d7896 !important;
-    color: #14212b !important;
+    position: relative !important;
+    padding: 10px 11px !important;
+    border: 1px solid #aebbc5 !important;
+    border-top: 3px solid #2e667f !important;
+    background: #f8fafb !important;
+    color: #1c2a35 !important;
+    box-shadow: none !important;
   }
 
   .navdash-navbrief-console .print-sub > div:first-child,
   .navdash-navbrief-console .print-sub > div:first-child * {
-    color: #17324d !important;
-    font-weight: 800 !important;
-  }
-
-  .navdash-navbrief-console .print-panel table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-  }
-
-  .navdash-navbrief-console .print-panel thead th {
-    background: #17324d !important;
-    color: #ffffff !important;
-    border-color: #17324d !important;
-    font-weight: 800 !important;
+    color: #17334a !important;
+    font-weight: 850 !important;
     letter-spacing: .035em !important;
   }
 
-  .navdash-navbrief-console .print-panel tbody tr:nth-child(even) td {
-    background: #f6f8fa !important;
+  .navdash-navbrief-console .print-sub > div:nth-child(2) {
+    color: #425466 !important;
+  }
+
+  /* Weather card gets a distinct operational treatment */
+  .navdash-navbrief-console #navbrief-route-weather {
+    padding: 11px 12px !important;
+    border: 1px solid #8fa9b7 !important;
+    border-left: 5px solid #2d7896 !important;
+    border-top: 1px solid #8fa9b7 !important;
+    background: #eef5f8 !important;
+  }
+
+  .navdash-navbrief-console #navbrief-route-weather > div:first-child,
+  .navdash-navbrief-console #navbrief-route-weather > div:first-child * {
+    color: #173b52 !important;
+    font-weight: 900 !important;
+  }
+
+  .navdash-navbrief-console #navbrief-route-weather [class*="text-[#42d3c8]"] {
+    color: #2d667d !important;
+  }
+
+  /* Tables */
+  .navdash-navbrief-console .print-panel table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+    background: #ffffff !important;
+    font-size: 8.6px !important;
+  }
+
+  .navdash-navbrief-console .print-panel thead {
+    display: table-header-group !important;
+  }
+
+  .navdash-navbrief-console .print-panel thead th {
+    padding: 6px 6px !important;
+    background: #1b354a !important;
+    color: #ffffff !important;
+    border: 1px solid #1b354a !important;
+    font-size: 7.6px !important;
+    font-weight: 800 !important;
+    letter-spacing: .075em !important;
+    text-transform: uppercase !important;
+    vertical-align: bottom !important;
   }
 
   .navdash-navbrief-console .print-panel tbody td {
-    border-color: #aebbc5 !important;
-    color: #17232d !important;
+    padding: 6px 6px !important;
+    border: 1px solid #c0c9d0 !important;
+    color: #202d38 !important;
+    vertical-align: top !important;
+    background: #ffffff !important;
   }
 
+  .navdash-navbrief-console .print-panel tbody tr:nth-child(even) td {
+    background: #f3f6f8 !important;
+  }
+
+  .navdash-navbrief-console .print-panel tbody tr:last-child td {
+    border-bottom-color: #8c9aa5 !important;
+  }
+
+  .navdash-navbrief-console .print-panel table tr,
+  .navdash-navbrief-console .print-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Strong text and section labels */
   .navdash-navbrief-console .print-panel b,
-  .navdash-navbrief-console .print-panel strong {
-    color: #17324d !important;
+  .navdash-navbrief-console .print-panel strong,
+  .navdash-navbrief-console .print-panel h3,
+  .navdash-navbrief-console .print-panel .uppercase.font-black {
+    color: #19364d !important;
   }
 
-  .navdash-navbrief-console #navbrief-route-weather {
-    border: 1.5px solid #2d7896 !important;
-    border-left: 5px solid #2d7896 !important;
-    background: #eef7fa !important;
+  .navdash-navbrief-console .print-panel [class*="text-[#8294a5]"] {
+    color: #526575 !important;
   }
 
-  .navdash-navbrief-console #navbrief-route-weather > div:first-child {
-    color: #17324d !important;
-    font-weight: 900 !important;
-    letter-spacing: .06em !important;
+  .navdash-navbrief-console .print-panel [class*="border-white"] {
+    border-color: #b7c1c9 !important;
   }
 
+  /* Operational cautions remain visible without looking like web alerts */
   .navdash-navbrief-console [class*="amber"],
   .navdash-navbrief-console [class*="yellow"] {
-    border-color: #c28a21 !important;
-    background: #fff7df !important;
-    color: #5a3b00 !important;
+    border-color: #c49738 !important;
+    background: #fff8e7 !important;
+    color: #604714 !important;
   }
 
   .navdash-navbrief-console [class*="red"] {
-    border-color: #a63c3c !important;
-    background: #fff0f0 !important;
-    color: #711f1f !important;
+    border-color: #ad6565 !important;
+    background: #fff2f2 !important;
+    color: #762f2f !important;
   }
 
-  .navdash-navbrief-console .print-panel h3,
-  .navdash-navbrief-console .print-panel .uppercase.font-black {
-    color: #17324d !important;
+  /* Give longer text blocks breathing room */
+  .navdash-navbrief-console .print-panel .leading-5 {
+    line-height: 1.48 !important;
   }
 
-  .navdash-navbrief-console .print-panel hr,
-  .navdash-navbrief-console .print-panel [class*="border-white"] {
-    border-color: #aebbc5 !important;
-  }
-
+  /* Neutral professional footer */
   .navdash-navbrief-console .print-panel::after {
-    content: "M/V MB480  •  NAVDASH NAVIGATION BRIEF";
-    display: block;
-    margin-top: 12px;
-    padding-top: 6px;
-    border-top: 1px solid #c7a54b;
-    color: #52616d;
-    font-size: 8px;
-    font-weight: 700;
-    letter-spacing: .12em;
-    text-align: right;
+    content: "M/V MB480  ·  NAVIGATION BRIEF  ·  FOR BRIDGE TEAM USE";
+    display: block !important;
+    margin: 13px 12px 0 !important;
+    padding: 7px 1px 1px !important;
+    border-top: 1px solid #9aa8b3 !important;
+    color: #667480 !important;
+    font-size: 7px !important;
+    font-weight: 700 !important;
+    letter-spacing: .13em !important;
+    text-align: right !important;
   }
 }
