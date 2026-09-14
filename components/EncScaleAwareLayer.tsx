@@ -7,12 +7,18 @@ const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_DIRECT_FRAGMENT = "gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline";
 const NAVDASH_ENC_FRAGMENT = "/api/noaa-charts/wms";
 
-function s52DisplayParams(colorScheme: 1 | 3) {
+function s52DisplayParams(colorScheme: 0 | 5) {
   return JSON.stringify({
-    ECDISParameters: {
-      version: "10.9",
-      DynamicParameters: {
-        Parameter: [{ name: "ColorScheme", value: colorScheme }],
+    DisplayParameters: {
+      ECDISParameters: {
+        version: "10.9",
+        DynamicParameters: {
+          Parameter: [
+            { name: "ColorScheme", value: colorScheme },
+            { name: "DisplayFrames", value: 2 },
+            { name: "DisplayFrameText", value: 0 },
+          ],
+        },
       },
     },
   });
@@ -20,8 +26,8 @@ function s52DisplayParams(colorScheme: 1 | 3) {
 
 /**
  * Keeps the current NavDash map intact while rendering NOAA ENC through the
- * Maritime Chart Service export path. Day and Bridge Night request the NOAA
- * S-52 day/night portrayals directly; route, AIS, tools and overlays are not
+ * Maritime Chart Service export path. Day and Bridge Night request NOAA's
+ * S-52 DAY/NIGHT portrayals directly; route, AIS, tools and overlays are not
  * changed here.
  */
 export function EncScaleAwareLayer() {
@@ -57,7 +63,7 @@ export function EncScaleAwareLayer() {
         format: "image/png",
         transparent: false,
         version: "1.1.1",
-        display_params: s52DisplayParams(nightMode ? 3 : 1),
+        display_params: s52DisplayParams(nightMode ? 5 : 0),
         opacity: 1,
         tileSize: 512,
         updateWhenZooming: false,
