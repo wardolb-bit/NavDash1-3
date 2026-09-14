@@ -9,8 +9,6 @@ export default function FullWidthRouteProfile() {
     let originalNextSibling: ChildNode | null = null;
 
     const moveProfile = () => {
-      if (movedPanel?.isConnected && movedPanel.parentElement?.tagName === "MAIN") return;
-
       const main = document.querySelector("main");
       if (!(main instanceof HTMLElement)) return;
 
@@ -21,28 +19,29 @@ export default function FullWidthRouteProfile() {
       );
       if (!(workspace instanceof HTMLElement)) return;
 
-      const profileLabel = Array.from(workspace.querySelectorAll("div")).find(
-        (node) => (node.textContent || "").trim() === "ROUTE PROFILE",
-      );
-      if (!(profileLabel instanceof HTMLElement)) return;
+      const profileSvg = workspace.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
+      if (!profileSvg) return;
 
-      const panel = profileLabel.closest("div.mt-2.border");
+      const panel = profileSvg.closest("div.mt-2.border");
       if (!(panel instanceof HTMLElement)) return;
 
       if (!originalParent) {
         originalParent = panel.parentElement;
         originalNextSibling = panel.nextSibling;
       }
-      movedPanel = panel;
 
+      movedPanel = panel;
       panel.dataset.navdashFullWidthProfile = "true";
       panel.style.setProperty("width", "calc(100vw - 16px)", "important");
       panel.style.setProperty("max-width", "calc(100vw - 16px)", "important");
       panel.style.setProperty("box-sizing", "border-box", "important");
       panel.style.setProperty("margin-left", "0", "important");
       panel.style.setProperty("margin-right", "0", "important");
+      panel.style.setProperty("justify-self", "stretch", "important");
 
-      workspace.insertAdjacentElement("afterend", panel);
+      if (panel.parentElement !== main) {
+        workspace.insertAdjacentElement("afterend", panel);
+      }
     };
 
     moveProfile();
@@ -55,7 +54,7 @@ export default function FullWidthRouteProfile() {
       window.removeEventListener("resize", moveProfile);
       if (!movedPanel || !originalParent) return;
       delete movedPanel.dataset.navdashFullWidthProfile;
-      ["width", "max-width", "box-sizing", "margin-left", "margin-right"].forEach((property) => movedPanel?.style.removeProperty(property));
+      ["width", "max-width", "box-sizing", "margin-left", "margin-right", "justify-self"].forEach((property) => movedPanel?.style.removeProperty(property));
       if (originalNextSibling && originalNextSibling.parentNode === originalParent) {
         originalParent.insertBefore(movedPanel, originalNextSibling);
       } else {
