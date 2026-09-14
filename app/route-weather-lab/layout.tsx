@@ -54,6 +54,23 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           background: var(--nd-panel-alt) !important;
           background-color: var(--nd-panel-alt) !important;
         }
+
+        /* OpsStatusStrip is injected after first paint and rebuilt every second with inline night colors.
+           Override those inline colors at the host so the cards stay light after injection/re-render. */
+        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background:#050a0f"],
+        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background: #050a0f"] {
+          background: var(--nd-panel) !important;
+          background-color: var(--nd-panel) !important;
+          color: var(--nd-text) !important;
+          border-color: var(--nd-border) !important;
+        }
+
+        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background:#17130a"],
+        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background: #17130a"] {
+          background: var(--nd-panel-alt) !important;
+          background-color: var(--nd-panel-alt) !important;
+          border-color: rgba(122,91,0,.38) !important;
+        }
       `}</style>
       <WeatherChartLayer />
       <WeatherPlanStateSync />
