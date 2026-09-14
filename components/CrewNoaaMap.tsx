@@ -6,13 +6,13 @@ type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
 type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: number | null } | null;
 
-function s52DisplayParams(colorScheme: 0 | 5) {
+function s52NightDisplayParams() {
   return JSON.stringify({
     ECDISParameters: {
       version: "10.9",
       DynamicParameters: {
         Parameter: [
-          { name: "ColorScheme", value: colorScheme },
+          { name: "ColorScheme", value: 5 },
           { name: "DisplayFrames", value: 2 },
           { name: "DisplayFrameText", value: 0 },
         ],
@@ -62,20 +62,6 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         maxZoom: 15,
       }).setView(center, 10);
 
-      const chartLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
-        layers: "1,2,3,4,5,6,7",
-        format: "image/png",
-        transparent: false,
-        version: "1.1.1",
-        display_params: s52DisplayParams(nightMode ? 5 : 0),
-        maxZoom: 15,
-        keepBuffer: 6,
-        updateWhenIdle: false,
-        updateWhenZooming: false,
-        attribution: "NOAA Office of Coast Survey ENC Online",
-      } as any).addTo(map);
-
-      chartLayerRef.current = chartLayer;
       mapRef.current = map;
       window.setTimeout(() => map.invalidateSize(), 50);
     }
@@ -87,13 +73,58 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   }, []);
 
   useEffect(() => {
-    const chartLayer = chartLayerRef.current;
-    if (!chartLayer) return;
+    let cancelled = false;
+    let timer = 0;
 
-    chartLayer.setParams({
-      display_params: s52DisplayParams(nightMode ? 5 : 0),
-    }, false);
-    chartLayer.redraw();
+    async function updateChart() {
+      const map = mapRef.current;
+      if (!map) {
+        timer = window.setTimeout(() => { if (!cancelled) void updateChart(); }, 100);
+        return;
+      }
+
+      const L = await import("leaflet");
+      if (cancelled) return;
+
+      if (chartLayerRef.current) {
+        try { map.removeLayer(chartLayerRef.current); } catch {}
+        chartLayerRef.current = null;
+      }
+
+      const chartLayer = nightMode
+        ? L.tileLayer.wms("/api/noaa-charts/wms", {
+            layers: "1,2,3,4,5,6,7",
+            format: "image/png",
+            transparent: false,
+            version: "1.1.1",
+            display_params: s52NightDisplayParams(),
+            maxZoom: 15,
+            keepBuffer: 6,
+            updateWhenIdle: false,
+            updateWhenZooming: false,
+            attribution: "NOAA Office of Coast Survey ENC Online",
+          } as any)
+        : L.tileLayer.wms("/api/noaa-charts/wms", {
+            layers: "1,2,3,4,5,6,7,12",
+            format: "image/png",
+            transparent: false,
+            version: "1.3.0",
+            maxZoom: 15,
+            keepBuffer: 6,
+            updateWhenIdle: false,
+            updateWhenZooming: false,
+            attribution: "NOAA Office of Coast Survey ENC Online",
+          } as any);
+
+      chartLayer.addTo(map);
+      chartLayerRef.current = chartLayer;
+    }
+
+    void updateChart();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [nightMode]);
 
   useEffect(() => {
