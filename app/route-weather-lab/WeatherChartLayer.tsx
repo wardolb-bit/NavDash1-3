@@ -70,6 +70,13 @@ function vesselIconHtml(orientation: number) {
   return `<div style="width:28px;height:28px;transform:rotate(${orientation}deg);transform-origin:14px 14px;filter:drop-shadow(0 0 5px rgba(34,211,238,.8))"><svg width="28" height="28" viewBox="0 0 30 30" xmlns="http://www.w3.org/2000/svg"><path d="M15 1 L24 25 L15 20 L6 25 Z" fill="#061018" stroke="#67e8f9" stroke-width="2.4" stroke-linejoin="round"/><path d="M15 4 L15 20" stroke="#67e8f9" stroke-width="1.7"/><circle cx="15" cy="15" r="2.3" fill="#f8fafc"/></svg></div>`;
 }
 
+function webMercator(lon: number, lat: number) {
+  const x = lon * 20037508.342789244 / 180;
+  const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
+  const y = Math.log(Math.tan((90 + clampedLat) * Math.PI / 360)) / (Math.PI / 180);
+  return [x, y * 20037508.342789244 / 180] as const;
+}
+
 export default function WeatherChartLayer() {
   useLayoutEffect(() => {
     let cancelled = false;
@@ -128,7 +135,9 @@ export default function WeatherChartLayer() {
       const size = map.getSize();
       const width = Math.max(256, Math.min(2048, Math.round(size.x)));
       const height = Math.max(256, Math.min(2048, Math.round(size.y)));
-      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+      const [west, south] = webMercator(bounds.getWest(), bounds.getSouth());
+      const [east, north] = webMercator(bounds.getEast(), bounds.getNorth());
+      const bbox = [west, south, east, north].join(",");
       const params = new URLSearchParams({
         bbox,
         size: `${width},${height}`,
