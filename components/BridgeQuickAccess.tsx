@@ -58,7 +58,7 @@ export function BridgeQuickAccess() {
   return createPortal(
     <>
       <Link href="/celestial" className={buttonClass}>Star Finder</Link>
-      <Link href="/wx-routing" className={buttonClass}>WX Routing</Link>
+      <a href="https://wx.wardlab.dev/" className={buttonClass}>Weather</a>
       <Link href="/tides" className={buttonClass}>Tides</Link>
       <Link href="/position-report" className={buttonClass}>Position Report</Link>
       <Link href="/nav-brief" className={buttonClass}>Nav Brief</Link>
