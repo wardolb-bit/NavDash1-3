@@ -12,7 +12,7 @@ type WavePoint = {
 };
 type WaveFrame = { validAt: string; points: WavePoint[] };
 
-const BASE = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_global.json";
+const BASE = "https://pae-paha.pacioos.hawaii.edu/erddap/griddap/ww3_hawaii.json";
 const UA = "NavDash route weather preview (wardmaritimegroup.com)";
 
 function to360(lon: number) {
@@ -54,18 +54,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Wave request requires route points and forecast valid times." }, { status: 400 });
     }
 
-    const minLat = Math.max(-77.5, Math.min(...points.map((p) => p.lat)) - 0.75);
-    const maxLat = Math.min(77.5, Math.max(...points.map((p) => p.lat)) + 0.75);
+    const minLat = Math.max(18.0, Math.min(...points.map((p) => p.lat)) - 0.25);
+    const maxLat = Math.min(23.0, Math.max(...points.map((p) => p.lat)) + 0.25);
     const lons = points.map((p) => to360(p.lon));
-    const minLon = Math.max(0, Math.min(...lons) - 0.75);
-    const maxLon = Math.min(359.5, Math.max(...lons) + 0.75);
+    const minLon = Math.max(199.0, Math.min(...lons) - 0.25);
+    const maxLon = Math.min(208.0, Math.max(...lons) + 0.25);
 
     const start = new Date(Math.min(...validTimes.map((d) => d.getTime())));
     const end = new Date(Math.max(...validTimes.map((d) => d.getTime())));
     const t0 = start.toISOString().replace(".000Z", "Z");
     const t1 = end.toISOString().replace(".000Z", "Z");
 
-    // Live PacIOOS WW3 dimensions are time, depth, latitude, longitude.
+    // PacIOOS Hawaii regional WW3 dimensions are time, depth, latitude, longitude.
     const slice = `[(%s):(%e)][(0.0)][(${minLat.toFixed(2)}):(${maxLat.toFixed(2)})][(${minLon.toFixed(2)}):(${maxLon.toFixed(2)})]`;
     const query = ["Thgt", "Tper", "Tdir"]
       .map((name) => `${name}${slice.replace("%s", t0).replace("%e", t1)}`)
@@ -123,7 +123,7 @@ export async function POST(request: Request) {
 
         for (const row of parsed) {
           const dtHours = Math.abs(row.time - targetTime) / 3600000;
-          if (dtHours > 3.1) continue;
+          if (dtHours > 1.6) continue;
           const dLat = row.lat - point.lat;
           const dLon = row.lon - targetLon;
           const spatial = dLat * dLat + dLon * dLon;
@@ -141,7 +141,7 @@ export async function POST(request: Request) {
           waveHeightFt: mToFt(best?.h ?? null),
           wavePeriodSec: best?.p === null || best?.p === undefined ? null : Number(best.p.toFixed(0)),
           waveDirectionDeg: best?.d === null || best?.d === undefined ? null : Number(best.d.toFixed(0)),
-          source: "PacIOOS WaveWatch III global (NOAA/NCEP GFS-forced)",
+          source: "PacIOOS WaveWatch III Hawaii regional (~5 km; island-shadowing aware)",
         };
       });
 
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       provider: "PacIOOS / NOAA IOOS",
-      product: "WaveWatch III global wave model (NOAA/NCEP GFS-forced)",
+      product: "WaveWatch III Hawaii regional wave model (~5 km)",
       generatedAt: new Date().toISOString(),
       populatedPointCount: populated,
       frames,
