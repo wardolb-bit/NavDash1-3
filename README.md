@@ -1,68 +1,32 @@
-# Ward Maritime Nav Console - AIS + RTZ Marine Build
+# M/V MB480 NavDash 1.3
 
-This build removes the NAVTOR/NavBox API layer and uses a host-computer AIS/NMEA 0183 feed instead.
+NavDash is the Vercel-hosted navigation and operations dashboard for M/V MB480.
 
-## What it does
+## Current architecture
 
-- Reads AIS/NMEA 0183 high-speed serial data at 38400 baud from the host computer.
-- Broadcasts that feed over WebSocket so other devices on the same network can view the console.
-- Plots ownship from `!AIVDO` AIS messages.
-- Plots AIS targets from `!AIVDM` messages.
-- Decodes AIS type 5 vessel names when received and shows names instead of MMSI where possible.
-- Uploads `.rtz` route files and overlays the route on the Leaflet/OpenStreetMap chart.
-- Adds OpenSeaMap seamark overlay for marine chart context.
-- Formats courses/headings as three digits with degree symbol, such as `018°`.
-- Keeps raw AIS diagnostics tucked behind a collapsible panel.
+- The NavDash web application is hosted online through Vercel.
+- Shipboard AIS/position data is supplied by the separate NavDash bridge running on the vessel network.
+- Browser clients connect to that bridge over WebSocket for live AIS/NMEA data.
+- Shared route, weather, and application state are handled by the web application and its active backend services.
+- The repository no longer contains the retired full-app USB runtime, Electron wrapper, portable-Node launcher, or local all-in-one AIS/Next.js server setup.
 
-## First run
+## Active application areas
+
+The current build includes the bridge console, crew/mobile view, weather and weather routing, tides, celestial tools, position report, navigation brief, MSI, voyage/arrival planning, storm map, and operational tools.
+
+## Development
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open:
+Production build:
 
-```txt
-http://localhost:3000
+```bash
+npm run build
 ```
 
-## Serial port setup
+## Navigation use
 
-The data server tries to auto-select a USB serial port. If it selects the wrong port, stop the app and start it with an explicit COM port.
-
-Windows PowerShell:
-
-```powershell
-$env:AIS_PORT="COM3"; npm run dev
-```
-
-Windows Command Prompt:
-
-```cmd
-set AIS_PORT=COM3 && npm run dev
-```
-
-Change `COM3` to the actual port from Device Manager.
-
-AIS/NMEA high-speed default is:
-
-```txt
-38400 baud, 8 data bits, no parity, 1 stop bit
-```
-
-## Multi-display / ECR use
-
-The host computer must be plugged into the AIS serial feed and run the app.
-
-Other displays on the same network can open:
-
-```txt
-http://HOST-COMPUTER-IP:3000
-```
-
-The browser clients receive AIS data from the host WebSocket server, so the ECR does not need direct serial access.
-
-## Notes
-
-This is a non-certified situational-awareness and recreational/offshore utility. It is not an ECDIS replacement and should not be used as the sole means of navigation.
+NavDash is a non-certified situational-awareness and operational support tool. It is not an ECDIS replacement and should not be used as the sole means of navigation.
