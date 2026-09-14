@@ -6,6 +6,8 @@ import { useBridgeTheme } from "../lib/useBridgeTheme";
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_DIRECT_FRAGMENT = "gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline";
 const NAVDASH_ENC_FRAGMENT = "/api/noaa-charts/wms";
+const BRIGHTNESS_STORAGE_KEY = "navdash-enc-brightness";
+const BRIGHTNESS_EVENT = "navdash-enc-brightness-change";
 
 function s52DisplayParams(colorScheme: 0 | 5) {
   return JSON.stringify({
@@ -22,6 +24,23 @@ function s52DisplayParams(colorScheme: 0 | 5) {
   });
 }
 
+function readBrightness() {
+  try {
+    const stored = Number(window.localStorage.getItem(BRIGHTNESS_STORAGE_KEY));
+    if (!Number.isFinite(stored)) return 100;
+    return Math.max(40, Math.min(140, stored));
+  } catch {
+    return 100;
+  }
+}
+
+function applyBrightness(layer: any, value = readBrightness()) {
+  const container = layer?.getContainer?.();
+  if (container instanceof HTMLElement) {
+    container.style.filter = `brightness(${value}%)`;
+  }
+}
+
 /**
  * Keeps the current NavDash map intact while rendering NOAA ENC through the
  * Maritime Chart Service export path. Day and Bridge Night request NOAA's
@@ -34,6 +53,13 @@ export function EncScaleAwareLayer() {
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
+    let chartLayer: any = null;
+
+    const onBrightnessChange = (event: Event) => {
+      const value = Number((event as CustomEvent<number>).detail);
+      applyBrightness(chartLayer, Number.isFinite(value) ? value : readBrightness());
+    };
+    window.addEventListener(BRIGHTNESS_EVENT, onBrightnessChange);
 
     const attach = async () => {
       if (cancelled) return;
@@ -56,7 +82,7 @@ export function EncScaleAwareLayer() {
         }
       }
 
-      L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
+      chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
         layers: "1,2,3,4,5,6,7",
         format: "image/png",
         transparent: false,
@@ -68,6 +94,9 @@ export function EncScaleAwareLayer() {
         keepBuffer: 2,
         attribution: "NOAA Office of Coast Survey ENC Online",
       } as any).addTo(map);
+
+      applyBrightness(chartLayer);
+      chartLayer.on?.("load", () => applyBrightness(chartLayer));
     };
 
     void attach();
@@ -75,6 +104,7 @@ export function EncScaleAwareLayer() {
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.removeEventListener(BRIGHTNESS_EVENT, onBrightnessChange);
     };
   }, [nightMode]);
 
