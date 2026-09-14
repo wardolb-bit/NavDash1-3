@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { createPortal } from "react-dom";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 
 type OwnShip = {
@@ -14,8 +13,6 @@ type OwnShip = {
 
 type RouteWaypoint = { name?: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: RouteWaypoint[] } | null;
-
-const NS = "http://www.w3.org/2000/svg";
 
 function sixBitCharToValue(char: string) {
   let value = char.charCodeAt(0) - 48;
@@ -224,7 +221,7 @@ export default function OpsStatusStrip() {
       const dataState = fresh ? "LIVE" : socket?.readyState === WebSocket.OPEN ? "NO OWN-SHIP FIX" : "OFFLINE";
       const dataTone = fresh ? "actual" : "neutral";
 
-      target.innerHTML = `<div style="display:grid;grid-template-columns:minmax(180px,1.7fr) minmax(120px,1fr) minmax(100px,.8fr) minmax(135px,1fr) minmax(135px,1fr) minmax(125px,1fr) minmax(92px,.7fr);gap:6px;align-items:stretch">
+      target.innerHTML = `<div style="display:grid;grid-template-columns:minmax(180px,1.7fr) minmax(120px,1fr) minmax(100px,.8fr) minmax(135px,1fr) minmax(135px,1fr) minmax(125px,1fr) minmax(92px,.7fr);gap:6px;align-items:stretch;overflow-x:auto;padding-bottom:1px">
         ${panel("ROUTE", routeName, "neutral", mode === "WEATHER TIME" && forecastValid !== "--" ? `VALID ${forecastValid}` : mode)}
         ${panel("DEPARTURE", fmtDeparture(departureInput?.value || ""), "plan")}
         ${panel("PLAN", Number.isFinite(plannedSpeed) ? `${plannedSpeed.toFixed(1)} kt` : "--", "plan", deltaSub)}
