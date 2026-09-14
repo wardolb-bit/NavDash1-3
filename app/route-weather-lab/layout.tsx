@@ -38,6 +38,22 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           font-size: 12px !important;
           letter-spacing: -.015em;
         }
+
+        /* Route Weather day mode: remove hard-coded night panels without changing Bridge Night. */
+        html[data-navdash-theme="day"] main [class*="bg-[#050a0f]"],
+        html[data-navdash-theme="day"] main [class*="bg-[#08131b]"],
+        html[data-navdash-theme="day"] main [class*="bg-[#08130f]"],
+        html[data-navdash-theme="day"] main [class*="bg-[#101820]"],
+        html[data-navdash-theme="day"] main [class*="bg-[#17130a]"] {
+          background: var(--nd-panel) !important;
+          background-color: var(--nd-panel) !important;
+          color: var(--nd-text) !important;
+        }
+
+        html[data-navdash-theme="day"] main [class*="bg-[#17130a]"] {
+          background: var(--nd-panel-alt) !important;
+          background-color: var(--nd-panel-alt) !important;
+        }
       `}</style>
       <WeatherChartLayer />
       <WeatherPlanStateSync />
