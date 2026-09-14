@@ -1,1 +1,11 @@
-export { default } from "./phone/page";
+import CrewRouteWeatherBridge from "./CrewRouteWeatherBridge";
+import CrewViewPage from "./phone/page";
+
+export default function CrewRootPage() {
+  return (
+    <>
+      <CrewRouteWeatherBridge />
+      <CrewViewPage />
+    </>
+  );
+}
