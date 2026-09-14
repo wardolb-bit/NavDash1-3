@@ -8,16 +8,14 @@ type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: numb
 
 function s52DisplayParams(colorScheme: 0 | 5) {
   return JSON.stringify({
-    DisplayParameters: {
-      ECDISParameters: {
-        version: "10.9",
-        DynamicParameters: {
-          Parameter: [
-            { name: "ColorScheme", value: colorScheme },
-            { name: "DisplayFrames", value: 2 },
-            { name: "DisplayFrameText", value: 0 },
-          ],
-        },
+    ECDISParameters: {
+      version: "10.9",
+      DynamicParameters: {
+        Parameter: [
+          { name: "ColorScheme", value: colorScheme },
+          { name: "DisplayFrames", value: 2 },
+          { name: "DisplayFrameText", value: 0 },
+        ],
       },
     },
   });
