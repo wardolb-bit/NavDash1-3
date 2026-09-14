@@ -14,7 +14,7 @@ export default function RouteProfileDistanceUnitFix() {
           .forEach((text) => {
             const value = text.textContent?.trim() || "";
             if (!/^\d+(?:\.\d+)?\s*•/.test(value)) return;
-            text.textContent = value.replace(/^(\d+(?:\.\d+)?)\s*•/, "$1 NM •");
+            text.textContent = value.replace(/^(\d+(?:\.\d+)?)\s*•/, "$1 NM along route •");
           });
       });
     };
