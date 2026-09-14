@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import FullWidthRouteProfile from "./FullWidthRouteProfile";
 import WeatherChartLayer from "./WeatherChartLayer";
 import WeatherMainButtonFix from "./WeatherMainButtonFix";
 
@@ -6,34 +7,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
   return (
     <>
       <style>{`
-        /* Keep the normal map + voyage rail layout. The route profile itself is allowed to
-           extend across the full page from the left page margin to the right page margin. */
-        @media (min-width: 900px) {
-          main > div.mb-2.grid:has(#route-weather-lab-map) {
-            overflow: visible !important;
-          }
-
-          main > div.mb-2.grid:has(#route-weather-lab-map) > section {
-            overflow: visible !important;
-          }
-
-          main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) {
-            width: calc(100vw - 16px) !important;
-            max-width: calc(100vw - 16px) !important;
-            min-width: calc(100vw - 16px) !important;
-            box-sizing: border-box !important;
-            margin-left: 0 !important;
-            margin-right: 0 !important;
-            overflow: hidden !important;
-          }
-
-          main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) svg[viewBox="0 0 1000 160"] {
-            display: block !important;
-            width: 100% !important;
-            max-width: none !important;
-          }
-        }
-
         /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
           grid-template-columns: minmax(0, 1fr) !important;
@@ -59,6 +32,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
         }
       `}</style>
       <WeatherChartLayer />
+      <FullWidthRouteProfile />
       <WeatherMainButtonFix />
       {children}
     </>
