@@ -19,7 +19,7 @@ export default function FullWidthRouteProfile() {
       );
       if (!(workspace instanceof HTMLElement)) return;
 
-      const profileSvg = workspace.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
+      const profileSvg = main.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
       if (!profileSvg) return;
 
       const panel = profileSvg.parentElement;
@@ -32,21 +32,21 @@ export default function FullWidthRouteProfile() {
 
       movedPanel = panel;
       panel.dataset.navdashFullWidthProfile = "true";
-      panel.style.setProperty("grid-column", "1 / -1", "important");
+      panel.style.setProperty("display", "block", "important");
       panel.style.setProperty("width", "100%", "important");
       panel.style.setProperty("max-width", "none", "important");
       panel.style.setProperty("min-width", "0", "important");
       panel.style.setProperty("box-sizing", "border-box", "important");
       panel.style.setProperty("margin-left", "0", "important");
       panel.style.setProperty("margin-right", "0", "important");
-      panel.style.setProperty("justify-self", "stretch", "important");
+      panel.style.setProperty("margin-top", "8px", "important");
 
       profileSvg.style.setProperty("display", "block", "important");
       profileSvg.style.setProperty("width", "100%", "important");
       profileSvg.style.setProperty("max-width", "none", "important");
 
-      if (panel.parentElement !== workspace) {
-        workspace.appendChild(panel);
+      if (panel.previousElementSibling !== workspace || panel.parentElement !== main) {
+        workspace.insertAdjacentElement("afterend", panel);
       }
     };
 
@@ -62,14 +62,14 @@ export default function FullWidthRouteProfile() {
 
       delete movedPanel.dataset.navdashFullWidthProfile;
       [
-        "grid-column",
+        "display",
         "width",
         "max-width",
         "min-width",
         "box-sizing",
         "margin-left",
         "margin-right",
-        "justify-self",
+        "margin-top",
       ].forEach((property) => movedPanel?.style.removeProperty(property));
 
       const svg = movedPanel.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
