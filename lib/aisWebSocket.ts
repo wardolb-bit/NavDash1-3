@@ -1,18 +1,5 @@
 const AIS_WS_HOST_KEY = "navdash-ais-ws-host";
 const CLOUD_AIS_WS_URL = "wss://uujlsvgromzapubtinfg.supabase.co/functions/v1/navdash-ais-relay?role=client";
-const LEGACY_WHEELHOUSE_AIS_WS_URL = "ws://10.129.4.102:8081";
-
-function isLocalAisUrl(url: string) {
-  return /^wss?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(url.trim());
-}
-
-function isLegacyAisUrl(url: string) {
-  const normalized = url.trim().replace(/\/$/, "");
-  return (
-    normalized === LEGACY_WHEELHOUSE_AIS_WS_URL ||
-    /^wss?:\/\/ais\.wardlab\.dev(?::\d+)?$/i.test(normalized)
-  );
-}
 
 export function getAisWebSocketUrl(defaultUrl = CLOUD_AIS_WS_URL) {
   const params = new URLSearchParams(window.location.search);
@@ -31,14 +18,7 @@ export function getAisWebSocketUrl(defaultUrl = CLOUD_AIS_WS_URL) {
   }
 
   const storedUrl = window.localStorage.getItem(AIS_WS_HOST_KEY)?.trim();
-  if (storedUrl && isLegacyAisUrl(storedUrl)) {
-    window.localStorage.setItem(AIS_WS_HOST_KEY, CLOUD_AIS_WS_URL);
-    return CLOUD_AIS_WS_URL;
-  }
-
-  if (storedUrl && !isLocalAisUrl(storedUrl)) return storedUrl;
-
-  if (storedUrl && isLocalAisUrl(storedUrl)) {
+  if (storedUrl !== CLOUD_AIS_WS_URL) {
     window.localStorage.setItem(AIS_WS_HOST_KEY, CLOUD_AIS_WS_URL);
   }
 
