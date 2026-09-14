@@ -177,16 +177,14 @@ function enhance() {
   const encounterMode = Array.from(document.querySelectorAll("div")).some((el) => el.textContent?.trim() === "ROUTE ENCOUNTER");
 
   if (encounterMode && tableRows.length >= samples.length) {
-    const every = samples.length <= 5 ? 1 : samples.length <= 9 ? 2 : 3;
-
     samples.forEach((point, index) => {
-      if (index % every !== 0 && index !== samples.length - 1) return;
       const cells = tableRows[index]?.querySelectorAll<HTMLTableCellElement>("td");
       if (!cells || cells.length < 8) return;
 
       const windDir = parseDirection(cells[3]?.textContent || "");
       if (windDir !== null) {
-        const arrow = svgEl("g", { transform: `translate(${point.x} ${Math.max(68, point.windY - 22)}) rotate(${windDir + 180})` });
+        const arrowY = Math.max(64, point.windY - 28);
+        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${windDir + 180})` });
         arrow.append(
           svgEl("line", { x1: -9, y1: 0, x2: 9, y2: 0, stroke: "#67e8f9", "stroke-width": 2.2, "stroke-linecap": "round" }),
           svgEl("path", { d: "M 9 0 L 3 -4.5 M 9 0 L 3 4.5", fill: "none", stroke: "#67e8f9", "stroke-width": 2.2, "stroke-linecap": "round" })
@@ -196,7 +194,8 @@ function enhance() {
 
       const waveDir = parseDirection(cells[7]?.textContent || "");
       if (waveDir !== null) {
-        const arrow = svgEl("g", { transform: `translate(${point.x} ${Math.max(14, point.seaY - 28)}) rotate(${waveDir + 180})`, opacity: .95 });
+        const arrowY = Math.max(12, point.seaY - 34);
+        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${waveDir + 180})`, opacity: .95 });
         arrow.append(
           svgEl("line", { x1: -7, y1: 0, x2: 7, y2: 0, stroke: "#f1d56b", "stroke-width": 1.8, "stroke-linecap": "round" }),
           svgEl("path", { d: "M 7 0 L 2 -3.5 M 7 0 L 2 3.5", fill: "none", stroke: "#f1d56b", "stroke-width": 1.8, "stroke-linecap": "round" })
