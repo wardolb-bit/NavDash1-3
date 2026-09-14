@@ -37,6 +37,7 @@ type Bounds = { left: number; right: number; top: number; bottom: number };
 const NOMADS = "https://nomads.ncep.noaa.gov";
 const USER_AGENT = "NavDash GFS Wave GRIB route sampler (wardmaritimegroup.com)";
 const M_TO_FT = 3.28084;
+const MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M = 40;
 
 function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   const r = 3440.065;
@@ -181,7 +182,9 @@ function sampleHeightMeters(
   for (const [dLat, dLon] of offsets) {
     const sample = nearestGridpoint(grid, point.lat + dLat, point.lon + dLon);
     const value = Number(values[sample.index]);
-    if (!Number.isFinite(value) || value < 0) continue;
+    // GRIB decoders can expose packed missing-value sentinels (commonly ~9999/10000)
+    // as finite numbers. Reject anything outside a physically credible HTSGW range.
+    if (!Number.isFinite(value) || value < 0 || value > MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M) continue;
     const distanceNm = nmBetween(point.lat, point.lon, sample.latitude, sample.longitude);
     if (distanceNm > 35) continue;
     if (!best || distanceNm < best.distanceNm) best = { value, distanceNm };
