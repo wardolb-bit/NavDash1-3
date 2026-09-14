@@ -4,6 +4,7 @@ import {
   nearestGridpoint,
   parseFields,
   parseGrid,
+  parseProduct,
   splitMessages,
 } from "@azohra/meteo.grib";
 
@@ -33,11 +34,21 @@ type NoaaFrame = { validAt: string; points: NoaaPoint[] };
 
 type ModelRun = { date: string; cycle: string; cycleTime: Date };
 type Bounds = { left: number; right: number; top: number; bottom: number };
+type DecodedField = {
+  grid: ReturnType<typeof parseGrid>;
+  values: Float64Array | number[];
+};
+type WaveFields = {
+  height: DecodedField | null;
+  period: DecodedField | null;
+  direction: DecodedField | null;
+};
 
 const NOMADS = "https://nomads.ncep.noaa.gov";
 const USER_AGENT = "NavDash GFS Wave GRIB route sampler (wardmaritimegroup.com)";
 const M_TO_FT = 3.28084;
 const MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M = 40;
+const MAX_VALID_WAVE_PERIOD_SEC = 60;
 
 function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   const r = 3440.065;
@@ -95,7 +106,7 @@ async function latestModelRun() {
       });
       if (!response.ok) continue;
       const text = await response.text();
-      if (text.includes(":HTSGW:")) return run;
+      if (text.includes(":HTSGW:") && text.includes(":PERPW:")) return run;
     } catch {
       // Try the previous cycle.
     }
@@ -135,6 +146,8 @@ function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds) {
   const params = new URLSearchParams();
   params.set("file", gribFileName(run, forecastHour));
   params.set("var_HTSGW", "on");
+  params.set("var_PERPW", "on");
+  params.set("var_DIRPW", "on");
   params.set("lev_surface", "on");
   params.set("subregion", "");
   params.set("leftlon", String(bounds.left));
@@ -145,9 +158,8 @@ function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds) {
   return `${NOMADS}/cgi-bin/filter_gfswave.pl?${params.toString()}`;
 }
 
-async function fetchHeightField(run: ModelRun, forecastHour: number, bounds: Bounds) {
-  const url = filterUrl(run, forecastHour, bounds);
-  const response = await fetch(url, {
+async function fetchWaveFields(run: ModelRun, forecastHour: number, bounds: Bounds): Promise<WaveFields> {
+  const response = await fetch(filterUrl(run, forecastHour, bounds), {
     headers: { "User-Agent": USER_AGENT, Accept: "application/octet-stream" },
     cache: "no-store",
   });
@@ -156,35 +168,46 @@ async function fetchHeightField(run: ModelRun, forecastHour: number, bounds: Bou
   if (bytes.length < 16 || String.fromCharCode(...bytes.slice(0, 4)) !== "GRIB") {
     throw new Error(`NOMADS returned a non-GRIB response for f${String(forecastHour).padStart(3, "0")}.`);
   }
-  const messages = splitMessages(bytes);
-  if (!messages.length) throw new Error("Downloaded GRIB2 contained no messages.");
-  const fields = parseFields(messages[0]);
-  if (!fields.length) throw new Error("Downloaded GRIB2 contained no decodable fields.");
-  const field = fields[0];
-  const grid = parseGrid(field.section3);
-  const { values } = decodeFieldValues(field);
-  return { grid, values };
+
+  const result: WaveFields = { height: null, period: null, direction: null };
+  for (const message of splitMessages(bytes)) {
+    for (const field of parseFields(message)) {
+      if (field.discipline !== 10) continue;
+      const product = parseProduct(field.section4);
+      if (product.parameterCategory !== 0) continue;
+      let target: keyof WaveFields | null = null;
+      if (product.parameterNumber === 3) target = "height";       // HTSGW
+      else if (product.parameterNumber === 11) target = "period"; // PERPW
+      else if (product.parameterNumber === 10) target = "direction"; // DIRPW
+      if (!target || result[target]) continue;
+      const grid = parseGrid(field.section3);
+      const { values } = decodeFieldValues(field);
+      result[target] = { grid, values };
+    }
+  }
+
+  if (!result.height) throw new Error("Downloaded GFS Wave GRIB2 did not contain HTSGW.");
+  return result;
 }
 
-function sampleHeightMeters(
-  grid: ReturnType<typeof parseGrid>,
-  values: Float64Array | number[],
-  point: Point,
-) {
-  const offsets = [
-    [0, 0],
-    [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25],
-    [0.25, 0.25], [0.25, -0.25], [-0.25, 0.25], [-0.25, -0.25],
-    [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5],
-  ];
+const OFFSETS = [
+  [0, 0],
+  [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25],
+  [0.25, 0.25], [0.25, -0.25], [-0.25, 0.25], [-0.25, -0.25],
+  [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5],
+] as const;
 
+function sampleField(
+  field: DecodedField | null,
+  point: Point,
+  valid: (value: number) => boolean,
+) {
+  if (!field) return null;
   let best: { value: number; distanceNm: number } | null = null;
-  for (const [dLat, dLon] of offsets) {
-    const sample = nearestGridpoint(grid, point.lat + dLat, point.lon + dLon);
-    const value = Number(values[sample.index]);
-    // GRIB decoders can expose packed missing-value sentinels (commonly ~9999/10000)
-    // as finite numbers. Reject anything outside a physically credible HTSGW range.
-    if (!Number.isFinite(value) || value < 0 || value > MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M) continue;
+  for (const [dLat, dLon] of OFFSETS) {
+    const sample = nearestGridpoint(field.grid, point.lat + dLat, point.lon + dLon);
+    const value = Number(field.values[sample.index]);
+    if (!Number.isFinite(value) || !valid(value)) continue;
     const distanceNm = nmBetween(point.lat, point.lon, sample.latitude, sample.longitude);
     if (distanceNm > 35) continue;
     if (!best || distanceNm < best.distanceNm) best = { value, distanceNm };
@@ -267,9 +290,9 @@ export async function POST(request: Request) {
     for (const validAt of validTimes) {
       const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
       const forecastHour = Math.max(0, Math.min(120, rawHour));
-      let heightField: Awaited<ReturnType<typeof fetchHeightField>> | null = null;
+      let waveFields: WaveFields | null = null;
       try {
-        heightField = await fetchHeightField(run, forecastHour, bounds);
+        waveFields = await fetchWaveFields(run, forecastHour, bounds);
       } catch {
         gribFailures += 1;
       }
@@ -277,19 +300,22 @@ export async function POST(request: Request) {
       const localFrame = nearestNoaaFrame(noaaFrames, validAt);
       const resultPoints = points.map((point): WavePoint => {
         const local = nearestNoaaPoint(localFrame, point);
-        const gribSample = heightField ? sampleHeightMeters(heightField.grid, heightField.values, point) : null;
+        const height = sampleField(waveFields?.height ?? null, point, (value) => value >= 0 && value <= MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M);
+        const period = sampleField(waveFields?.period ?? null, point, (value) => value > 0 && value <= MAX_VALID_WAVE_PERIOD_SEC);
+        const direction = sampleField(waveFields?.direction ?? null, point, (value) => value >= 0 && value <= 360);
 
-        if (gribSample) {
+        if (height) {
+          const distanceLabel = height.distanceNm <= 1
+            ? "exact-grid sample"
+            : `nearest-water sample (${height.distanceNm.toFixed(1)} nm)`;
           return {
             lat: point.lat,
             lon: point.lon,
             distanceNm: point.distanceNm,
-            waveHeightFt: rounded(gribSample.value * M_TO_FT, 1),
-            wavePeriodSec: rounded(local?.point.wavePeriodSec ?? null, 0),
-            waveDirectionDeg: null,
-            source: gribSample.distanceNm <= 1
-              ? `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} exact-grid sample`
-              : `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} nearest-water sample (${gribSample.distanceNm.toFixed(1)} nm)`,
+            waveHeightFt: rounded(height.value * M_TO_FT, 1),
+            wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
+            waveDirectionDeg: rounded(direction?.value ?? null, 0),
+            source: `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} ${distanceLabel}`,
           };
         }
 
@@ -300,7 +326,7 @@ export async function POST(request: Request) {
             distanceNm: point.distanceNm,
             waveHeightFt: local.point.waveHeightFt,
             wavePeriodSec: local.point.wavePeriodSec,
-            waveDirectionDeg: null,
+            waveDirectionDeg: rounded(direction?.value ?? null, 0),
             source: `NOAA/NWS marine grid fallback (${local.distanceNm.toFixed(1)} nm source distance)`,
           };
         }
@@ -310,8 +336,8 @@ export async function POST(request: Request) {
           lon: point.lon,
           distanceNm: point.distanceNm,
           waveHeightFt: null,
-          wavePeriodSec: local?.point.wavePeriodSec ?? null,
-          waveDirectionDeg: null,
+          wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
+          waveDirectionDeg: rounded(direction?.value ?? null, 0),
           source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
         };
       });
@@ -320,18 +346,24 @@ export async function POST(request: Request) {
     }
 
     const populated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.waveHeightFt !== null).length, 0);
+    const periodPopulated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.wavePeriodSec !== null).length, 0);
+    const directionPopulated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.waveDirectionDeg !== null).length, 0);
     const total = frames.reduce((count, frame) => count + frame.points.length, 0);
 
     return NextResponse.json({
       provider: "NOAA / NCEP GFS Wave GRIB2",
-      product: "GFS Wave 0.25° significant wave height with NWS marine-grid fallback",
+      product: "GFS Wave 0.25° HTSGW + PERPW + DIRPW with NWS marine-grid fallback",
       generatedAt: new Date().toISOString(),
       modelRun: run.cycleTime.toISOString(),
       modelCycle: `${run.date} ${run.cycle}Z`,
       gribFailures,
       populatedPointCount: populated,
+      wavePeriodPointCount: periodPopulated,
+      waveDirectionPointCount: directionPopulated,
       totalPointCount: total,
       coveragePercent: total ? Math.round((populated / total) * 100) : 0,
+      periodCoveragePercent: total ? Math.round((periodPopulated / total) * 100) : 0,
+      directionCoveragePercent: total ? Math.round((directionPopulated / total) * 100) : 0,
       frames,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
