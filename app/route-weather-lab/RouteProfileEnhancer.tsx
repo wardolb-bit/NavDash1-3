@@ -75,7 +75,7 @@ function deconflictWaypointLabels(svg: SVGSVGElement) {
 
   if (groups.length < 2) return;
 
-  const labels = groups.map((group, index) => {
+  const labels = groups.map((group) => {
     group.style.display = "";
     const texts = group.querySelectorAll<SVGTextElement>(":scope > text");
     const line = group.querySelector<SVGLineElement>(":scope > line");
@@ -92,7 +92,7 @@ function deconflictWaypointLabels(svg: SVGSVGElement) {
       left = x - width;
       right = x;
     }
-    return { group, index, left, right };
+    return { group, left, right };
   }).filter((item) => Number.isFinite(item.left) && Number.isFinite(item.right));
 
   if (labels.length < 2) return;
@@ -291,8 +291,10 @@ function enhance() {
   if (vesselLine) {
     const x = Number(vesselLine.getAttribute("x1"));
     if (Number.isFinite(x)) {
-      enhancement.append(svgEl("rect", { x: x - 2, y: 4, width: 4, height: 120, rx: 2, fill: "#22d3ee", opacity: .24 }));
-      enhancement.append(svgEl("circle", { cx: x, cy: 8, r: 5, fill: "#22d3ee", stroke: "#f8fafc", "stroke-width": 1.5 }));
+      vesselLine.style.display = "none";
+      const vesselParent = vesselLine.parentElement;
+      const vesselPath = vesselParent?.querySelector<SVGPathElement>('path[fill="#22d3ee"]');
+      if (vesselPath) vesselPath.style.display = "none";
 
       let nearestIndex = 0;
       let nearestDx = Infinity;
@@ -311,30 +313,57 @@ function enhance() {
       const seaText = cells?.[5]?.textContent?.trim() || "--";
       const windText = cells?.[3]?.textContent?.trim() || "--";
       const readout = `${Math.round(approximateNm)} NM  •  ${seaText}  •  ${windText}`;
-      const width = Math.max(180, readout.length * 6.1 + 22);
-      const bx = Math.max(6, Math.min(994 - width, x - width / 2));
-      enhancement.append(svgEl("rect", {
+      const width = Math.max(220, Math.min(390, readout.length * 6.6 + 30));
+      const height = 34;
+      const bx = (1000 - width) / 2;
+      const by = 55;
+      const gapTop = by - 7;
+      const gapBottom = by + height + 7;
+
+      selectionOverlay.append(svgEl("line", {
+        x1: x, y1: 7, x2: x, y2: gapTop,
+        stroke: "#22d3ee", "stroke-width": 2.5, "stroke-dasharray": "5 4", opacity: .95,
+      }));
+      selectionOverlay.append(svgEl("line", {
+        x1: x, y1: gapBottom, x2: x, y2: 124,
+        stroke: "#22d3ee", "stroke-width": 2.5, "stroke-dasharray": "5 4", opacity: .95,
+      }));
+      selectionOverlay.append(svgEl("circle", {
+        cx: x, cy: 7, r: 5, fill: "#22d3ee", stroke: "#f8fafc", "stroke-width": 1.5,
+      }));
+
+      selectionOverlay.append(svgEl("rect", {
+        x: bx - 8,
+        y: by - 6,
+        width: width + 16,
+        height: height + 12,
+        rx: 8,
+        fill: "#050a0f",
+        "fill-opacity": 1,
+        stroke: "none",
+      }));
+      selectionOverlay.append(svgEl("rect", {
         x: bx,
-        y: 18,
+        y: by,
         width,
-        height: 25,
-        rx: 5,
+        height,
+        rx: 6,
         fill: "#03070b",
-        "fill-opacity": .97,
+        "fill-opacity": .98,
         stroke: "#22d3ee",
         "stroke-opacity": .9,
         "stroke-width": 1.4,
       }));
       const text = svgEl("text", {
-        x: bx + width / 2,
-        y: 35,
+        x: 500,
+        y: by + 22,
         "text-anchor": "middle",
         fill: "#dffaff",
-        "font-size": 12,
+        "font-size": 14,
         "font-weight": 900,
       });
       text.textContent = readout;
-      enhancement.append(text);
+      selectionOverlay.append(text);
     }
   }
 
