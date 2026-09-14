@@ -20,9 +20,15 @@ type NoaaPoint = {
   wavePeriodSec: number | null;
 };
 type NoaaFrame = { validAt: string; points: NoaaPoint[] };
-type NdfdSeries = { times: Date[]; values: Array<number | null> };
 
-const UA = "NavDash route wave fallback (wardmaritimegroup.com)";
+type ErddapRow = {
+  time: Date;
+  waveHeightFt: number | null;
+  wavePeriodSec: number | null;
+  waveDirectionDeg: number | null;
+};
+
+const ERDDAP_BASE = "https://erddap.aoml.noaa.gov/hdb/erddap/griddap";
 
 function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   const r = 3440.065;
@@ -34,123 +40,74 @@ function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function xmlDecode(value: string) {
-  return value.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+function to360(lon: number) {
+  const value = lon % 360;
+  return value < 0 ? value + 360 : value;
 }
 
-function attr(tag: string, name: string) {
-  const match = new RegExp(`${name}=["']([^"']+)["']`, "i").exec(tag);
-  return match ? xmlDecode(match[1]) : "";
+function rounded(value: number | null, digits = 1) {
+  return value === null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 }
 
-function valuesFromXml(block: string) {
-  const values: Array<number | null> = [];
-  const re = /<value\b[^>]*\/>|<value\b[^>]*>([\s\S]*?)<\/value>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(block))) {
-    const raw = typeof match[1] === "string" ? match[1].replace(/<[^>]+>/g, "").trim() : "";
-    const value = Number(raw);
-    values.push(raw !== "" && Number.isFinite(value) ? value : null);
+function parseErddapJson(json: any): ErddapRow[] {
+  const table = json?.table;
+  const columns: string[] = Array.isArray(table?.columnNames) ? table.columnNames : [];
+  const rows: any[][] = Array.isArray(table?.rows) ? table.rows : [];
+  const timeIndex = columns.indexOf("time");
+  const hIndex = columns.indexOf("Thgt");
+  const pIndex = columns.indexOf("Tper");
+  const dIndex = columns.indexOf("Tdir");
+  if (timeIndex < 0 || hIndex < 0) return [];
+
+  return rows.map((row) => {
+    const time = new Date(String(row[timeIndex]));
+    const h = Number(row[hIndex]);
+    const p = pIndex >= 0 ? Number(row[pIndex]) : NaN;
+    const d = dIndex >= 0 ? Number(row[dIndex]) : NaN;
+    return {
+      time,
+      waveHeightFt: Number.isFinite(h) ? h * 3.28084 : null,
+      wavePeriodSec: Number.isFinite(p) ? p : null,
+      waveDirectionDeg: Number.isFinite(d) ? d : null,
+    };
+  }).filter((row) => Number.isFinite(row.time.getTime()));
+}
+
+async function fetchGlobalWw3AtPoint(point: Point, validTimes: Date[]) {
+  if (!validTimes.length) return [] as ErddapRow[];
+  const datasetYear = validTimes[0].getUTCFullYear();
+  const dataset = `WaveWatch_${datasetYear}`;
+  const start = validTimes[0].toISOString();
+  const end = validTimes[validTimes.length - 1].toISOString();
+  const lon = to360(point.lon);
+  const axis = `[(${start}):1:(${end})][(${point.lat.toFixed(4)})][(${lon.toFixed(4)})]`;
+  const query = `Thgt${axis},Tper${axis},Tdir${axis}`;
+  const url = `${ERDDAP_BASE}/${dataset}.json?${query}`;
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "NavDash route wave coverage" },
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+    return parseErddapJson(await response.json());
+  } catch {
+    return [];
   }
-  return values;
 }
 
-function parseTimeLayouts(xml: string) {
-  const layouts = new Map<string, Date[]>();
-  const re = /<time-layout\b[^>]*>([\s\S]*?)<\/time-layout>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(xml))) {
-    const block = match[1];
-    const key = /<layout-key\b[^>]*>([\s\S]*?)<\/layout-key>/i.exec(block)?.[1]?.trim();
-    if (!key) continue;
-    const times: Date[] = [];
-    const timeRe = /<start-valid-time\b[^>]*>([\s\S]*?)<\/start-valid-time>/gi;
-    let timeMatch: RegExpExecArray | null;
-    while ((timeMatch = timeRe.exec(block))) {
-      const time = new Date(timeMatch[1].trim());
-      if (Number.isFinite(time.getTime())) times.push(time);
-    }
-    layouts.set(key, times);
-  }
-  return layouts;
-}
-
-function extractWaveSeries(parameters: string, layouts: Map<string, Date[]>): NdfdSeries | null {
-  const re = /<wave-height\b([^>]*)>([\s\S]*?)<\/wave-height>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(parameters))) {
-    const opening = `<wave-height${match[1]}>`;
-    const layoutKey = attr(opening, "time-layout");
-    const times = layouts.get(layoutKey) || [];
-    const values = valuesFromXml(match[2]);
-    if (times.length && values.length) return { times, values };
-  }
-  return null;
-}
-
-function nearestSeriesValue(series: NdfdSeries | null, target: Date) {
-  if (!series) return null;
-  let best: number | null = null;
+function nearestErddap(rows: ErddapRow[], target: Date) {
+  let best: ErddapRow | null = null;
   let bestDelta = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < series.times.length; i += 1) {
-    const value = series.values[i];
-    if (value === null || value === undefined) continue;
-    const delta = Math.abs(series.times[i].getTime() - target.getTime());
+  for (const row of rows) {
+    if (row.waveHeightFt === null) continue;
+    const delta = Math.abs(row.time.getTime() - target.getTime());
     if (delta < bestDelta) {
-      best = value;
+      best = row;
       bestDelta = delta;
     }
   }
-  return bestDelta <= 7 * 3600000 ? best : null;
-}
-
-async function sampleOceanicWave(points: Point[], validTimes: Date[]) {
-  const empty = points.map(() => validTimes.map(() => null as number | null));
-  if (!points.length || !validTimes.length) return empty;
-  try {
-    const params = new URLSearchParams();
-    params.set("listLatLon", points.map((point) => `${point.lat.toFixed(4)},${point.lon.toFixed(4)}`).join(" "));
-    params.set("product", "time-series");
-    params.set("begin", validTimes[0].toISOString());
-    params.set("end", validTimes[validTimes.length - 1].toISOString());
-    params.set("Unit", "e");
-    params.set("waveh", "waveh");
-    params.set("XMLformat", "DWML");
-
-    const response = await fetch(`https://digital.weather.gov/xml/sample_products/browser_interface/ndfdXMLclient.php?${params.toString()}`, {
-      headers: { "User-Agent": UA, Accept: "application/xml,text/xml" },
-      cache: "no-store",
-    });
-    if (!response.ok) return empty;
-    const xml = await response.text();
-    if (!/<dwml\b/i.test(xml)) return empty;
-
-    const layouts = parseTimeLayouts(xml);
-    const blocks = new Map<string, string>();
-    const paramRe = /<parameters\b([^>]*)>([\s\S]*?)<\/parameters>/gi;
-    let paramMatch: RegExpExecArray | null;
-    while ((paramMatch = paramRe.exec(xml))) {
-      const opening = `<parameters${paramMatch[1]}>`;
-      const locationKey = attr(opening, "applicable-location");
-      if (locationKey) blocks.set(locationKey, paramMatch[2]);
-    }
-
-    const locationKeys: string[] = [];
-    const locationRe = /<location\b[^>]*>([\s\S]*?)<\/location>/gi;
-    let locationMatch: RegExpExecArray | null;
-    while ((locationMatch = locationRe.exec(xml))) {
-      const key = /<location-key\b[^>]*>([\s\S]*?)<\/location-key>/i.exec(locationMatch[1])?.[1]?.trim();
-      if (key) locationKeys.push(key);
-    }
-
-    return points.map((_, index) => {
-      const block = blocks.get(locationKeys[index]) || Array.from(blocks.values())[index];
-      const wave = block ? extractWaveSeries(block, layouts) : null;
-      return validTimes.map((validAt) => nearestSeriesValue(wave, validAt));
-    });
-  } catch {
-    return empty;
-  }
+  return bestDelta <= 2 * 3600000 ? best : null;
 }
 
 export async function POST(request: Request) {
@@ -179,26 +136,26 @@ export async function POST(request: Request) {
     }
 
     const origin = new URL(request.url).origin;
-    const [noaaResponse, oceanicWave] = await Promise.all([
-      fetch(`${origin}/api/noaa-route-weather`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          waypoints: points.map((point, index) => ({
-            lat: point.lat,
-            lon: point.lon,
-            name: `Route sample ${index + 1}`,
-          })),
-        }),
-        cache: "no-store",
+    const noaaResponsePromise = fetch(`${origin}/api/noaa-route-weather`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        waypoints: points.map((point, index) => ({
+          lat: point.lat,
+          lon: point.lon,
+          name: `Route sample ${index + 1}`,
+        })),
       }),
-      sampleOceanicWave(points, validTimes),
-    ]);
+      cache: "no-store",
+    });
+
+    const ww3ByPointPromise = Promise.all(points.map((point) => fetchGlobalWw3AtPoint(point, validTimes)));
+    const [noaaResponse, ww3ByPoint] = await Promise.all([noaaResponsePromise, ww3ByPointPromise]);
 
     const noaaJson = await noaaResponse.json();
     const noaaFrames: NoaaFrame[] = noaaResponse.ok && Array.isArray(noaaJson?.frames) ? noaaJson.frames : [];
 
-    const frames: WaveFrame[] = validTimes.map((validAt, validIndex) => {
+    const frames: WaveFrame[] = validTimes.map((validAt) => {
       const targetTime = validAt.getTime();
       let frame = noaaFrames[0] || null;
       let frameDelta = frame ? Math.abs(new Date(frame.validAt).getTime() - targetTime) : Number.POSITIVE_INFINITY;
@@ -224,23 +181,39 @@ export async function POST(request: Request) {
           }
         }
 
-        const local = nearest && nearestNm <= 18 ? nearest : null;
-        const oceanic = oceanicWave[pointIndex]?.[validIndex] ?? null;
-        const waveHeightFt = local?.waveHeightFt ?? oceanic;
-        const wavePeriodSec = local?.wavePeriodSec ?? null;
+        if (nearest && nearestNm <= 18) {
+          return {
+            lat: point.lat,
+            lon: point.lon,
+            distanceNm: point.distanceNm,
+            waveHeightFt: nearest.waveHeightFt,
+            wavePeriodSec: nearest.wavePeriodSec,
+            waveDirectionDeg: null,
+            source: `NOAA/NWS route marine grid (${nearestNm.toFixed(1)} nm source distance)`,
+          };
+        }
+
+        const ww3 = nearestErddap(ww3ByPoint[pointIndex] || [], validAt);
+        if (ww3) {
+          return {
+            lat: point.lat,
+            lon: point.lon,
+            distanceNm: point.distanceNm,
+            waveHeightFt: rounded(ww3.waveHeightFt, 1),
+            wavePeriodSec: rounded(ww3.wavePeriodSec, 0),
+            waveDirectionDeg: rounded(ww3.waveDirectionDeg, 0),
+            source: "NOAA ERDDAP / PacIOOS global WaveWatch III",
+          };
+        }
 
         return {
           lat: point.lat,
           lon: point.lon,
           distanceNm: point.distanceNm,
-          waveHeightFt,
-          wavePeriodSec,
+          waveHeightFt: null,
+          wavePeriodSec: null,
           waveDirectionDeg: null,
-          source: local
-            ? `NOAA/NWS route marine grid (${nearestNm.toFixed(1)} nm source distance)`
-            : oceanic !== null
-              ? "NOAA/NDFD Oceanic wave grid (exact route sample)"
-              : "NOAA wave guidance unavailable at this sample",
+          source: "No NOAA/NWS or NOAA-hosted WW3 wave value available",
         };
       });
 
@@ -251,17 +224,20 @@ export async function POST(request: Request) {
       (count, frame) => count + frame.points.filter((point) => point.waveHeightFt !== null).length,
       0,
     );
+    const total = frames.reduce((count, frame) => count + frame.points.length, 0);
 
     return NextResponse.json({
-      provider: "NOAA / National Weather Service",
-      product: "NWS route marine waves + NDFD Oceanic gap fill",
+      provider: "NOAA / NWS + NOAA ERDDAP",
+      product: "NWS marine grids with global WaveWatch III fallback",
       generatedAt: new Date().toISOString(),
       populatedPointCount: populated,
+      totalPointCount: total,
+      coveragePercent: total ? Math.round((populated / total) * 100) : 0,
       frames,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "NOAA/NWS route wave sampling failed." },
+      { error: error instanceof Error ? error.message : "Route wave sampling failed." },
       { status: 500 },
     );
   }
