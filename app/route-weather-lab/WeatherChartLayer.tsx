@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect } from "react";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 
-const NOAA_CHART_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/WMSServer";
+const NOAA_CHART_EXPORT = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/NOAAChartDisplay/MapServer/exts/MaritimeChartService/MapServer/export";
 const MAP_ID = "route-weather-lab-map";
 
 type OwnShip = {
@@ -82,9 +82,7 @@ export default function WeatherChartLayer() {
 
       L.Map.addInitHook(function (this: any) {
         const container = this.getContainer?.();
-        if (container?.id === MAP_ID) {
-          container.__routeWeatherLeafletMap = this;
-        }
+        if (container?.id === MAP_ID) container.__routeWeatherLeafletMap = this;
       });
       (L.Map as any).__navdashRouteWeatherHookInstalled = true;
     })();
@@ -97,13 +95,75 @@ export default function WeatherChartLayer() {
     let pollTimer = 0;
     let reconnectTimer = 0;
     let staleTimer = 0;
+    let chartRefreshTimer = 0;
     let socket: WebSocket | null = null;
     let map: any = null;
-    let chartLayer: any = null;
+    let chartOverlay: any = null;
     let vesselLayer: any = null;
     let vesselMarker: any = null;
     let lastOwnShip: OwnShip | null = null;
     let baseLayersRemoved = false;
+
+    const removeFallbackTiles = async () => {
+      if (!map || baseLayersRemoved) return;
+      const leafletModule = await import("leaflet");
+      if (disposed) return;
+      const L: any = leafletModule.default || leafletModule;
+      const remove: any[] = [];
+      map.eachLayer((layer: any) => {
+        if (layer instanceof L.TileLayer) remove.push(layer);
+      });
+      remove.forEach((layer) => {
+        try { map.removeLayer(layer); } catch {}
+      });
+      baseLayersRemoved = true;
+    };
+
+    const refreshChart = async () => {
+      if (disposed || !map) return;
+      const leafletModule = await import("leaflet");
+      if (disposed) return;
+      const L: any = leafletModule.default || leafletModule;
+      const bounds = map.getBounds();
+      const size = map.getSize();
+      const width = Math.max(256, Math.min(2048, Math.round(size.x)));
+      const height = Math.max(256, Math.min(2048, Math.round(size.y)));
+      const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(",");
+      const params = new URLSearchParams({
+        bbox,
+        size: `${width},${height}`,
+        dpi: "96",
+        transparent: "false",
+        layers: "show:0,1,2,3,4,5,6,7",
+        f: "image",
+      });
+      const url = `${NOAA_CHART_EXPORT}?${params.toString()}`;
+
+      const nextOverlay = L.imageOverlay(url, bounds, {
+        opacity: 1,
+        interactive: false,
+        pane: "route-weather-noaa-enc",
+        crossOrigin: false,
+      });
+
+      nextOverlay.once("load", () => {
+        if (disposed || !map) return;
+        removeFallbackTiles();
+        if (chartOverlay && chartOverlay !== nextOverlay) {
+          try { map.removeLayer(chartOverlay); } catch {}
+        }
+        chartOverlay = nextOverlay;
+      });
+      nextOverlay.once("error", () => {
+        try { map.removeLayer(nextOverlay); } catch {}
+      });
+      nextOverlay.addTo(map);
+    };
+
+    const scheduleChartRefresh = () => {
+      window.clearTimeout(chartRefreshTimer);
+      chartRefreshTimer = window.setTimeout(refreshChart, 180);
+    };
 
     const install = async () => {
       if (disposed) return;
@@ -113,7 +173,7 @@ export default function WeatherChartLayer() {
         pollTimer = window.setTimeout(install, 100);
         return;
       }
-      if (map === nextMap && chartLayer) return;
+      if (map === nextMap) return;
 
       const leafletModule = await import("leaflet");
       if (disposed) return;
@@ -130,33 +190,9 @@ export default function WeatherChartLayer() {
         pane.style.zIndex = "690";
       }
 
-      chartLayer = L.tileLayer.wms(NOAA_CHART_WMS, {
-        layers: "0,1,2,3,4,5,6,7",
-        format: "image/png",
-        transparent: false,
-        version: "1.3.0",
-        uppercase: true,
-        opacity: 1,
-        pane: "route-weather-noaa-enc",
-        maxZoom: 18,
-        updateWhenIdle: true,
-        keepBuffer: 2,
-      });
-
-      chartLayer.once("tileload", () => {
-        if (disposed || baseLayersRemoved || !map) return;
-        baseLayersRemoved = true;
-        const remove: any[] = [];
-        map.eachLayer((layer: any) => {
-          if (layer !== chartLayer && layer instanceof L.TileLayer) remove.push(layer);
-        });
-        remove.forEach((layer) => {
-          try { map.removeLayer(layer); } catch {}
-        });
-      });
-
-      chartLayer.addTo(map);
       vesselLayer = L.layerGroup([], { pane: "route-weather-ownship" } as any).addTo(map);
+      map.on("moveend zoomend resize", scheduleChartRefresh);
+      refreshChart();
     };
 
     const drawOwnShip = async (position: OwnShip | null) => {
@@ -227,9 +263,11 @@ export default function WeatherChartLayer() {
       disposed = true;
       window.clearTimeout(pollTimer);
       window.clearTimeout(reconnectTimer);
+      window.clearTimeout(chartRefreshTimer);
       window.clearInterval(staleTimer);
       try { socket?.close(); } catch {}
-      try { if (chartLayer && map) map.removeLayer(chartLayer); } catch {}
+      try { if (map) map.off("moveend zoomend resize", scheduleChartRefresh); } catch {}
+      try { if (chartOverlay && map) map.removeLayer(chartOverlay); } catch {}
       try { if (vesselLayer && map) map.removeLayer(vesselLayer); } catch {}
     };
   }, []);
