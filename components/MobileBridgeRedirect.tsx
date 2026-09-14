@@ -12,7 +12,7 @@ export function MobileBridgeRedirect() {
     } catch {}
 
     const narrow = window.matchMedia(`(max-width: ${MOBILE_MAX_WIDTH}px)`).matches;
-    if (narrow) window.location.replace("/mobile");
+    if (narrow) window.location.replace("/");
   }, []);
 
   return null;
