@@ -1,17 +1,32 @@
 "use client";
 
 import { useEffect } from "react";
+import { useBridgeTheme } from "../lib/useBridgeTheme";
 
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
 const NOAA_DIRECT_FRAGMENT = "gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline";
+const NAVDASH_ENC_FRAGMENT = "/api/noaa-charts/wms";
+
+function s52DisplayParams(colorScheme: 1 | 3) {
+  return JSON.stringify({
+    ECDISParameters: {
+      version: "10.9",
+      DynamicParameters: {
+        Parameter: [{ name: "ColorScheme", value: colorScheme }],
+      },
+    },
+  });
+}
 
 /**
- * Keeps the current NavDash map intact while restoring the cached NOAA ENC
- * service path. NOAA's Maritime Chart Service selects best-scale ENC content
- * as the requested map scale changes. Optional diagnostic/quality overlays
- * remain off to avoid the large U/triangle symbology.
+ * Keeps the current NavDash map intact while rendering NOAA ENC through the
+ * Maritime Chart Service export path. Day and Bridge Night request the NOAA
+ * S-52 day/night portrayals directly; route, AIS, tools and overlays are not
+ * changed here.
  */
 export function EncScaleAwareLayer() {
+  const { nightMode } = useBridgeTheme();
+
   useEffect(() => {
     let cancelled = false;
     let timer = 0;
@@ -29,26 +44,21 @@ export function EncScaleAwareLayer() {
       const L = await import("leaflet");
       if (cancelled) return;
 
-      // Remove only the direct NOAA ENC WMS layer created by the base map.
+      // Remove only NOAA ENC layers. Leave OSM, OpenSeaMap and NavDash overlays alone.
       for (const layer of Object.values(map._layers || {}) as any[]) {
         const url = String(layer?._url || "");
-        if (url.includes(NOAA_DIRECT_FRAGMENT)) {
+        if (url.includes(NOAA_DIRECT_FRAGMENT) || url.includes(NAVDASH_ENC_FRAGMENT)) {
           try { map.removeLayer(layer); } catch {}
         }
       }
 
-      // Avoid adding a second cached ENC layer if this effect is re-run.
-      const existing = Object.values(map._layers || {}).find((layer: any) =>
-        String(layer?._url || "").includes("/api/noaa-charts/wms"),
-      );
-      if (existing) return;
-
-      L.tileLayer.wms("/api/noaa-charts/wms", {
-        layers: "0,1,2,3,4,5,6,7",
+      L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
+        layers: "1,2,3,4,5,6,7",
         format: "image/png",
-        transparent: true,
+        transparent: false,
         version: "1.1.1",
-        opacity: 0.9,
+        display_params: s52DisplayParams(nightMode ? 3 : 1),
+        opacity: 1,
         tileSize: 512,
         updateWhenZooming: false,
         keepBuffer: 2,
@@ -62,7 +72,7 @@ export function EncScaleAwareLayer() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [nightMode]);
 
   return null;
 }
