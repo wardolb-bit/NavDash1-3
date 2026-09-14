@@ -19,7 +19,6 @@ type WeatherResponse = { frames?: Frame[]; product?: string; provider?: string }
 type WaveResponse = { frames?: Array<{ validAt: string; points: ForecastPoint[] }> };
 
 const WX_ORIGIN = "https://wx.wardlab.dev";
-const ENCOUNTER_SPEED_KT = 9;
 
 function toRad(value: number) {
   return (value * Math.PI) / 180;
@@ -124,7 +123,7 @@ function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherRes
   };
 }
 
-function pickHoverSample(weather: WeatherResponse, routeDistanceNm: number) {
+function pickHoverSample(weather: WeatherResponse, routeDistanceNm: number, departureMs: number, speedKt: number) {
   const frames = weather.frames || [];
   if (!frames.length || !frames[0]?.points?.length) return null;
 
@@ -140,9 +139,7 @@ function pickHoverSample(weather: WeatherResponse, routeDistanceNm: number) {
   }
 
   const distance = Number(frames[0].points[sampleIndex]?.distanceNm || 0);
-  const departure = new Date();
-  departure.setMinutes(0, 0, 0);
-  const etaMs = departure.getTime() + (distance / ENCOUNTER_SPEED_KT) * 3600000;
+  const etaMs = departureMs + (distance / speedKt) * 3600000;
 
   let selectedFrame = frames[0];
   let bestDelta = Math.abs(new Date(selectedFrame.validAt).getTime() - etaMs);
@@ -173,8 +170,13 @@ export async function POST(request: NextRequest) {
 
     const shipLat = Number(body?.shipLat);
     const shipLon = Number(body?.shipLon);
+    const speedKt = Number(body?.speedKt);
+    const departureMs = new Date(String(body?.departure || "")).getTime();
     if (!Number.isFinite(shipLat) || !Number.isFinite(shipLon)) {
       return NextResponse.json({ error: "Ownship position unavailable" }, { status: 400 });
+    }
+    if (!Number.isFinite(speedKt) || speedKt <= 0 || !Number.isFinite(departureMs)) {
+      return NextResponse.json({ error: "Shared weather planning state unavailable" }, { status: 409 });
     }
 
     const windResponse = await fetch(`${WX_ORIGIN}/api/noaa-route-weather`, {
@@ -208,7 +210,7 @@ export async function POST(request: NextRequest) {
     }
 
     const ownshipDistanceNm = shipDistanceAlongRoute(route, shipLat, shipLon);
-    const selected = pickHoverSample(merged, ownshipDistanceNm);
+    const selected = pickHoverSample(merged, ownshipDistanceNm, departureMs, speedKt);
     if (!selected) return NextResponse.json({ error: "No weather sample for ownship route segment" }, { status: 502 });
 
     const selectedPoint = selected.point;
@@ -229,6 +231,8 @@ export async function POST(request: NextRequest) {
       source: "NavDash route hover sample",
       validAt: selectedFrame.validAt,
       distanceNm: selectedPoint.distanceNm,
+      departure: new Date(departureMs).toISOString(),
+      speedKt,
       nws: {
         shortForecast: `${windText} • ${seaText} • ${selectedPoint.distanceNm.toFixed(0)} NM along route • Valid ${validText}`,
         forecastWindKt: selectedPoint.windKt,
