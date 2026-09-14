@@ -106,11 +106,8 @@ function deconflictWaypointLabels(svg: SVGSVGElement) {
     const item = labels[i];
     const clearOfPrevious = item.left > previousRight + padding;
     const clearOfLast = item.right < last.left - padding;
-    if (clearOfPrevious && clearOfLast) {
-      previousRight = item.right;
-    } else {
-      item.group.style.display = "none";
-    }
+    if (clearOfPrevious && clearOfLast) previousRight = item.right;
+    else item.group.style.display = "none";
   }
 
   first.group.style.display = "";
@@ -134,10 +131,12 @@ function enhance() {
       x: Number(circles[0].getAttribute("cx")),
       seaY: Number(circles[0].getAttribute("cy")),
       windY: Number(circles[1].getAttribute("cy")),
+      selected: Number(circles[0].getAttribute("r")) >= 7 || Number(circles[0].getAttribute("stroke-width")) >= 2,
     };
   }).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.seaY) && Number.isFinite(p.windY));
   if (samples.length < 2) return;
 
+  const selectedIndex = samples.findIndex((p) => p.selected);
   const enhancement = svgEl("g", { class: "route-profile-enhancements", "pointer-events": "none" }) as SVGGElement;
   const defs = svgEl("defs");
 
@@ -181,10 +180,13 @@ function enhance() {
       const cells = tableRows[index]?.querySelectorAll<HTMLTableCellElement>("td");
       if (!cells || cells.length < 8) return;
 
+      const isSelected = selectedIndex === index;
+      const dimmed = selectedIndex >= 0 && !isSelected;
+
       const windDir = parseDirection(cells[3]?.textContent || "");
-      if (windDir !== null) {
+      if (windDir !== null && !isSelected) {
         const arrowY = Math.max(64, point.windY - 28);
-        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${windDir + 180})` });
+        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${windDir + 180})`, opacity: dimmed ? .32 : .95 });
         arrow.append(
           svgEl("line", { x1: -9, y1: 0, x2: 9, y2: 0, stroke: "#67e8f9", "stroke-width": 2.2, "stroke-linecap": "round" }),
           svgEl("path", { d: "M 9 0 L 3 -4.5 M 9 0 L 3 4.5", fill: "none", stroke: "#67e8f9", "stroke-width": 2.2, "stroke-linecap": "round" })
@@ -193,9 +195,9 @@ function enhance() {
       }
 
       const waveDir = parseDirection(cells[7]?.textContent || "");
-      if (waveDir !== null) {
+      if (waveDir !== null && !isSelected) {
         const arrowY = Math.max(12, point.seaY - 34);
-        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${waveDir + 180})`, opacity: .95 });
+        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${waveDir + 180})`, opacity: dimmed ? .32 : .95 });
         arrow.append(
           svgEl("line", { x1: -7, y1: 0, x2: 7, y2: 0, stroke: "#f1d56b", "stroke-width": 1.8, "stroke-linecap": "round" }),
           svgEl("path", { d: "M 7 0 L 2 -3.5 M 7 0 L 2 3.5", fill: "none", stroke: "#f1d56b", "stroke-width": 1.8, "stroke-linecap": "round" })
