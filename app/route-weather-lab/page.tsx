@@ -585,7 +585,7 @@ export default function RouteWeatherLabPage() {
           )}
 
           <div className="relative overflow-hidden border border-slate-800">
-            <div ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />
+            <div id="route-weather-lab-map" ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />
             {weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • arrows = wind flow • hover for details</div>}
           </div>
 
@@ -667,31 +667,33 @@ export default function RouteWeatherLabPage() {
             <div className="mt-2 text-4xl font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "NO WAVE DATA" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div>
             {maxSeas?.wavePeriodSec != null && <div className="mt-1 text-sm text-slate-300">{maxSeas.wavePeriodSec.toFixed(0)} s • {compass(maxSeas.waveDirectionDeg)}</div>}
             <div className="mt-2 text-[10px] font-bold text-slate-400">{occurrence(maxSeas) || "No route wave sample available."}</div>
-            {maxSeas?.waveSource && <div className="mt-1 text-[9px] text-slate-600">{maxSeas.waveSource}</div>}
           </section>
 
           <section className="border border-slate-700/50 bg-[#071019] p-3">
-            <div className="flex items-center justify-between"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">MAX WIND ALONG VOYAGE</div><span className="text-[9px] font-black text-emerald-300">ROUTE-SAMPLED</span></div>
-            <div className="mt-2 text-3xl font-black text-cyan-300">{maxWind?.windKt == null ? "NO WIND DATA" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div>
-            {maxGust?.gustKt != null && <div className="mt-1 text-sm text-slate-300">Max gust {maxGust.gustKt.toFixed(0)} kt</div>}
+            <div className="flex items-center justify-between"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">MAX WIND ALONG VOYAGE</div><span className="text-[9px] font-black text-cyan-300">NOAA</span></div>
+            <div className="mt-2 text-4xl font-black text-cyan-300">{maxWind?.windKt == null ? "NO WIND DATA" : `${maxWind.windKt.toFixed(0)} kt`}</div>
+            {maxWind?.windDirectionDeg != null && <div className="mt-1 text-sm text-slate-300">{compass(maxWind.windDirectionDeg)} • GUST {maxGust?.gustKt == null ? "--" : `${maxGust.gustKt.toFixed(0)} kt`}</div>}
             <div className="mt-2 text-[10px] font-bold text-slate-400">{occurrence(maxWind) || "No route wind sample available."}</div>
           </section>
 
-          <section className="border border-slate-700/50 bg-[#071019] p-3"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">LAYERS</div><div className="mt-2 flex gap-4 text-xs font-bold"><label><input type="checkbox" checked={showSeas} onChange={(e) => setShowSeas(e.target.checked)} className="mr-2" />Seas ribbon</label><label><input type="checkbox" checked={showWind} onChange={(e) => setShowWind(e.target.checked)} className="mr-2" />Wind arrows</label></div></section>
+          {weather && (
+            <section className="border border-slate-700/50 bg-[#071019] p-3">
+              <div className="mb-2 flex items-center justify-between"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">DISPLAY</div><div className="text-[9px] text-slate-500">{weather.coveredSampleCount}/{weather.sampleCount} wind coverage</div></div>
+              <div className="flex flex-wrap gap-2"><label className="flex items-center gap-2 border border-slate-700 bg-[#050a0f] px-2 py-2 text-[10px] font-black"><input type="checkbox" checked={showWind} onChange={(e) => setShowWind(e.target.checked)} /> WIND</label><label className="flex items-center gap-2 border border-slate-700 bg-[#050a0f] px-2 py-2 text-[10px] font-black"><input type="checkbox" checked={showSeas} onChange={(e) => setShowSeas(e.target.checked)} /> SEAS</label></div>
+            </section>
+          )}
 
-          <section className="border border-slate-700/50 bg-[#071019] p-3"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">DATA STATUS</div><div className="mt-2 text-xs leading-5 text-slate-300">{status}</div>{weather && <div className="mt-2 text-[10px] leading-4 text-slate-500">{weather.provider}<br/>{weather.product}<br/>Coverage {weather.coveredSampleCount}/{weather.sampleCount} route samples</div>}</section>
+          <section className="border border-slate-700/50 bg-[#071019] p-3">
+            <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">STATUS</div>
+            <div className="mt-2 text-[11px] leading-relaxed text-slate-300">{status}</div>
+          </section>
         </aside>
       </div>
 
-      {weather && (
+      {weather && displayedPoints.length > 0 && (
         <section className="border border-slate-700/50 bg-[#071019] p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs text-slate-400">Each row uses the forecast valid time nearest the vessel ETA at that route sample.</div></div><div className="text-[10px] font-black text-amber-300">FORECAST MATCH WINDOW: 0–24 HR</div></div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-xs">
-              <thead className="border-b border-slate-800 text-[9px] uppercase tracking-wider text-slate-500"><tr><th className="py-2">Dist</th><th>ETA</th><th>Forecast valid</th><th>Wind</th><th>Gust</th><th>Seas</th><th>Period</th><th>Wave dir</th><th>Sources</th></tr></thead>
-              <tbody>{encounter.map((p, i) => <tr key={`${p.lat}-${p.lon}-${i}`} className="border-b border-slate-900"><td className="py-2 font-mono">{p.distanceNm.toFixed(0)} NM</td><td>{formatWhen(p.eta)}</td><td>{formatWhen(p.validAt)} <span className="text-slate-600">({p.deltaHours.toFixed(1)}h)</span></td><td>{p.windKt === null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td>{p.gustKt === null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="font-black text-[#f1d56b]">{p.waveHeightFt === null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td>{p.wavePeriodSec === null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td>{p.waveDirectionDeg == null ? "--" : `${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°`}</td><td className="text-[10px] text-slate-500">{p.source}{p.waveSource ? ` / ${p.waveSource}` : ""}</td></tr>)}</tbody>
-            </table>
-          </div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs font-black text-slate-200">{mode === "encounter" ? "Conditions matched to vessel ETA at each sample" : `Snapshot valid ${selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}`}</div></div>{mode === "encounter" && <div className="text-[9px] text-slate-500">ETA match tolerance shown in VALID column</div>}</div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-[10px]"><thead className="border-b border-slate-800 text-slate-500"><tr><th className="p-2">NM</th><th className="p-2">ETA / VALID</th><th className="p-2">WIND</th><th className="p-2">GUST</th><th className="p-2">SEAS</th><th className="p-2">PERIOD</th><th className="p-2">WAVE DIR</th><th className="p-2">SOURCE</th></tr></thead><tbody>{displayedPoints.map((p, i) => { const enc = mode === "encounter" ? (p as EncounterPoint) : null; return <tr key={i} className={`border-b border-slate-900 ${focusedIndex === i ? "bg-cyan-400/10" : ""}`} onMouseEnter={() => setFocusedIndex(i)} onMouseLeave={() => setFocusedIndex(null)}><td className="p-2 font-black text-slate-200">{p.distanceNm.toFixed(0)}</td><td className="p-2 text-slate-400">{enc ? <><div>{formatWhen(enc.eta)}</div><div className="text-[8px] text-slate-600">valid {formatWhen(enc.validAt)} • Δ {enc.deltaHours.toFixed(1)}h</div></> : selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</td><td className="p-2 font-black text-cyan-200">{p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td className="p-2">{p.gustKt == null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="p-2 font-black" style={{ color: seaColor(p.waveHeightFt) }}>{p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td className="p-2">{p.wavePeriodSec == null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td className="p-2">{p.waveDirectionDeg == null ? "--" : `${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°`}</td><td className="p-2 text-[8px] text-slate-500">{p.waveSource ? `${p.source} • ${p.waveSource}` : p.source}</td></tr>; })}</tbody></table></div>
         </section>
       )}
     </main>
