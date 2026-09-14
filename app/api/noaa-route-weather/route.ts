@@ -162,20 +162,24 @@ export async function POST(request: Request) {
       .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
     if (route.length < 2) return NextResponse.json({ error: "Route requires at least two valid waypoints." }, { status: 400 });
 
+    const url = new URL(request.url);
+    const nwsOnly = url.searchParams.get("nwsOnly") === "1";
     const now = new Date();
     now.setUTCMinutes(0, 0, 0);
     const validTimes = TARGET_HOURS.map((hours) => new Date(now.getTime() + hours * 3600000));
     const samples = routeSamples(route);
-    const origin = new URL(request.url).origin;
+    const origin = url.origin;
 
     const [nwsResults, atmosResult] = await Promise.all([
       Promise.all(samples.map((point) => sampleNwsPoint(point, validTimes))),
-      fetch(`${origin}/api/gfs-atmos-route`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
-      }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
+      nwsOnly
+        ? Promise.resolve({ ok: false, json: null })
+        : fetch(`${origin}/api/gfs-atmos-route`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
+          }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
     ]);
 
     const atmos = atmosResult.ok ? atmosResult.json as AtmosResponse : null;
@@ -220,7 +224,9 @@ export async function POST(request: Request) {
       frames,
       note: usingGrib
         ? "GFS atmospheric GRIB2 is the primary route weather source; NWS point grids remain available for marine-wave fallback."
-        : "GFS atmospheric GRIB2 was unavailable; using available NWS point-grid data.",
+        : nwsOnly
+          ? "NWS point grids requested for marine-wave fallback."
+          : "GFS atmospheric GRIB2 was unavailable; using available NWS point-grid data.",
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA route weather failed." }, { status: 500 });
