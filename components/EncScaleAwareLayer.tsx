@@ -9,13 +9,13 @@ const NAVDASH_ENC_FRAGMENT = "/api/noaa-charts/wms";
 const BRIGHTNESS_STORAGE_KEY = "navdash-enc-brightness";
 const BRIGHTNESS_EVENT = "navdash-enc-brightness-change";
 
-function s52DisplayParams(colorScheme: 0 | 5) {
+function s52NightDisplayParams() {
   return JSON.stringify({
     ECDISParameters: {
       version: "10.9",
       DynamicParameters: {
         Parameter: [
-          { name: "ColorScheme", value: colorScheme },
+          { name: "ColorScheme", value: 5 },
           { name: "DisplayFrames", value: 2 },
           { name: "DisplayFrameText", value: 0 },
         ],
@@ -42,10 +42,9 @@ function applyBrightness(layer: any, value = readBrightness()) {
 }
 
 /**
- * Keeps the current NavDash map intact while rendering NOAA ENC through the
- * Maritime Chart Service export path. Day and Bridge Night request NOAA's
- * S-52 DAY/NIGHT portrayals directly; route, AIS, tools and overlays are not
- * changed here.
+ * Keeps the current NavDash map intact while splitting ENC portrayal by theme.
+ * Day mode uses the original transparent NOAA ENC overlay presentation.
+ * Bridge Night uses NOAA's S-52 NIGHT portrayal.
  */
 export function EncScaleAwareLayer() {
   const { nightMode } = useBridgeTheme();
@@ -56,6 +55,7 @@ export function EncScaleAwareLayer() {
     let chartLayer: any = null;
 
     const onBrightnessChange = (event: Event) => {
+      if (!nightMode) return;
       const value = Number((event as CustomEvent<number>).detail);
       applyBrightness(chartLayer, Number.isFinite(value) ? value : readBrightness());
     };
@@ -82,21 +82,35 @@ export function EncScaleAwareLayer() {
         }
       }
 
-      chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
-        layers: "1,2,3,4,5,6,7",
-        format: "image/png",
-        transparent: false,
-        version: "1.1.1",
-        display_params: s52DisplayParams(nightMode ? 5 : 0),
-        opacity: 1,
-        tileSize: 512,
-        updateWhenZooming: false,
-        keepBuffer: 2,
-        attribution: "NOAA Office of Coast Survey ENC Online",
-      } as any).addTo(map);
+      if (nightMode) {
+        chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
+          layers: "1,2,3,4,5,6,7",
+          format: "image/png",
+          transparent: false,
+          version: "1.1.1",
+          display_params: s52NightDisplayParams(),
+          opacity: 1,
+          tileSize: 512,
+          updateWhenZooming: false,
+          keepBuffer: 2,
+          attribution: "NOAA Office of Coast Survey ENC Online",
+        } as any).addTo(map);
 
-      applyBrightness(chartLayer);
-      chartLayer.on?.("load", () => applyBrightness(chartLayer));
+        applyBrightness(chartLayer);
+        chartLayer.on?.("load", () => applyBrightness(chartLayer));
+      } else {
+        chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
+          layers: "0,1,2,3,4,5,6,7",
+          format: "image/png",
+          transparent: true,
+          version: "1.1.1",
+          opacity: 0.9,
+          tileSize: 512,
+          updateWhenZooming: false,
+          keepBuffer: 2,
+          attribution: "NOAA Office of Coast Survey ENC Online",
+        } as any).addTo(map);
+      }
     };
 
     void attach();
