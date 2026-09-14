@@ -225,18 +225,19 @@ function enhance() {
         const distText = cells[0]?.textContent?.trim() || "--";
         const windText = cells[3]?.textContent?.trim() || "--";
         const seaText = cells[5]?.textContent?.trim() || "--";
-        const readout = `${distText}  •  ${seaText}  •  ${windText}`;
-        const width = Math.max(220, Math.min(390, readout.length * 6.6 + 30));
-        const height = 34;
+        const distanceLabel = distText === "--" ? "--" : `${distText} NM along route`;
+        const readout = `${distanceLabel}  •  ${seaText}  •  ${windText}`;
+        const width = Math.max(300, Math.min(540, readout.length * 7.2 + 48));
+        const height = 36;
         const bx = (1000 - width) / 2;
-        const by = 55;
+        const by = 54;
 
         selectionOverlay.append(svgEl("rect", {
-          x: bx - 8,
-          y: by - 6,
-          width: width + 16,
-          height: height + 12,
-          rx: 8,
+          x: bx - 10,
+          y: by - 7,
+          width: width + 20,
+          height: height + 14,
+          rx: 9,
           fill: "#050a0f",
           "fill-opacity": 1,
           stroke: "none",
@@ -246,7 +247,7 @@ function enhance() {
           y: by,
           width,
           height,
-          rx: 6,
+          rx: 7,
           fill: "#03070b",
           "fill-opacity": .98,
           stroke: "#94a3b8",
@@ -255,7 +256,7 @@ function enhance() {
         }));
         const text = svgEl("text", {
           x: 500,
-          y: by + 22,
+          y: by + 23,
           "text-anchor": "middle",
           fill: "#e2e8f0",
           "font-size": 14,
@@ -312,13 +313,13 @@ function enhance() {
       const cells = tableRows[nearestIndex]?.querySelectorAll<HTMLTableCellElement>("td");
       const seaText = cells?.[5]?.textContent?.trim() || "--";
       const windText = cells?.[3]?.textContent?.trim() || "--";
-      const readout = `${Math.round(approximateNm)} NM  •  ${seaText}  •  ${windText}`;
-      const width = Math.max(220, Math.min(390, readout.length * 6.6 + 30));
-      const height = 34;
+      const readout = `${Math.round(approximateNm)} NM along route  •  ${seaText}  •  ${windText}`;
+      const width = Math.max(300, Math.min(540, readout.length * 7.2 + 48));
+      const height = 36;
       const bx = (1000 - width) / 2;
-      const by = 55;
-      const gapTop = by - 7;
-      const gapBottom = by + height + 7;
+      const by = 54;
+      const gapTop = by - 8;
+      const gapBottom = by + height + 8;
 
       selectionOverlay.append(svgEl("line", {
         x1: x, y1: 7, x2: x, y2: gapTop,
@@ -333,11 +334,11 @@ function enhance() {
       }));
 
       selectionOverlay.append(svgEl("rect", {
-        x: bx - 8,
-        y: by - 6,
-        width: width + 16,
-        height: height + 12,
-        rx: 8,
+        x: bx - 10,
+        y: by - 7,
+        width: width + 20,
+        height: height + 14,
+        rx: 9,
         fill: "#050a0f",
         "fill-opacity": 1,
         stroke: "none",
@@ -347,7 +348,7 @@ function enhance() {
         y: by,
         width,
         height,
-        rx: 6,
+        rx: 7,
         fill: "#03070b",
         "fill-opacity": .98,
         stroke: "#22d3ee",
@@ -356,7 +357,7 @@ function enhance() {
       }));
       const text = svgEl("text", {
         x: 500,
-        y: by + 22,
+        y: by + 23,
         "text-anchor": "middle",
         fill: "#dffaff",
         "font-size": 14,
