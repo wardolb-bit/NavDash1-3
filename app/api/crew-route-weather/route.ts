@@ -19,6 +19,7 @@ type WeatherResponse = { frames?: Frame[]; product?: string; provider?: string }
 type WaveResponse = { frames?: Array<{ validAt: string; points: ForecastPoint[] }> };
 
 const WX_ORIGIN = "https://wx.wardlab.dev";
+const ENCOUNTER_SPEED_KT = 9;
 
 function toRad(value: number) {
   return (value * Math.PI) / 180;
@@ -34,11 +35,44 @@ function distanceNm(a: Waypoint, b: Waypoint) {
   return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function cumulativeDistanceToLegMidpoint(route: Waypoint[], activeIndex: number) {
+function cumulativeWaypointDistances(route: Waypoint[]) {
+  const out: number[] = [0];
   let total = 0;
-  for (let i = 1; i < activeIndex; i += 1) total += distanceNm(route[i - 1], route[i]);
-  if (activeIndex > 0 && activeIndex < route.length) total += distanceNm(route[activeIndex - 1], route[activeIndex]) / 2;
-  return total;
+  for (let i = 1; i < route.length; i += 1) {
+    total += distanceNm(route[i - 1], route[i]);
+    out.push(total);
+  }
+  return out;
+}
+
+function shipDistanceAlongRoute(route: Waypoint[], shipLat: number, shipLon: number) {
+  const cumulative = cumulativeWaypointDistances(route);
+  let best = { xte: Number.POSITIVE_INFINITY, distanceNm: 0 };
+
+  for (let i = 1; i < route.length; i += 1) {
+    const a = route[i - 1];
+    const b = route[i];
+    const refLat = (shipLat + a.lat + b.lat) / 3;
+    const refLon = (shipLon + a.lon + b.lon) / 3;
+    const cosLat = Math.cos(toRad(refLat));
+    const p = { x: (shipLon - refLon) * 60 * cosLat, y: (shipLat - refLat) * 60 };
+    const s = { x: (a.lon - refLon) * 60 * cosLat, y: (a.lat - refLat) * 60 };
+    const e = { x: (b.lon - refLon) * 60 * cosLat, y: (b.lat - refLat) * 60 };
+    const vx = e.x - s.x;
+    const vy = e.y - s.y;
+    const wx = p.x - s.x;
+    const wy = p.y - s.y;
+    const len2 = vx * vx + vy * vy;
+    const ratio = len2 > 0 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2)) : 0;
+    const dx = p.x - (s.x + ratio * vx);
+    const dy = p.y - (s.y + ratio * vy);
+    const xte = Math.sqrt(dx * dx + dy * dy);
+    const legNm = distanceNm(a, b);
+    const along = cumulative[i - 1] + legNm * ratio;
+    if (xte < best.xte) best = { xte, distanceNm: along };
+  }
+
+  return best.distanceNm;
 }
 
 function compass(deg: number | null | undefined) {
@@ -90,6 +124,40 @@ function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherRes
   };
 }
 
+function pickHoverSample(weather: WeatherResponse, routeDistanceNm: number) {
+  const frames = weather.frames || [];
+  if (!frames.length || !frames[0]?.points?.length) return null;
+
+  const sampleCount = frames[0].points.length;
+  let sampleIndex = Math.max(0, sampleCount - 1);
+  for (let i = 0; i < sampleCount - 1; i += 1) {
+    const a = Number(frames[0].points[i]?.distanceNm);
+    const b = Number(frames[0].points[i + 1]?.distanceNm);
+    if (routeDistanceNm >= a && routeDistanceNm < b) {
+      sampleIndex = i;
+      break;
+    }
+  }
+
+  const distance = Number(frames[0].points[sampleIndex]?.distanceNm || 0);
+  const departure = new Date();
+  departure.setMinutes(0, 0, 0);
+  const etaMs = departure.getTime() + (distance / ENCOUNTER_SPEED_KT) * 3600000;
+
+  let selectedFrame = frames[0];
+  let bestDelta = Math.abs(new Date(selectedFrame.validAt).getTime() - etaMs);
+  for (const frame of frames) {
+    const delta = Math.abs(new Date(frame.validAt).getTime() - etaMs);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      selectedFrame = frame;
+    }
+  }
+
+  const point = selectedFrame.points?.[sampleIndex];
+  return point ? { point, frame: selectedFrame } : null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -103,10 +171,11 @@ export async function POST(request: NextRequest) {
 
     if (route.length < 2) return NextResponse.json({ error: "Route unavailable" }, { status: 400 });
 
-    const rawActive = Number(body?.activeWaypointIndex);
-    const activeIndex = Number.isFinite(rawActive)
-      ? Math.max(1, Math.min(Math.round(rawActive), route.length - 1))
-      : 1;
+    const shipLat = Number(body?.shipLat);
+    const shipLon = Number(body?.shipLon);
+    if (!Number.isFinite(shipLat) || !Number.isFinite(shipLon)) {
+      return NextResponse.json({ error: "Ownship position unavailable" }, { status: 400 });
+    }
 
     const windResponse = await fetch(`${WX_ORIGIN}/api/noaa-route-weather`, {
       method: "POST",
@@ -134,40 +203,16 @@ export async function POST(request: NextRequest) {
         });
         if (waveResponse.ok) merged = mergeWave(windJson, (await waveResponse.json()) as WaveResponse);
       } catch {
-        // NOAA/NWS route weather remains the fallback if the wave endpoint is unavailable.
+        // Keep NOAA/NWS route weather if the wave overlay is unavailable.
       }
     }
 
-    const frames = merged.frames || [];
-    if (!frames.length) return NextResponse.json({ error: "No route weather frames" }, { status: 502 });
+    const ownshipDistanceNm = shipDistanceAlongRoute(route, shipLat, shipLon);
+    const selected = pickHoverSample(merged, ownshipDistanceNm);
+    if (!selected) return NextResponse.json({ error: "No weather sample for ownship route segment" }, { status: 502 });
 
-    const now = Date.now();
-    let selectedFrame = frames[0];
-    let frameDelta = Math.abs(new Date(selectedFrame.validAt).getTime() - now);
-    for (const frame of frames) {
-      const delta = Math.abs(new Date(frame.validAt).getTime() - now);
-      if (delta < frameDelta) {
-        frameDelta = delta;
-        selectedFrame = frame;
-      }
-    }
-
-    const targetDistance = cumulativeDistanceToLegMidpoint(route, activeIndex);
-    let selectedPoint = selectedFrame.points?.[0];
-    let pointDelta = Number.POSITIVE_INFINITY;
-    for (const point of selectedFrame.points || []) {
-      const delta = Math.abs(Number(point.distanceNm) - targetDistance);
-      if (delta < pointDelta) {
-        pointDelta = delta;
-        selectedPoint = point;
-      }
-    }
-
-    if (!selectedPoint) return NextResponse.json({ error: "No weather sample for active leg" }, { status: 502 });
-
-    const from = route[activeIndex - 1];
-    const to = route[activeIndex];
-    const legLabel = `${from?.name || `WP${activeIndex}`} to ${to?.name || `WP${activeIndex + 1}`}`;
+    const selectedPoint = selected.point;
+    const selectedFrame = selected.frame;
     const valid = new Date(selectedFrame.validAt);
     const validText = Number.isNaN(valid.getTime())
       ? selectedFrame.validAt
@@ -181,11 +226,11 @@ export async function POST(request: NextRequest) {
       : `Seas ${selectedPoint.waveHeightFt.toFixed(1)} ft${selectedPoint.wavePeriodSec == null ? "" : ` @ ${selectedPoint.wavePeriodSec.toFixed(0)} s`}${selectedPoint.waveDirectionDeg == null ? "" : ` ${compass(selectedPoint.waveDirectionDeg)}`}`;
 
     return NextResponse.json({
-      source: "NavDash route weather",
-      routeLeg: legLabel,
+      source: "NavDash route hover sample",
       validAt: selectedFrame.validAt,
+      distanceNm: selectedPoint.distanceNm,
       nws: {
-        shortForecast: `${legLabel} • ${windText} • ${seaText} • Valid ${validText}`,
+        shortForecast: `${windText} • ${seaText} • ${selectedPoint.distanceNm.toFixed(0)} NM along route • Valid ${validText}`,
         forecastWindKt: selectedPoint.windKt,
         alerts: [],
       },
@@ -196,7 +241,7 @@ export async function POST(request: NextRequest) {
       pacific: {
         summaryText: `${windText} • ${seaText}`,
         parsed: {
-          maxWindKt: selectedPoint.gustKt ?? selectedPoint.windKt,
+          maxWindKt: selectedPoint.windKt,
           maxSeasFt: selectedPoint.waveHeightFt,
           warnings: [],
         },
