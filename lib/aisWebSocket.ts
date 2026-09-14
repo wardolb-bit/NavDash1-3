@@ -9,7 +9,14 @@ function isLocalAisUrl(url: string) {
 
 function isLegacyAisUrl(url: string) {
   const normalized = url.trim().replace(/\/$/, "");
-  return normalized === LEGACY_WHEELHOUSE_AIS_WS_URL || normalized === LEGACY_SECURE_AIS_WS_URL;
+  if (normalized === LEGACY_WHEELHOUSE_AIS_WS_URL || normalized === LEGACY_SECURE_AIS_WS_URL) return true;
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.hostname.toLowerCase() === "ais.wardlab.dev";
+  } catch {
+    return /^wss?:\/\/ais\.wardlab\.dev(?::\d+)?(?:\/.*)?$/i.test(normalized);
+  }
 }
 
 export function getAisWebSocketUrl(defaultUrl = CLOUD_AIS_WS_URL) {
