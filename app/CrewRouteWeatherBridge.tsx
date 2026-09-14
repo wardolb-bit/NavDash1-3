@@ -21,13 +21,17 @@ export default function CrewRouteWeatherBridge() {
       if (path !== "/api/wx" || method !== "GET") return nativeFetch(input, init);
 
       try {
-        const routeResponse = await nativeFetch("/api/route-state", { cache: "no-store" });
+        const [routeResponse, planResponse] = await Promise.all([
+          nativeFetch("/api/route-state", { cache: "no-store" }),
+          nativeFetch("/api/weather-plan-state", { cache: "no-store" }),
+        ]);
         if (!routeResponse.ok) return nativeFetch(input, init);
         const route = await routeResponse.json();
         if (!route?.hasRoute || !Array.isArray(route?.waypoints) || route.waypoints.length < 2) {
           return nativeFetch(input, init);
         }
 
+        const plan = planResponse.ok ? await planResponse.json() : null;
         const shipLat = Number(url.searchParams.get("lat"));
         const shipLon = Number(url.searchParams.get("lon"));
 
@@ -37,15 +41,16 @@ export default function CrewRouteWeatherBridge() {
           cache: "no-store",
           body: JSON.stringify({
             waypoints: route.waypoints,
-            activeWaypointIndex: route.activeWaypointIndex,
             shipLat: Number.isFinite(shipLat) ? shipLat : null,
             shipLon: Number.isFinite(shipLon) ? shipLon : null,
+            departure: plan?.departure ?? null,
+            speedKt: plan?.speedKt ?? null,
           }),
         });
 
         if (weatherResponse.ok) return weatherResponse;
       } catch {
-        // Fall through to the legacy point-weather source if route weather is unavailable.
+        // Fall through to the legacy point-weather source if shared route weather is unavailable.
       }
 
       return nativeFetch(input, init);
