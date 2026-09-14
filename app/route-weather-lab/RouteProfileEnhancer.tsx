@@ -118,28 +118,6 @@ function enhance() {
   const svg = document.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
   if (!svg) return;
 
-  if (svg.dataset.profileBandTracking !== "1") {
-    svg.dataset.profileBandTracking = "1";
-    svg.addEventListener("pointerdown", (event) => {
-      const target = event.target;
-      if (!(target instanceof SVGElement)) return;
-      const group = target.closest<SVGGElement>('g[style*="cursor"]');
-      if (!group) return;
-      const circles = group.querySelectorAll<SVGCircleElement>("circle");
-      if (circles.length < 2) return;
-      const matrix = svg.getScreenCTM();
-      if (!matrix) return;
-      const point = svg.createSVGPoint();
-      point.x = event.clientX;
-      point.y = event.clientY;
-      const local = point.matrixTransform(matrix.inverse());
-      const seaY = Number(circles[0].getAttribute("cy"));
-      const windY = Number(circles[1].getAttribute("cy"));
-      if (!Number.isFinite(seaY) || !Number.isFinite(windY)) return;
-      svg.dataset.profileBand = Math.abs(local.y - windY) < Math.abs(local.y - seaY) ? "wind" : "sea";
-    });
-  }
-
   svg.querySelector("g.route-profile-enhancements")?.remove();
   deconflictWaypointLabels(svg);
 
@@ -240,47 +218,46 @@ function enhance() {
     });
 
     if (selectedIndex >= 0) {
-      const point = samples[selectedIndex];
       const cells = tableRows[selectedIndex]?.querySelectorAll<HTMLTableCellElement>("td");
-      if (point && cells && cells.length >= 6) {
+      if (cells && cells.length >= 6) {
         const distText = cells[0]?.textContent?.trim() || "--";
         const windText = cells[3]?.textContent?.trim() || "--";
         const seaText = cells[5]?.textContent?.trim() || "--";
         const readout = `${distText}  •  ${seaText}  •  ${windText}`;
-        const width = Math.max(190, Math.min(350, readout.length * 6.4 + 24));
-        const bx = Math.max(6, Math.min(994 - width, point.x - width / 2));
-        const selectedBand = svg.dataset.profileBand === "wind" ? "wind" : "sea";
-        const anchorY = selectedBand === "wind" ? point.windY : point.seaY;
-        const by = Math.max(2, anchorY - 34);
-        const bottom = by + 24;
-        const accent = selectedBand === "wind" ? "#67e8f9" : "#f1d56b";
-        enhancement.append(svgEl("line", {
-          x1: point.x,
-          y1: bottom,
-          x2: point.x,
-          y2: Math.max(bottom + 2, anchorY - 6),
-          stroke: accent,
-          "stroke-width": 1,
-          opacity: .8,
+        const width = Math.max(220, Math.min(390, readout.length * 6.6 + 30));
+        const height = 34;
+        const bx = (1000 - width) / 2;
+        const by = 55;
+
+        enhancement.append(svgEl("rect", {
+          x: bx - 8,
+          y: by - 6,
+          width: width + 16,
+          height: height + 12,
+          rx: 8,
+          fill: "#050a0f",
+          "fill-opacity": 1,
+          stroke: "none",
         }));
         enhancement.append(svgEl("rect", {
           x: bx,
           y: by,
           width,
-          height: 24,
-          rx: 5,
+          height,
+          rx: 6,
           fill: "#03070b",
-          "fill-opacity": .97,
-          stroke: accent,
-          "stroke-width": 1,
+          "fill-opacity": .98,
+          stroke: "#94a3b8",
+          "stroke-opacity": .85,
+          "stroke-width": 1.2,
         }));
         const text = svgEl("text", {
-          x: bx + width / 2,
-          y: by + 16,
+          x: 500,
+          y: by + 22,
           "text-anchor": "middle",
           fill: "#e2e8f0",
-          "font-size": 13,
-          "font-weight": 800,
+          "font-size": 14,
+          "font-weight": 850,
         });
         text.textContent = readout;
         enhancement.append(text);
