@@ -29,6 +29,16 @@ function spatialReference(searchParams: URLSearchParams) {
   return match?.[1] || "3857";
 }
 
+function arcgisSpatialReference(sr: string) {
+  const wkid = sr === "3857" ? 102100 : Number(sr) || 102100;
+  return JSON.stringify({ wkid });
+}
+
+function maritimeLayers(raw: string | null) {
+  const value = (raw || "1,2,3,4,5,6,7").trim();
+  return value.includes(":") ? value : `show:${value}`;
+}
+
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const operation = requestValue(params, "request");
@@ -43,10 +53,11 @@ export async function GET(request: NextRequest) {
 
   const width = requestValue(params, "width") || "256";
   const height = requestValue(params, "height") || "256";
-  const layers = requestValue(params, "layers") || "1,2,3,4,5,6,7";
+  const layers = maritimeLayers(requestValue(params, "layers"));
   const transparent = requestValue(params, "transparent") || "false";
   const displayParams = requestValue(params, "display_params");
   const sr = spatialReference(params);
+  const arcgisSr = arcgisSpatialReference(sr);
 
   const cacheIdentity = new URLSearchParams();
   cacheIdentity.set("bbox", bbox);
@@ -60,7 +71,7 @@ export async function GET(request: NextRequest) {
   const query = normalizedQuery(cacheIdentity);
   const utcDay = new Date().toISOString().slice(0, 10);
   const digest = createHash("sha256").update(query).digest("hex");
-  const cacheKey = `noaa/mcs-export-v1/${utcDay}/${digest}.png`;
+  const cacheKey = `noaa/mcs-export-v2/${utcDay}/${digest}.png`;
 
   try {
     const cached = await getR2Object(cacheKey);
@@ -83,13 +94,12 @@ export async function GET(request: NextRequest) {
 
     const upstream = new URL(NOAA_MCS_EXPORT);
     upstream.searchParams.set("bbox", bbox);
-    upstream.searchParams.set("bboxSR", sr);
-    upstream.searchParams.set("imageSR", sr);
+    upstream.searchParams.set("bboxSR", arcgisSr);
+    upstream.searchParams.set("imageSR", arcgisSr);
     upstream.searchParams.set("size", `${width},${height}`);
     upstream.searchParams.set("layers", layers);
     upstream.searchParams.set("transparent", transparent);
     upstream.searchParams.set("dpi", "96");
-    upstream.searchParams.set("forcecharts", "true");
     upstream.searchParams.set("f", "image");
     if (displayParams) upstream.searchParams.set("display_params", displayParams);
 
