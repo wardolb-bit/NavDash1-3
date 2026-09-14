@@ -55,6 +55,12 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           background-color: var(--nd-panel-alt) !important;
         }
 
+        /* Darker wind cyan for Day mode readability only. */
+        html[data-navdash-theme="day"] main aside > section:nth-child(3) [class*="text-cyan"],
+        html[data-navdash-theme="day"] main table [class*="text-cyan"] {
+          color: #007985 !important;
+        }
+
         /* OpsStatusStrip is injected after first paint and rebuilt every second with inline night colors.
            Override those inline colors at the host so the cards stay light after injection/re-render. */
         html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background:#050a0f"],
