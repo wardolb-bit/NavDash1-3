@@ -2,12 +2,16 @@
   "name": "wmg-nav-console-ais-marine",
   "version": "1.3.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start"
   },
   "dependencies": {
+    "@azohra/meteo.grib": "^0.1.4",
     "leaflet": "^1.9.4",
     "maplibre-gl": "^5.24.0",
     "next": "14.2.5",
