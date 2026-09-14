@@ -6,48 +6,31 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
   return (
     <>
       <style>{`
-        #route-weather-lab-map + * {}
-
-        /* Desktop: keep map/content left, voyage rail right, and let the native route profile span the full workspace below them. */
-        @media (min-width: 1280px) {
+        /* Keep the normal map + voyage rail layout. The route profile itself is allowed to
+           extend across the full page from the left page margin to the right page margin. */
+        @media (min-width: 900px) {
           main > div.mb-2.grid:has(#route-weather-lab-map) {
-            position: relative !important;
-            display: block !important;
+            overflow: visible !important;
           }
 
           main > div.mb-2.grid:has(#route-weather-lab-map) > section {
-            width: 100% !important;
-            min-width: 0 !important;
-          }
-
-          main > div.mb-2.grid:has(#route-weather-lab-map) > section > :not(:has(> svg[viewBox="0 0 1000 160"])) {
-            width: calc(100% - 388px) !important;
-            max-width: calc(100% - 388px) !important;
-            box-sizing: border-box !important;
+            overflow: visible !important;
           }
 
           main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) {
-            width: 100% !important;
-            max-width: none !important;
+            width: calc(100vw - 16px) !important;
+            max-width: calc(100vw - 16px) !important;
+            min-width: calc(100vw - 16px) !important;
             box-sizing: border-box !important;
             margin-left: 0 !important;
             margin-right: 0 !important;
             overflow: hidden !important;
           }
 
-          main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) svg {
+          main > div.mb-2.grid:has(#route-weather-lab-map) > section > div:has(> svg[viewBox="0 0 1000 160"]) svg[viewBox="0 0 1000 160"] {
             display: block !important;
             width: 100% !important;
             max-width: none !important;
-          }
-
-          main > div.mb-2.grid:has(#route-weather-lab-map) > aside {
-            position: absolute !important;
-            top: 0 !important;
-            right: 0 !important;
-            width: 380px !important;
-            max-width: 380px !important;
-            z-index: 2 !important;
           }
         }
 
