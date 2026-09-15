@@ -45,6 +45,24 @@ type WaveResponse = {
 };
 type EncounterPoint = ForecastPoint & { eta: Date; validAt: Date; deltaHours: number };
 
+const ENC_BRIGHTNESS_KEY = "navdash-enc-brightness";
+const ENC_BRIGHTNESS_MIN = 40;
+const ENC_BRIGHTNESS_MAX = 140;
+const ENC_BRIGHTNESS_STEP = 10;
+
+function clampEncBrightness(value: number) {
+  return Math.max(ENC_BRIGHTNESS_MIN, Math.min(ENC_BRIGHTNESS_MAX, Math.round(value / ENC_BRIGHTNESS_STEP) * ENC_BRIGHTNESS_STEP));
+}
+
+function readEncBrightness() {
+  try {
+    const stored = Number(window.localStorage.getItem(ENC_BRIGHTNESS_KEY));
+    return Number.isFinite(stored) ? clampEncBrightness(stored) : 100;
+  } catch {
+    return 100;
+  }
+}
+
 function nmBetween(a: Waypoint, b: Waypoint) {
   const r = 3440.065;
   const p1 = a.lat * Math.PI / 180;
@@ -237,6 +255,7 @@ export default function RouteWeatherLabPage() {
   useEffect(() => {
     let cancelled = false;
     let themeObserver: MutationObserver | null = null;
+    let brightnessMenu: HTMLDivElement | null = null;
 
     async function init() {
       if (!mapEl.current || mapRef.current) return;
@@ -258,7 +277,7 @@ export default function RouteWeatherLabPage() {
           DynamicParameters: {
             Parameter: [
               { name: "AreaSymbolizationType", value: 2 },
-              { name: "ColorScheme", value: night ? 2 : 0 },
+              { name: "ColorScheme", value: night ? 5 : 0 },
               { name: "DisplayCategory", value: "1,2,4" },
               { name: "DisplayDepthUnits", value: 1 },
               { name: "HonorScamin", value: 1 },
@@ -279,8 +298,82 @@ export default function RouteWeatherLabPage() {
         display_params: encDisplayParams(isNight()),
       } as any).addTo(map);
 
+      const applyBrightness = (value = readEncBrightness()) => {
+        const brightness = clampEncBrightness(value);
+        const container = encLayer.getContainer?.() as HTMLElement | undefined;
+        if (container) container.style.filter = `brightness(${brightness}%)`;
+      };
+
+      const closeBrightnessMenu = () => {
+        brightnessMenu?.remove();
+        brightnessMenu = null;
+      };
+
+      const adjustBrightness = (delta: number) => {
+        const next = clampEncBrightness(readEncBrightness() + delta);
+        try { window.localStorage.setItem(ENC_BRIGHTNESS_KEY, String(next)); } catch {}
+        applyBrightness(next);
+        window.dispatchEvent(new CustomEvent("navdash-enc-brightness-change", { detail: next }));
+        return next;
+      };
+
+      const openBrightnessMenu = (event: MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        closeBrightnessMenu();
+        if (!mapEl.current) return;
+
+        const day = document.documentElement.dataset.navdashTheme === "day" || document.documentElement.classList.contains("day-mode");
+        const menu = document.createElement("div");
+        menu.style.cssText = "position:absolute;z-index:1700;min-width:205px;padding:6px;border-radius:7px;box-shadow:0 10px 28px rgba(0,0,0,.34);user-select:none;-webkit-user-select:none";
+        menu.style.background = day ? "rgba(255,255,255,.98)" : "rgba(5,12,18,.98)";
+        menu.style.border = day ? "1px solid rgba(15,23,42,.22)" : "1px solid rgba(241,213,107,.38)";
+
+        const label = document.createElement("div");
+        label.style.cssText = "padding:7px 12px 5px;font:700 10px/1.2 system-ui,sans-serif;letter-spacing:.07em";
+        label.style.color = day ? "#586773" : "#91a0ad";
+        const syncLabel = () => { label.textContent = `CHART BRIGHTNESS  ${readEncBrightness()}%`; };
+        syncLabel();
+        menu.appendChild(label);
+
+        const addButton = (text: string, delta: number) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.textContent = text;
+          button.style.cssText = "display:flex;width:100%;align-items:center;border:0;background:transparent;padding:10px 12px;text-align:left;font:700 11px/1.2 system-ui,sans-serif;letter-spacing:.07em;cursor:pointer;border-radius:4px";
+          button.style.color = day ? "#17212b" : "#e7edf3";
+          button.addEventListener("mouseenter", () => { button.style.background = day ? "#f3f6f8" : "#15212c"; });
+          button.addEventListener("mouseleave", () => { button.style.background = "transparent"; });
+          button.addEventListener("click", (clickEvent) => {
+            clickEvent.preventDefault();
+            clickEvent.stopPropagation();
+            adjustBrightness(delta);
+            syncLabel();
+          });
+          menu.appendChild(button);
+        };
+
+        addButton("CHART DIMMER  −", -ENC_BRIGHTNESS_STEP);
+        addButton("CHART BRIGHTER  +", ENC_BRIGHTNESS_STEP);
+
+        const rect = mapEl.current.getBoundingClientRect();
+        mapEl.current.appendChild(menu);
+        const menuRect = menu.getBoundingClientRect();
+        const left = Math.max(6, Math.min(event.clientX - rect.left, rect.width - menuRect.width - 6));
+        const top = Math.max(6, Math.min(event.clientY - rect.top, rect.height - menuRect.height - 6));
+        menu.style.left = `${left}px`;
+        menu.style.top = `${top}px`;
+        brightnessMenu = menu;
+      };
+
+      encLayer.on("load", () => applyBrightness());
+      applyBrightness();
+      mapEl.current.addEventListener("contextmenu", openBrightnessMenu);
+      document.addEventListener("pointerdown", closeBrightnessMenu, true);
+
       const applyEncPalette = () => {
         encLayer.setParams({ display_params: encDisplayParams(isNight()) });
+        applyBrightness();
       };
       themeObserver = new MutationObserver(applyEncPalette);
       themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-navdash-theme"] });
@@ -288,12 +381,18 @@ export default function RouteWeatherLabPage() {
       routeLayerRef.current = L.layerGroup().addTo(map);
       weatherLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
+      (map as any).__routeWeatherCleanup = () => {
+        mapEl.current?.removeEventListener("contextmenu", openBrightnessMenu);
+        document.removeEventListener("pointerdown", closeBrightnessMenu, true);
+        closeBrightnessMenu();
+      };
       setTimeout(() => map.invalidateSize(), 100);
     }
     init();
     return () => {
       cancelled = true;
       themeObserver?.disconnect();
+      (mapRef.current as any)?.__routeWeatherCleanup?.();
       mapRef.current?.remove();
       mapRef.current = null;
     };
