@@ -1,0 +1,86 @@
+name: Build Shipboard Bridge
+
+on:
+  push:
+    branches:
+      - shipboard-bridge-v1
+    paths:
+      - 'shipboard-bridge/**'
+      - '.github/workflows/build-shipboard-bridge.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: shipboard-bridge
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: shipboard-bridge/package-lock.json
+
+      - name: Reassemble bridge source
+        shell: pwsh
+        run: |
+          $chunks = Get-ChildItem 'source.b64.*' | Sort-Object Name
+          if ($chunks.Count -lt 1) { throw 'No source chunks found.' }
+          $base64 = ($chunks | ForEach-Object { Get-Content $_.FullName -Raw }) -join ''
+          [IO.File]::WriteAllBytes('NavDash-Shipboard-Bridge.js', [Convert]::FromBase64String($base64))
+          Write-Host "Reassembled $((Get-Item 'NavDash-Shipboard-Bridge.js').Length) bytes"
+
+      - name: Install dependencies
+        shell: pwsh
+        run: npm install
+
+      - name: Bundle Cloudflare Tunnel client
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe' -OutFile 'cloudflared.exe'
+          if (-not (Test-Path 'cloudflared.exe')) { throw 'cloudflared download failed' }
+
+      - name: Syntax check
+        shell: pwsh
+        run: npm run check
+
+      - name: Build EXE
+        shell: pwsh
+        run: npm run build:exe
+
+      - name: Smoke test EXE
+        shell: pwsh
+        run: |
+          $env:NAVDASH_DATA_DIR = Join-Path $env:RUNNER_TEMP 'NavDash-Smoke-Test'
+          $process = Start-Process -FilePath '.\dist\NavDash-Shipboard-Bridge-v1.exe' -PassThru -WindowStyle Hidden
+          try {
+            $health = $null
+            for ($i = 0; $i -lt 15; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $health = Invoke-RestMethod -Uri 'http://127.0.0.1:8081/health' -TimeoutSec 2
+                if ($health) { break }
+              } catch {}
+            }
+            if (-not $health) { throw 'Bridge did not answer /health.' }
+            if ($health.app -ne 'NavDash Shipboard Bridge') { throw "Unexpected app identity: $($health.app)" }
+            if ($health.version -ne '1.0.0') { throw "Unexpected bridge version: $($health.version)" }
+            if ($process.HasExited) { throw "Bridge exited unexpectedly with code $($process.ExitCode)" }
+            Write-Host "Smoke test passed: $($health.app) v$($health.version)"
+          }
+          finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
+
+      - name: Upload Windows EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: NavDash-Shipboard-Bridge-v1-Windows
+          path: shipboard-bridge/dist/NavDash-Shipboard-Bridge-v1.exe
+          if-no-files-found: error
