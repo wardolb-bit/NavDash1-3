@@ -272,7 +272,13 @@ export default function RouteWeatherLabPage() {
       const map = L.map(mapEl.current, { attributionControl: false, zoomControl: true }).setView([20, 0], 3);
       const encPane = map.createPane("routeWeatherEnc");
       encPane.style.zIndex = "200";
-      const isNight = () => document.documentElement.dataset.navdashTheme !== "day" && !document.documentElement.classList.contains("day-mode");
+      const isNight = () => {
+        try {
+          return window.localStorage.getItem("navConsoleTheme") !== "day";
+        } catch {
+          return document.documentElement.dataset.navdashTheme !== "day";
+        }
+      };
       const encDisplayParams = () => JSON.stringify({
         ECDISParameters: {
           version: "10.9",
@@ -307,6 +313,12 @@ export default function RouteWeatherLabPage() {
         brightnessMenu = null;
       };
 
+      const onDocumentPointerDown = (event: PointerEvent) => {
+        if (!brightnessMenu) return;
+        if (event.target instanceof Node && brightnessMenu.contains(event.target)) return;
+        closeBrightnessMenu();
+      };
+
       const adjustBrightness = (delta: number) => {
         const next = clampEncBrightness(readEncBrightness() + delta);
         try { window.localStorage.setItem(ENC_BRIGHTNESS_KEY, String(next)); } catch {}
@@ -321,7 +333,7 @@ export default function RouteWeatherLabPage() {
         closeBrightnessMenu();
         if (!mapEl.current) return;
 
-        const day = document.documentElement.dataset.navdashTheme === "day" || document.documentElement.classList.contains("day-mode");
+        const day = !isNight();
         const menu = document.createElement("div");
         menu.style.cssText = "position:absolute;z-index:1700;min-width:205px;padding:6px;border-radius:7px;box-shadow:0 10px 28px rgba(0,0,0,.34);user-select:none;-webkit-user-select:none";
         menu.style.background = day ? "rgba(255,255,255,.98)" : "rgba(5,12,18,.98)";
@@ -367,7 +379,7 @@ export default function RouteWeatherLabPage() {
       encLayer.on("load", () => applyBrightness());
       applyBrightness();
       mapEl.current.addEventListener("contextmenu", openBrightnessMenu);
-      document.addEventListener("pointerdown", closeBrightnessMenu, true);
+      document.addEventListener("pointerdown", onDocumentPointerDown, true);
 
       const applyEncPalette = () => {
         const nextNight = isNight();
@@ -386,7 +398,7 @@ export default function RouteWeatherLabPage() {
       mapRef.current = map;
       (map as any).__routeWeatherCleanup = () => {
         mapEl.current?.removeEventListener("contextmenu", openBrightnessMenu);
-        document.removeEventListener("pointerdown", closeBrightnessMenu, true);
+        document.removeEventListener("pointerdown", onDocumentPointerDown, true);
         closeBrightnessMenu();
       };
       setTimeout(() => map.invalidateSize(), 100);
