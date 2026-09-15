@@ -151,7 +151,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       const routePoints = route?.waypoints?.map((wp) => [wp.lat, wp.lon] as [number, number]) || [];
       const routeGroup = L.layerGroup();
 
-      if (routePoints.length > 1) {
+      if (route && routePoints.length > 1) {
         L.polyline(routePoints, { color: "#c9a227", weight: 3, opacity: 0.95 }).addTo(routeGroup);
         route.waypoints.forEach((wp, index) => {
           const isActive = index === route.activeWaypointIndex;

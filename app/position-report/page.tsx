@@ -228,22 +228,30 @@ function loadSavedRoute(): RouteState | null {
 }
 
 function normalizePositionHistory(candidate: unknown): PositionLogEntry[] {
-  const entries = Array.isArray(candidate) ? candidate : candidate && typeof candidate === 'object' && Array.isArray((candidate as { entries?: unknown[] }).entries) ? (candidate as { entries: unknown[] }).entries : [];
-  return entries.map(entry => {
-    if (!entry || typeof entry !== 'object') return null;
+  const entries = Array.isArray(candidate)
+    ? candidate
+    : candidate && typeof candidate === 'object' && Array.isArray((candidate as { entries?: unknown[] }).entries)
+      ? (candidate as { entries: unknown[] }).entries
+      : [];
+  const normalized: PositionLogEntry[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
     const item = entry as Record<string, unknown>;
     const lat = Number(item.lat);
     const lon = Number(item.lon);
     const timestamp = Number(item.timestamp);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(timestamp)) return null;
-    return {
-      lat, lon, timestamp,
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(timestamp)) continue;
+    normalized.push({
+      lat,
+      lon,
+      timestamp,
       sog: Number.isFinite(Number(item.sog)) ? Number(item.sog) : null,
       cog: Number.isFinite(Number(item.cog)) ? Number(item.cog) : null,
       heading: Number.isFinite(Number(item.heading)) ? Number(item.heading) : null,
       receivedAt: typeof item.receivedAt === 'string' ? item.receivedAt : undefined,
-    };
-  }).filter((entry): entry is PositionLogEntry => entry !== null).sort((a, b) => a.timestamp - b.timestamp);
+    });
+  }
+  return normalized.sort((a, b) => a.timestamp - b.timestamp);
 }
 
 export default function PositionReportPage() {

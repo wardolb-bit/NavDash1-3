@@ -290,7 +290,7 @@ export function BridgeTrackedAisTargets() {
       mapElement?.removeEventListener("dblclick", toggleNearestTarget, true);
       mapElement = element;
       map = nextMap;
-      mapElement.addEventListener("dblclick", toggleNearestTarget, true);
+      element.addEventListener("dblclick", toggleNearestTarget, true);
     };
 
     const applySnapshotTarget = (value: any) => {

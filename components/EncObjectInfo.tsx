@@ -136,7 +136,8 @@ function lightCharacteristic(attributes: Record<string, unknown[]>) {
   const groupRaw = firstValue(attributes, "SIGGRP");
   const group = usefulValue(groupRaw) ? String(groupRaw).replace(/^\((.*)\)$/, "$1") : "";
   const colours = allValues(attributes, "COLOUR").flatMap((value) => numericCodes(value)).map((code) => COLOUR[code]).filter(Boolean);
-  const colourAbbr = [...new Set(colours)].map((colour) => ({ White: "W", Red: "R", Green: "G", Yellow: "Y", Blue: "Bu", Amber: "Am", Orange: "Or", Violet: "Vi" }[colour] || colour)).join("/");
+  const colourAbbreviations: Record<string, string> = { White: "W", Red: "R", Green: "G", Yellow: "Y", Blue: "Bu", Amber: "Am", Orange: "Or", Violet: "Vi" };
+  const colourAbbr = [...new Set(colours)].map((colour) => colourAbbreviations[colour] || colour).join("/");
   const periodRaw = firstValue(attributes, "SIGPER");
   const period = usefulValue(periodRaw) ? `${Number(periodRaw)}s` : "";
   return [char + (group ? `(${group})` : ""), colourAbbr, period].filter(Boolean).join(" ");

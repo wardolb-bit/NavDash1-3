@@ -69,7 +69,7 @@ export async function r2Request(
       "x-amz-date": timestamp,
       ...(method === "PUT" && contentType ? { "content-type": contentType } : {}),
     },
-    body: method === "PUT" ? body : undefined,
+    body: method === "PUT" ? (body as unknown as BodyInit) : undefined,
     cache: "no-store",
   });
 }

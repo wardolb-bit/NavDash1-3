@@ -1,6 +1,5 @@
 import './globals.css';
 import './bridge-console.css';
-import './day-fixes.css';
 import './global-theme.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
