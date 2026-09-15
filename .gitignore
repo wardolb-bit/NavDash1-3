@@ -25,17 +25,15 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
-# Large raw coastline source bundle; keep generated runtime JSON in public/data.
-data/gshhg/
-
 # Local weather cache can be regenerated or restored from the full USB backup.
 data/grib/*.tmp
 data/grib/current-grib*
 wgrib-full.txt
 wgrib-test.txt
 
-# Runtime route state is generated locally and must not be committed.
+# Runtime navigation state is generated locally and must not be committed.
 data/loaded-route.json
+data/position-history.json
 
 # OS/editor noise
 .DS_Store
