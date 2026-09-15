@@ -18,58 +18,32 @@ jobs:
           fetch-depth: 0
 
       - name: Remove WX wind arrow layer completely
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
+          import re
 
           path = Path('app/wx-routing/page.tsx')
           text = path.read_text(encoding='utf-8')
 
-          targets = [
-              'const WX_WIND_LAYER_ID = "navdash-wx-routing-wind";\n',
-              '''    map.addLayer({
-      id: WX_WIND_LAYER_ID,
-      type: "symbol",
-      source: WX_SOURCE_ID,
-      layout: {
-        visibility: "none",
-        "text-field": "^",
-        "text-size": ["interpolate", ["linear"], ["zoom"], 2, 14, 8, 22],
-        "text-rotate": ["get", "rotation"],
-        "text-allow-overlap": true,
-        "text-ignore-placement": true,
-      },
-      paint: {
-        "text-color": nightMode ? "#f8fafc" : "#0f172a",
-        "text-halo-color": nightMode ? "#020617" : "#ffffff",
-        "text-halo-width": 2,
-      },
-    });
+          const_pattern = r'^const WX_WIND_LAYER_ID = "navdash-wx-routing-wind";\n'
+          layer_pattern = r'    map\.addLayer\(\{\n      id: WX_WIND_LAYER_ID,\n      type: "symbol",\n      source: WX_SOURCE_ID,\n      layout: \{\n        visibility: "none",\n        "text-field": "\^",\n        "text-size": \["interpolate", \["linear"\], \["zoom"\], 2, 14, 8, 22\],\n        "text-rotate": \["get", "rotation"\],\n        "text-allow-overlap": true,\n        "text-ignore-placement": true,\n      \},\n      paint: \{\n        "text-color": nightMode \? "#f8fafc" : "#0f172a",\n        "text-halo-color": nightMode \? "#020617" : "#ffffff",\n        "text-halo-width": 2,\n      \},\n    \}\);\n\n'
+          visibility_pattern = r'    if \(map\.getLayer\(WX_WIND_LAYER_ID\)\) \{\n      map\.setLayoutProperty\(WX_WIND_LAYER_ID, "visibility", "none"\);\n    \}\n'
 
-''',
-              '''    if (map.getLayer(WX_WIND_LAYER_ID)) {
-      map.setLayoutProperty(WX_WIND_LAYER_ID, "visibility", "none");
-    }
-''',
-          ]
-
-          for target in targets:
-              count = text.count(target)
+          for label, pattern, flags in [
+              ('constant', const_pattern, re.M),
+              ('layer block', layer_pattern, 0),
+              ('visibility block', visibility_pattern, 0),
+          ]:
+              text, count = re.subn(pattern, '', text, count=1, flags=flags)
               if count != 1:
-                  raise SystemExit(f'Expected exactly one target block, found {count}. No changes written.')
-              text = text.replace(target, '', 1)
+                  raise SystemExit(f'Expected exactly one {label}; found {count}. No changes written.')
+
+          if 'WX_WIND_LAYER_ID' in text or '"text-field": "^"' in text:
+              raise SystemExit('Wind arrow rendering code still remains after patch.')
 
           path.write_text(text, encoding='utf-8')
-
-      - name: Verify arrow layer is gone
-        shell: python
-        run: |
-          from pathlib import Path
-          text = Path('app/wx-routing/page.tsx').read_text(encoding='utf-8')
-          forbidden = ['WX_WIND_LAYER_ID', '"text-field": "^"']
-          remaining = [item for item in forbidden if item in text]
-          if remaining:
-              raise SystemExit(f'Arrow code still present: {remaining}')
+          PY
 
       - name: Remove one-shot workflow
         run: rm .github/workflows/remove-wx-wind-arrow-layer.yml
