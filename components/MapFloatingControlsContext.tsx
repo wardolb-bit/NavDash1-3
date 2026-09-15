@@ -211,6 +211,7 @@ function buildCategorizedMenu() {
   const existingButtons = Array.from(menu.querySelectorAll<HTMLButtonElement>(":scope > button"));
   const byText = (text: string) => existingButtons.find((button) => (button.textContent || "").trim().toUpperCase().startsWith(text));
 
+  const info = byText("INFO");
   const pan = byText("PAN");
   const fromShip = byText("FROM SHIP");
   const twoPoints = byText("TWO POINTS");
@@ -222,6 +223,8 @@ function buildCategorizedMenu() {
   menu.dataset.categorized = "true";
   menu.style.minWidth = "190px";
   menu.style.overflow = "visible";
+
+  if (info instanceof HTMLButtonElement) moveExistingButton(menu, info);
 
   categoryRow(menu, "MEASURE", (panel) => {
     [pan, fromShip, twoPoints, clearMeasure].forEach((button) => {
