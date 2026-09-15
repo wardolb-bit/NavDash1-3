@@ -7,21 +7,15 @@ layout_path = root / 'app/layout.tsx'
 enc = enc_path.read_text()
 layout = layout_path.read_text()
 
-replacements = []
-
 old = '''    let control: any = null;\n    let active = false;\n    let pendingController: AbortController | null = null;\n'''
 new = '''    let pendingController: AbortController | null = null;\n'''
 assert enc.count(old) == 1, f'Enc state block count {enc.count(old)}'
 enc = enc.replace(old, new, 1)
 
-for css_line in [
-    '        .navdash-enc-control{display:block;border:1px solid rgba(105,215,235,.55);background:rgba(7,16,25,.92);color:#d9fbff;border-radius:4px;padding:7px 9px;font:800 11px/1 system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28)}\\n',
-    '        .navdash-enc-control[data-active="true"]{border-color:#f1d56b;color:#f1d56b;background:rgba(29,25,10,.96)}\\n',
-    '        html[data-navdash-theme="day"] .navdash-enc-control{background:rgba(255,255,255,.96);color:#16323f;border-color:rgba(25,99,120,.45)}\\n',
-    '        html[data-navdash-theme="day"] .navdash-enc-control[data-active="true"]{background:#fff8d8;color:#765e00;border-color:#b89000}\\n',
-]:
-    assert enc.count(css_line) == 1, f'CSS line count {enc.count(css_line)}: {css_line[:50]}'
-    enc = enc.replace(css_line, '', 1)
+lines = enc.splitlines()
+control_css = [line for line in lines if '.navdash-enc-control' in line]
+assert len(control_css) == 4, f'ENC control CSS line count {len(control_css)}'
+enc = '\n'.join(line for line in lines if '.navdash-enc-control' not in line)
 
 old = '''    const identify = async (event: any) => {\n      if (!active || !map || !L) return;\n      const lat = Number(event?.latlng?.lat);\n      const lon = Number(event?.latlng?.lng);\n      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;\n'''
 new = '''    const identifyAt = async (lat: number, lon: number) => {\n      if (!map || !L) return;\n      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;\n'''
@@ -48,6 +42,6 @@ new = '''                if (!(group instanceof HTMLElement) || !(pan instanceof
 assert layout.count(old) == 1, f'menu insertion count {layout.count(old)}'
 layout = layout.replace(old, new, 1)
 
-enc_path.write_text(enc)
+enc_path.write_text(enc + '\n')
 layout_path.write_text(layout)
 print('Applied ENC right-click INFO scalpel')
