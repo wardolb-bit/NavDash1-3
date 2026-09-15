@@ -19,15 +19,19 @@ type WavePoint = {
   waveHeightFt: number | null;
   wavePeriodSec: number | null;
   waveDirectionDeg: number | null;
-  swellHeightFt: number | null;
-  swellPeriodSec: number | null;
-  swellDirectionDeg: number | null;
-  windWaveHeightFt: number | null;
-  windWavePeriodSec: number | null;
-  windWaveDirectionDeg: number | null;
   source: string;
 };
 type WaveFrame = { validAt: string; points: WavePoint[] };
+
+type NoaaPoint = {
+  lat: number;
+  lon: number;
+  distanceNm: number;
+  waveHeightFt: number | null;
+  wavePeriodSec: number | null;
+};
+type NoaaFrame = { validAt: string; points: NoaaPoint[] };
+
 type ModelRun = { date: string; cycle: string; cycleTime: Date };
 type Bounds = { left: number; right: number; top: number; bottom: number };
 type DecodedField = {
@@ -38,27 +42,13 @@ type WaveFields = {
   height: DecodedField | null;
   period: DecodedField | null;
   direction: DecodedField | null;
-  swellHeight: DecodedField | null;
-  swellPeriod: DecodedField | null;
-  swellDirection: DecodedField | null;
-  windWaveHeight: DecodedField | null;
-  windWavePeriod: DecodedField | null;
-  windWaveDirection: DecodedField | null;
-};
-
-type GridSample = {
-  latitude: number;
-  longitude: number;
-  distanceNm: number;
-  index: number;
 };
 
 const NOMADS = "https://nomads.ncep.noaa.gov";
-const USER_AGENT = "NavDash GFS Wave GRIB route sampler (wardlab.dev)";
+const USER_AGENT = "NavDash GFS Wave GRIB route sampler (wardmaritimegroup.com)";
 const M_TO_FT = 3.28084;
 const MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M = 40;
 const MAX_VALID_WAVE_PERIOD_SEC = 60;
-const MAX_WATER_SEARCH_NM = 60;
 
 function nmBetween(aLat: number, aLon: number, bLat: number, bLon: number) {
   const r = 3440.065;
@@ -74,18 +64,6 @@ function rounded(value: number | null, digits = 1) {
   return value === null || !Number.isFinite(value) ? null : Number(value.toFixed(digits));
 }
 
-function validHeight(value: number) {
-  return Number.isFinite(value) && value >= 0 && value <= MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M;
-}
-
-function validPeriod(value: number) {
-  return Number.isFinite(value) && value > 0 && value <= MAX_VALID_WAVE_PERIOD_SEC;
-}
-
-function validDirection(value: number) {
-  return Number.isFinite(value) && value >= 0 && value <= 360;
-}
-
 function ymd(date: Date) {
   return `${date.getUTCFullYear()}${String(date.getUTCMonth() + 1).padStart(2, "0")}${String(date.getUTCDate()).padStart(2, "0")}`;
 }
@@ -93,7 +71,8 @@ function ymd(date: Date) {
 function candidateRuns(now = new Date()) {
   const anchor = new Date(now);
   anchor.setUTCMinutes(0, 0, 0);
-  anchor.setUTCHours(Math.floor(anchor.getUTCHours() / 6) * 6);
+  const hour = anchor.getUTCHours();
+  anchor.setUTCHours(Math.floor(hour / 6) * 6);
   const runs: ModelRun[] = [];
   for (let i = 0; i < 8; i += 1) {
     const cycleTime = new Date(anchor.getTime() - i * 6 * 3600000);
@@ -127,8 +106,10 @@ async function latestModelRun() {
       });
       if (!response.ok) continue;
       const text = await response.text();
-      if (text.includes(":HTSGW:") && text.includes(":PERPW:") && text.includes(":DIRPW:")) return run;
-    } catch {}
+      if (text.includes(":HTSGW:") && text.includes(":PERPW:")) return run;
+    } catch {
+      // Try the previous cycle.
+    }
   }
   throw new Error("No current NOAA GFS Wave model cycle is available from NOMADS.");
 }
@@ -136,10 +117,26 @@ async function latestModelRun() {
 function routeBounds(points: Point[]): Bounds {
   const margin = 1.5;
   const lats = points.map((point) => point.lat);
-  const lons = points.map((point) => point.lon);
+  const signedLons = points.map((point) => point.lon);
+  const lon360 = signedLons.map((lon) => ((lon % 360) + 360) % 360);
+  const signedSpan = Math.max(...signedLons) - Math.min(...signedLons);
+  const span360 = Math.max(...lon360) - Math.min(...lon360);
+  const use360 = span360 < signedSpan;
+  const chosen = use360 ? lon360 : signedLons;
+
+  let left = Math.min(...chosen) - margin;
+  let right = Math.max(...chosen) + margin;
+  if (use360) {
+    left = Math.max(0, left);
+    right = Math.min(360, right);
+  } else {
+    left = Math.max(-180, left);
+    right = Math.min(180, right);
+  }
+
   return {
-    left: Math.max(-180, Math.min(...lons) - margin),
-    right: Math.min(180, Math.max(...lons) + margin),
+    left,
+    right,
     top: Math.min(90, Math.max(...lats) + margin),
     bottom: Math.max(-90, Math.min(...lats) - margin),
   };
@@ -148,9 +145,9 @@ function routeBounds(points: Point[]): Bounds {
 function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds) {
   const params = new URLSearchParams();
   params.set("file", gribFileName(run, forecastHour));
-  for (const variable of ["HTSGW", "PERPW", "DIRPW", "SWELL", "SWPER", "SWDIR", "WVHGT", "WVPER", "WVDIR"]) {
-    params.set(`var_${variable}`, "on");
-  }
+  params.set("var_HTSGW", "on");
+  params.set("var_PERPW", "on");
+  params.set("var_DIRPW", "on");
   params.set("lev_surface", "on");
   params.set("subregion", "");
   params.set("leftlon", String(bounds.left));
@@ -167,136 +164,95 @@ async function fetchWaveFields(run: ModelRun, forecastHour: number, bounds: Boun
     cache: "no-store",
   });
   if (!response.ok) throw new Error(`NOMADS GRIB download failed (${response.status}) for f${String(forecastHour).padStart(3, "0")}.`);
-
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.length < 16 || String.fromCharCode(...bytes.slice(0, 4)) !== "GRIB") {
     throw new Error(`NOMADS returned a non-GRIB response for f${String(forecastHour).padStart(3, "0")}.`);
   }
 
-  const result: WaveFields = {
-    height: null,
-    period: null,
-    direction: null,
-    swellHeight: null,
-    swellPeriod: null,
-    swellDirection: null,
-    windWaveHeight: null,
-    windWavePeriod: null,
-    windWaveDirection: null,
-  };
-
+  const result: WaveFields = { height: null, period: null, direction: null };
   for (const message of splitMessages(bytes)) {
     for (const field of parseFields(message)) {
       if (field.discipline !== 10) continue;
       const product = parseProduct(field.section4);
       if (product.parameterCategory !== 0) continue;
-
-      const parameterMap: Record<number, keyof WaveFields> = {
-        3: "height",
-        4: "windWaveDirection",
-        5: "windWaveHeight",
-        6: "windWavePeriod",
-        7: "swellDirection",
-        8: "swellHeight",
-        9: "swellPeriod",
-        10: "direction",
-        11: "period",
-      };
-      const target = parameterMap[product.parameterNumber];
+      let target: keyof WaveFields | null = null;
+      if (product.parameterNumber === 3) target = "height";       // HTSGW
+      else if (product.parameterNumber === 11) target = "period"; // PERPW
+      else if (product.parameterNumber === 10) target = "direction"; // DIRPW
       if (!target || result[target]) continue;
-
       const grid = parseGrid(field.section3);
       const { values } = decodeFieldValues(field);
       result[target] = { grid, values };
     }
   }
 
-  if (!result.height || !result.period || !result.direction) {
-    throw new Error("Downloaded GFS Wave GRIB2 is missing required HTSGW/PERPW/DIRPW fields.");
-  }
+  if (!result.height) throw new Error("Downloaded GFS Wave GRIB2 did not contain HTSGW.");
   return result;
 }
 
-function candidateOffsets() {
-  const offsets: Array<[number, number]> = [[0, 0]];
-  for (let ring = 1; ring <= 4; ring += 1) {
-    const d = ring * 0.25;
-    for (let x = -ring; x <= ring; x += 1) {
-      offsets.push([x * 0.25, -d], [x * 0.25, d]);
-    }
-    for (let y = -ring + 1; y <= ring - 1; y += 1) {
-      offsets.push([-d, y * 0.25], [d, y * 0.25]);
-    }
-  }
-  return offsets;
-}
+const OFFSETS = [
+  [0, 0],
+  [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25],
+  [0.25, 0.25], [0.25, -0.25], [-0.25, 0.25], [-0.25, -0.25],
+  [0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5],
+] as const;
 
-const SEARCH_OFFSETS = candidateOffsets();
-
-function findWaterCell(field: DecodedField, point: Point): GridSample | null {
-  const seen = new Set<number>();
-  let best: GridSample | null = null;
-
-  for (const [dLat, dLon] of SEARCH_OFFSETS) {
+function sampleField(
+  field: DecodedField | null,
+  point: Point,
+  valid: (value: number) => boolean,
+) {
+  if (!field) return null;
+  let best: { value: number; distanceNm: number } | null = null;
+  for (const [dLat, dLon] of OFFSETS) {
     const sample = nearestGridpoint(field.grid, point.lat + dLat, point.lon + dLon);
-    if (seen.has(sample.index)) continue;
-    seen.add(sample.index);
-
     const value = Number(field.values[sample.index]);
-    if (!validHeight(value)) continue;
-
+    if (!Number.isFinite(value) || !valid(value)) continue;
     const distanceNm = nmBetween(point.lat, point.lon, sample.latitude, sample.longitude);
-    if (distanceNm > MAX_WATER_SEARCH_NM) continue;
-    if (!best || distanceNm < best.distanceNm) {
-      best = {
-        latitude: sample.latitude,
-        longitude: sample.longitude,
-        distanceNm,
-        index: sample.index,
-      };
-    }
+    if (distanceNm > 35) continue;
+    if (!best || distanceNm < best.distanceNm) best = { value, distanceNm };
   }
-
   return best;
 }
 
-function valueAtCell(field: DecodedField | null, cell: GridSample, valid: (value: number) => boolean) {
-  if (!field) return null;
-  const sample = nearestGridpoint(field.grid, cell.latitude, cell.longitude);
-  const value = Number(field.values[sample.index]);
-  return valid(value) ? value : null;
+function nearestNoaaFrame(frames: NoaaFrame[], validAt: Date) {
+  let best: NoaaFrame | null = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+  for (const frame of frames) {
+    const delta = Math.abs(new Date(frame.validAt).getTime() - validAt.getTime());
+    if (delta < bestDelta) {
+      best = frame;
+      bestDelta = delta;
+    }
+  }
+  return best;
 }
 
-function nearestValidValue(
-  field: DecodedField | null,
-  cell: GridSample,
-  valid: (value: number) => boolean,
-  maxDistanceNm = 20,
-) {
-  if (!field) return null;
-  const direct = valueAtCell(field, cell, valid);
-  if (direct !== null) return direct;
-
-  let best: { value: number; distanceNm: number } | null = null;
-  for (const [dLat, dLon] of SEARCH_OFFSETS) {
-    const sample = nearestGridpoint(field.grid, cell.latitude + dLat, cell.longitude + dLon);
-    const value = Number(field.values[sample.index]);
-    if (!valid(value)) continue;
-    const distanceNm = nmBetween(cell.latitude, cell.longitude, sample.latitude, sample.longitude);
-    if (distanceNm > maxDistanceNm) continue;
-    if (!best || distanceNm < best.distanceNm) best = { value, distanceNm };
+function nearestNoaaPoint(frame: NoaaFrame | null, point: Point) {
+  let best: { point: NoaaPoint; distanceNm: number } | null = null;
+  for (const candidate of frame?.points || []) {
+    if (candidate.waveHeightFt === null && candidate.wavePeriodSec === null) continue;
+    const distanceNm = nmBetween(point.lat, point.lon, candidate.lat, candidate.lon);
+    if (distanceNm <= 18 && (!best || distanceNm < best.distanceNm)) best = { point: candidate, distanceNm };
   }
-  return best?.value ?? null;
+  return best;
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const points: Point[] = (Array.isArray(body?.points) ? body.points : [])
-      .map((p: any) => ({ lat: Number(p?.lat), lon: Number(p?.lon), distanceNm: Number(p?.distanceNm) }))
+      .map((p: any) => ({
+        lat: Number(p?.lat),
+        lon: Number(p?.lon),
+        distanceNm: Number(p?.distanceNm),
+      }))
       .filter((p: Point) =>
-        Number.isFinite(p.lat) && Number.isFinite(p.lon) && Number.isFinite(p.distanceNm) &&
-        Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180
+        Number.isFinite(p.lat) &&
+        Number.isFinite(p.lon) &&
+        Number.isFinite(p.distanceNm) &&
+        Math.abs(p.lat) <= 90 &&
+        Math.abs(p.lon) <= 180
       );
 
     const validTimes = (Array.isArray(body?.validTimes) ? body.validTimes : [])
@@ -307,7 +263,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Wave request requires route points and forecast valid times." }, { status: 400 });
     }
 
-    const run = await latestModelRun();
+    const [run, noaaResponse] = await Promise.all([
+      latestModelRun(),
+      fetch(`${new URL(request.url).origin}/api/noaa-route-weather`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          waypoints: points.map((point, index) => ({ lat: point.lat, lon: point.lon, name: `Route sample ${index + 1}` })),
+        }),
+        cache: "no-store",
+      }),
+    ]);
+
+    let noaaFrames: NoaaFrame[] = [];
+    try {
+      const noaaJson = await noaaResponse.json();
+      if (noaaResponse.ok && Array.isArray(noaaJson?.frames)) noaaFrames = noaaJson.frames;
+    } catch {
+      noaaFrames = [];
+    }
+
     const bounds = routeBounds(points);
     const frames: WaveFrame[] = [];
     let gribFailures = 0;
@@ -315,85 +290,69 @@ export async function POST(request: Request) {
     for (const validAt of validTimes) {
       const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
       const forecastHour = Math.max(0, Math.min(120, rawHour));
-
-      let fields: WaveFields | null = null;
+      let waveFields: WaveFields | null = null;
       try {
-        fields = await fetchWaveFields(run, forecastHour, bounds);
+        waveFields = await fetchWaveFields(run, forecastHour, bounds);
       } catch {
         gribFailures += 1;
       }
 
+      const localFrame = nearestNoaaFrame(noaaFrames, validAt);
       const resultPoints = points.map((point): WavePoint => {
-        if (!fields?.height) {
+        const local = nearestNoaaPoint(localFrame, point);
+        const height = sampleField(waveFields?.height ?? null, point, (value) => value >= 0 && value <= MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M);
+        const period = sampleField(waveFields?.period ?? null, point, (value) => value > 0 && value <= MAX_VALID_WAVE_PERIOD_SEC);
+        const direction = sampleField(waveFields?.direction ?? null, point, (value) => value >= 0 && value <= 360);
+
+        if (height) {
+          const distanceLabel = height.distanceNm <= 1
+            ? "exact-grid sample"
+            : `nearest-water sample (${height.distanceNm.toFixed(1)} nm)`;
           return {
-            ...point,
-            waveHeightFt: null,
-            wavePeriodSec: null,
-            waveDirectionDeg: null,
-            swellHeightFt: null,
-            swellPeriodSec: null,
-            swellDirectionDeg: null,
-            windWaveHeightFt: null,
-            windWavePeriodSec: null,
-            windWaveDirectionDeg: null,
-            source: "NOAA GFS Wave GRIB2 unavailable for this forecast hour",
+            lat: point.lat,
+            lon: point.lon,
+            distanceNm: point.distanceNm,
+            waveHeightFt: rounded(height.value * M_TO_FT, 1),
+            wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
+            waveDirectionDeg: rounded(direction?.value ?? null, 0),
+            source: `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} ${distanceLabel}`,
           };
         }
 
-        const cell = findWaterCell(fields.height, point);
-        if (!cell) {
+        if (local?.point.waveHeightFt !== null && local?.point.waveHeightFt !== undefined) {
           return {
-            ...point,
-            waveHeightFt: null,
-            wavePeriodSec: null,
-            waveDirectionDeg: null,
-            swellHeightFt: null,
-            swellPeriodSec: null,
-            swellDirectionDeg: null,
-            windWaveHeightFt: null,
-            windWavePeriodSec: null,
-            windWaveDirectionDeg: null,
-            source: "NOAA GFS Wave GRIB2 has no valid ocean cell within 60 NM",
+            lat: point.lat,
+            lon: point.lon,
+            distanceNm: point.distanceNm,
+            waveHeightFt: local.point.waveHeightFt,
+            wavePeriodSec: local.point.wavePeriodSec,
+            waveDirectionDeg: rounded(direction?.value ?? null, 0),
+            source: `NOAA/NWS marine grid fallback (${local.distanceNm.toFixed(1)} nm source distance)`,
           };
         }
-
-        const heightM = Number(fields.height.values[cell.index]);
-        const periodSec = nearestValidValue(fields.period, cell, validPeriod);
-        const directionDeg = nearestValidValue(fields.direction, cell, validDirection);
-        const swellHeightM = nearestValidValue(fields.swellHeight, cell, validHeight);
-        const swellPeriodSec = nearestValidValue(fields.swellPeriod, cell, validPeriod);
-        const swellDirectionDeg = nearestValidValue(fields.swellDirection, cell, validDirection);
-        const windWaveHeightM = nearestValidValue(fields.windWaveHeight, cell, validHeight);
-        const windWavePeriodSec = nearestValidValue(fields.windWavePeriod, cell, validPeriod);
-        const windWaveDirectionDeg = nearestValidValue(fields.windWaveDirection, cell, validDirection);
 
         return {
-          ...point,
-          waveHeightFt: rounded(heightM * M_TO_FT, 1),
-          wavePeriodSec: rounded(periodSec, 0),
-          waveDirectionDeg: rounded(directionDeg, 0),
-          swellHeightFt: rounded(swellHeightM === null ? null : swellHeightM * M_TO_FT, 1),
-          swellPeriodSec: rounded(swellPeriodSec, 0),
-          swellDirectionDeg: rounded(swellDirectionDeg, 0),
-          windWaveHeightFt: rounded(windWaveHeightM === null ? null : windWaveHeightM * M_TO_FT, 1),
-          windWavePeriodSec: rounded(windWavePeriodSec, 0),
-          windWaveDirectionDeg: rounded(windWaveDirectionDeg, 0),
-          source: `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} ocean cell ${cell.distanceNm.toFixed(1)} NM from route sample`,
+          lat: point.lat,
+          lon: point.lon,
+          distanceNm: point.distanceNm,
+          waveHeightFt: null,
+          wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
+          waveDirectionDeg: rounded(direction?.value ?? null, 0),
+          source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
         };
       });
 
       frames.push({ validAt: validAt.toISOString(), points: resultPoints });
     }
 
-    const allPoints = frames.flatMap((frame) => frame.points);
-    const total = allPoints.length;
-    const populated = allPoints.filter((point) => point.waveHeightFt !== null).length;
-    const periodPopulated = allPoints.filter((point) => point.wavePeriodSec !== null).length;
-    const directionPopulated = allPoints.filter((point) => point.waveDirectionDeg !== null).length;
+    const populated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.waveHeightFt !== null).length, 0);
+    const periodPopulated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.wavePeriodSec !== null).length, 0);
+    const directionPopulated = frames.reduce((count, frame) => count + frame.points.filter((point) => point.waveDirectionDeg !== null).length, 0);
+    const total = frames.reduce((count, frame) => count + frame.points.length, 0);
 
     return NextResponse.json({
       provider: "NOAA / NCEP GFS Wave GRIB2",
-      product: "GFS Wave 0.25° complete sea state: HTSGW/PERPW/DIRPW + swell + wind waves",
+      product: "GFS Wave 0.25° HTSGW + PERPW + DIRPW with NWS marine-grid fallback",
       generatedAt: new Date().toISOString(),
       modelRun: run.cycleTime.toISOString(),
       modelCycle: `${run.date} ${run.cycle}Z`,
@@ -410,7 +369,7 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "NOAA GFS Wave GRIB route sampling failed." },
-      { status: 500, headers: { "Cache-Control": "no-store" } },
+      { status: 500 },
     );
   }
 }

@@ -12,20 +12,12 @@ type ForecastPoint = {
   gustKt: number | null;
   waveHeightFt: number | null;
   wavePeriodSec: number | null;
-  waveDirectionDeg?: number | null;
-  swellHeightFt?: number | null;
-  swellPeriodSec?: number | null;
-  swellDirectionDeg?: number | null;
-  windWaveHeightFt?: number | null;
-  windWavePeriodSec?: number | null;
-  windWaveDirectionDeg?: number | null;
   airTempF?: number | null;
   relativeHumidityPct?: number | null;
   pressureHpa?: number | null;
   precipMm?: number | null;
   cloudCoverPct?: number | null;
   source: string;
-  waveSource?: string;
 };
 type MarkerFrame = { validAt: string; points: ForecastPoint[] };
 type AtmosPoint = SamplePoint & {
@@ -46,27 +38,8 @@ type AtmosResponse = {
   modelRun?: string;
   coveragePercent?: number;
 };
-type WavePoint = SamplePoint & {
-  waveHeightFt: number | null;
-  wavePeriodSec: number | null;
-  waveDirectionDeg: number | null;
-  swellHeightFt?: number | null;
-  swellPeriodSec?: number | null;
-  swellDirectionDeg?: number | null;
-  windWaveHeightFt?: number | null;
-  windWavePeriodSec?: number | null;
-  windWaveDirectionDeg?: number | null;
-  source: string;
-};
-type WaveResponse = {
-  frames?: Array<{ validAt: string; points: WavePoint[] }>;
-  product?: string;
-  provider?: string;
-  modelRun?: string;
-  coveragePercent?: number;
-};
 
-const UA = "NavDash NOAA route weather (wardlab.dev)";
+const UA = "NavDash NOAA route weather (wardmaritimegroup.com)";
 const TARGET_HOURS = [0, 3, 6, 9, 12, 18, 24];
 const SAMPLE_SPACING_NM = 35;
 const MAX_SAMPLES = 9;
@@ -161,7 +134,7 @@ async function sampleNwsPoint(point: SamplePoint, validTimes: Date[]) {
   }
 }
 
-function nearestFrame<T extends { validAt: string }>(frames: T[], validAt: Date) {
+function nearestAtmosFrame(frames: NonNullable<AtmosResponse["frames"]>, validAt: Date) {
   let best = frames[0];
   let bestDelta = Math.abs(new Date(best.validAt).getTime() - validAt.getTime());
   for (const candidate of frames) {
@@ -174,8 +147,8 @@ function nearestFrame<T extends { validAt: string }>(frames: T[], validAt: Date)
   return best;
 }
 
-function nearestPoint<T extends SamplePoint>(points: T[], sample: SamplePoint) {
-  return points.reduce<T | null>((best, candidate) => {
+function nearestAtmosPoint(points: AtmosPoint[], sample: SamplePoint) {
+  return points.reduce<AtmosPoint | null>((best, candidate) => {
     if (!best) return candidate;
     return Math.abs(candidate.distanceNm - sample.distanceNm) < Math.abs(best.distanceNm - sample.distanceNm) ? candidate : best;
   }, null);
@@ -198,7 +171,7 @@ export async function POST(request: Request) {
     const samples = routeSamples(route);
     const origin = url.origin;
 
-    const [nwsResults, atmosResult, waveResult] = await Promise.all([
+    const [nwsResults, atmosResult] = await Promise.all([
       Promise.all(samples.map((point) => sampleNwsPoint(point, validTimes))),
       nwsOnly
         ? Promise.resolve({ ok: false, json: null })
@@ -208,28 +181,16 @@ export async function POST(request: Request) {
             cache: "no-store",
             body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
           }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
-      nwsOnly
-        ? Promise.resolve({ ok: false, json: null })
-        : fetch(`${origin}/api/gfs-wave-route`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            cache: "no-store",
-            body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
-          }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
     ]);
 
     const atmos = atmosResult.ok ? atmosResult.json as AtmosResponse : null;
     const atmosFrames = Array.isArray(atmos?.frames) ? atmos!.frames! : [];
-    const wave = waveResult.ok ? waveResult.json as WaveResponse : null;
-    const waveFrames = Array.isArray(wave?.frames) ? wave!.frames! : [];
 
     const frames: MarkerFrame[] = validTimes.map((validAt, frameIndex) => {
-      const atmosFrame = atmosFrames.length ? nearestFrame(atmosFrames, validAt) : null;
-      const waveFrame = waveFrames.length ? nearestFrame(waveFrames, validAt) : null;
+      const atmosFrame = atmosFrames.length ? nearestAtmosFrame(atmosFrames, validAt) : null;
       const points = samples.map((sample, sampleIndex): ForecastPoint => {
         const nws = nwsResults[sampleIndex]?.[frameIndex] || null;
-        const grib = atmosFrame ? nearestPoint(atmosFrame.points, sample) : null;
-        const sea = waveFrame ? nearestPoint(waveFrame.points, sample) : null;
+        const grib = atmosFrame ? nearestAtmosPoint(atmosFrame.points, sample) : null;
         return {
           lat: sample.lat,
           lon: sample.lon,
@@ -237,22 +198,14 @@ export async function POST(request: Request) {
           windKt: grib?.windKt ?? nws?.windKt ?? null,
           windDirectionDeg: grib?.windDirectionDeg ?? nws?.windDirectionDeg ?? null,
           gustKt: grib?.gustKt ?? nws?.gustKt ?? null,
-          waveHeightFt: sea?.waveHeightFt ?? nws?.waveHeightFt ?? null,
-          wavePeriodSec: sea?.wavePeriodSec ?? nws?.wavePeriodSec ?? null,
-          waveDirectionDeg: sea?.waveDirectionDeg ?? null,
-          swellHeightFt: sea?.swellHeightFt ?? null,
-          swellPeriodSec: sea?.swellPeriodSec ?? null,
-          swellDirectionDeg: sea?.swellDirectionDeg ?? null,
-          windWaveHeightFt: sea?.windWaveHeightFt ?? null,
-          windWavePeriodSec: sea?.windWavePeriodSec ?? null,
-          windWaveDirectionDeg: sea?.windWaveDirectionDeg ?? null,
+          waveHeightFt: nws?.waveHeightFt ?? null,
+          wavePeriodSec: nws?.wavePeriodSec ?? null,
           airTempF: grib?.airTempF ?? null,
           relativeHumidityPct: grib?.relativeHumidityPct ?? null,
           pressureHpa: grib?.pressureHpa ?? null,
           precipMm: grib?.precipMm ?? null,
           cloudCoverPct: grib?.cloudCoverPct ?? null,
           source: grib?.source || nws?.source || "Weather data unavailable",
-          waveSource: sea?.source || (nws?.waveHeightFt !== null || nws?.wavePeriodSec !== null ? nws?.source : undefined),
         };
       });
       return { validAt: validAt.toISOString(), points };
@@ -260,24 +213,21 @@ export async function POST(request: Request) {
 
     const covered = frames[0]?.points.filter((point) => point.windKt !== null).length || 0;
     const usingGrib = atmosFrames.length > 0;
-    const usingWaveGrib = waveFrames.length > 0;
 
     return NextResponse.json({
-      version: 4,
-      provider: usingGrib || usingWaveGrib ? "NOAA / NCEP GFS + GFS Wave GRIB2 with NWS fallback" : "NOAA / National Weather Service",
-      product: [usingGrib ? (atmos?.product || "GFS atmospheric GRIB2") : null, usingWaveGrib ? (wave?.product || "GFS Wave GRIB2") : null].filter(Boolean).join(" + ") || "NWS Digital Forecast Database route sampling",
+      version: 3,
+      provider: usingGrib ? "NOAA / NCEP GFS GRIB2 + NWS marine fallback" : "NOAA / National Weather Service",
+      product: usingGrib ? (atmos?.product || "GFS 0.25° atmospheric GRIB2") : "NWS Digital Forecast Database route sampling",
       generatedAt: new Date().toISOString(),
-      modelRun: atmos?.modelRun || wave?.modelRun || null,
+      modelRun: atmos?.modelRun || null,
       sampleCount: samples.length,
       coveredSampleCount: covered,
       frames,
-      note: usingWaveGrib
-        ? "GFS Wave GRIB2 is the primary sea-state source; NWS point grids are used only when the wave model has no usable value."
-        : usingGrib
-          ? "GFS atmospheric GRIB2 is the primary wind source; GFS Wave was unavailable, so NWS marine wave fields are used where available."
-          : nwsOnly
-            ? "NWS point grids requested for marine-wave fallback."
-            : "GFS model data was unavailable; using available NWS point-grid data.",
+      note: usingGrib
+        ? "GFS atmospheric GRIB2 is the primary route weather source; NWS point grids remain available for marine-wave fallback."
+        : nwsOnly
+          ? "NWS point grids requested for marine-wave fallback."
+          : "GFS atmospheric GRIB2 was unavailable; using available NWS point-grid data.",
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA route weather failed." }, { status: 500 });
