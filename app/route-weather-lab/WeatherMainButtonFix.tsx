@@ -6,19 +6,26 @@ export default function WeatherMainButtonFix() {
   useEffect(() => {
     const fixButton = () => {
       const links = Array.from(document.querySelectorAll<HTMLAnchorElement>("a"));
-      const target = links.find((link) => link.textContent?.trim() === "NAV CONSOLE");
-      if (!target) return false;
-      target.textContent = "MAIN";
-      target.href = "/bridge";
-      return true;
+      const targets = links.filter((link) => {
+        const label = link.textContent?.trim();
+        return label === "NAV CONSOLE" || label === "MAIN";
+      });
+
+      targets.forEach((target) => {
+        target.textContent = "MAIN";
+        if (target.getAttribute("href") !== "/bridge") target.setAttribute("href", "/bridge");
+      });
     };
 
-    if (fixButton()) return;
+    fixButton();
 
-    const observer = new MutationObserver(() => {
-      if (fixButton()) observer.disconnect();
+    const observer = new MutationObserver(() => fixButton());
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["href"],
     });
-    observer.observe(document.body, { childList: true, subtree: true });
 
     return () => observer.disconnect();
   }, []);
