@@ -229,6 +229,8 @@ export default function RouteWeatherLabPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let themeObserver: MutationObserver | null = null;
+
     async function init() {
       if (!mapEl.current || mapRef.current) return;
       const L = await import("leaflet");
@@ -240,9 +242,42 @@ export default function RouteWeatherLabPage() {
         link.setAttribute("data-route-weather-leaflet", "true");
         document.head.appendChild(link);
       }
+
       const map = L.map(mapEl.current, { attributionControl: false, zoomControl: true }).setView([20, 0], 3);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+      const isNight = () => document.documentElement.dataset.navdashTheme !== "day" && !document.documentElement.classList.contains("day-mode");
+      const encDisplayParams = (night: boolean) => JSON.stringify({
+        ECDISParameters: {
+          version: "11.2",
+          DynamicParameters: {
+            Parameter: [
+              { name: "AreaSymbolizationType", value: 2 },
+              { name: "ColorScheme", value: night ? 2 : 0 },
+              { name: "DisplayCategory", value: "1,2,4" },
+              { name: "DisplayDepthUnits", value: 1 },
+              { name: "HonorScamin", value: 1 },
+              { name: "PointSymbolizationType", value: 2 },
+              { name: "TwoDepthShades", value: 1 },
+            ],
+          },
+        },
+      });
+
+      const encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
+        layers: "1,2,3,4,5,6,7",
+        format: "image/png",
+        transparent: false,
+        version: "1.1.1",
+        tileSize: 512,
+        maxZoom: 18,
+        display_params: encDisplayParams(isNight()),
+      } as any).addTo(map);
+
+      const applyEncPalette = () => {
+        encLayer.setParams({ display_params: encDisplayParams(isNight()) });
+      };
+      themeObserver = new MutationObserver(applyEncPalette);
+      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-navdash-theme"] });
+
       routeLayerRef.current = L.layerGroup().addTo(map);
       weatherLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
@@ -251,6 +286,7 @@ export default function RouteWeatherLabPage() {
     init();
     return () => {
       cancelled = true;
+      themeObserver?.disconnect();
       mapRef.current?.remove();
       mapRef.current = null;
     };
