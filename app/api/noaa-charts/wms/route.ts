@@ -39,18 +39,6 @@ function maritimeLayers(raw: string | null) {
   return value.includes(":") ? value : `show:${value}`;
 }
 
-function maritimeDisplayParams(raw: string | null) {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed?.DisplayParameters) return raw;
-    if (parsed?.ECDISParameters) {
-      return JSON.stringify({ DisplayParameters: parsed });
-    }
-  } catch {}
-  return raw;
-}
-
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const operation = requestValue(params, "request");
@@ -67,7 +55,7 @@ export async function GET(request: NextRequest) {
   const height = requestValue(params, "height") || "256";
   const layers = maritimeLayers(requestValue(params, "layers"));
   const transparent = requestValue(params, "transparent") || "false";
-  const displayParams = maritimeDisplayParams(requestValue(params, "display_params"));
+  const displayParams = requestValue(params, "display_params");
   const sr = spatialReference(params);
   const arcgisSr = arcgisSpatialReference(sr);
 
