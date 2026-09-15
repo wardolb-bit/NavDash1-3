@@ -562,7 +562,7 @@ export default function RouteWeatherLabPage() {
           <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c9a227]">NAVDASH ROUTE WEATHER</div>
           <div className="text-sm font-black">Route encounter and Weather Time</div>
         </div>
-        <Link href="https://wardlab.dev/" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">NAV CONSOLE</Link>
+        <Link href="/bridge" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">MAIN</Link>
       </div>
 
       <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_380px]">
