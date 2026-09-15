@@ -47,6 +47,23 @@ function normalizeRoute(data: RouteState | null | undefined) {
   };
 }
 
+function routeTimestamp(route: { savedAt?: string } | null | undefined) {
+  const timestamp = Date.parse(route?.savedAt || "");
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function readBrowserRoute() {
+  for (const storage of [window.sessionStorage, window.localStorage]) {
+    try {
+      const raw = storage.getItem(ROUTE_STORAGE_KEY);
+      if (!raw) continue;
+      const route = normalizeRoute(JSON.parse(raw));
+      if (route) return route;
+    } catch {}
+  }
+  return null;
+}
+
 function writeBrowserRoute(route: ReturnType<typeof normalizeRoute>) {
   if (!route) return;
   const value = JSON.stringify(route);
@@ -75,10 +92,19 @@ export function SharedRouteSync() {
         const response = await fetch("/api/route-state", { cache: "no-store" });
         if (!response.ok || closed || wheelhouseAnswered) return;
         const data = await response.json();
+
+        if (data?.hasRoute === false) {
+          clearBrowserRoute();
+          return;
+        }
+
         const normalized = normalizeRoute(data);
         if (!normalized) return;
-        writeBrowserRoute(normalized);
-        if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(normalized));
+
+        const browserRoute = readBrowserRoute();
+        if (!browserRoute || routeTimestamp(normalized) >= routeTimestamp(browserRoute)) {
+          writeBrowserRoute(normalized);
+        }
       } catch {}
     };
 
