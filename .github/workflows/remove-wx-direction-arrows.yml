@@ -1,0 +1,43 @@
+name: Remove WX direction arrows
+
+on:
+  push:
+    paths:
+      - '.github/workflows/remove-wx-direction-arrows.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  scalpel:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Disable WX sample-point direction arrows
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('app/wx-routing/page.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = 'map.setLayoutProperty(WX_WIND_LAYER_ID, "visibility", showGribPointLayer ? "visible" : "none");'
+          new = 'map.setLayoutProperty(WX_WIND_LAYER_ID, "visibility", "none");'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one WX wind-arrow visibility line, found {count}. No files changed.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+      - name: Remove one-shot workflow
+        run: rm .github/workflows/remove-wx-direction-arrows.yml
+
+      - name: Commit scalpel change
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/wx-routing/page.tsx .github/workflows/remove-wx-direction-arrows.yml
+          git commit -m "Remove WX route wind direction arrows"
+          git push origin HEAD:main
