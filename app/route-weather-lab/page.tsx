@@ -256,6 +256,8 @@ export default function RouteWeatherLabPage() {
     let cancelled = false;
     let brightnessMenu: HTMLDivElement | null = null;
     let encLayer: any = null;
+    let dayBaseLayer: any = null;
+    let daySeamarkLayer: any = null;
 
     async function init() {
       if (!mapEl.current || mapRef.current) return;
@@ -271,7 +273,7 @@ export default function RouteWeatherLabPage() {
 
       const map = L.map(mapEl.current, { attributionControl: false, zoomControl: true }).setView([20, 0], 3);
       const encPane = map.createPane("routeWeatherEnc");
-      encPane.style.zIndex = "200";
+      encPane.style.zIndex = "250";
 
       const isNight = () => {
         try {
@@ -298,14 +300,30 @@ export default function RouteWeatherLabPage() {
         encPane.style.filter = `brightness(${clampEncBrightness(value)}%)`;
       };
 
-      const createEncLayer = (night: boolean) => {
-        if (encLayer) {
-          try { map.removeLayer(encLayer); } catch {}
-          encLayer = null;
-        }
+      const removeLayer = (layer: any) => {
+        if (!layer) return;
+        try { map.removeLayer(layer); } catch {}
+      };
+
+      const createMapLayers = (night: boolean) => {
+        removeLayer(encLayer);
+        removeLayer(dayBaseLayer);
+        removeLayer(daySeamarkLayer);
+        encLayer = null;
+        dayBaseLayer = null;
+        daySeamarkLayer = null;
 
         if (mapEl.current) {
           mapEl.current.style.background = night ? "#071019" : "#dbe5e8";
+        }
+
+        if (!night) {
+          dayBaseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+          }).addTo(map);
+          daySeamarkLayer = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
+            maxZoom: 18,
+          }).addTo(map);
         }
 
         encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
@@ -314,6 +332,7 @@ export default function RouteWeatherLabPage() {
           format: "image/png",
           transparent: true,
           version: "1.1.1",
+          opacity: night ? 1 : 0.9,
           tileSize: 512,
           maxZoom: 18,
           updateWhenZooming: false,
@@ -395,10 +414,10 @@ export default function RouteWeatherLabPage() {
 
       const onThemeChange = (event: Event) => {
         const next = (event as CustomEvent<"bridge-night" | "day">).detail;
-        createEncLayer(next !== "day");
+        createMapLayers(next !== "day");
       };
 
-      createEncLayer(isNight());
+      createMapLayers(isNight());
       mapEl.current.addEventListener("contextmenu", openBrightnessMenu);
       document.addEventListener("pointerdown", onDocumentPointerDown, true);
       window.addEventListener("navdash-theme-change", onThemeChange);
