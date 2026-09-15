@@ -4,7 +4,6 @@ import { BridgeTrackedAisTargets } from "../../components/BridgeTrackedAisTarget
 import { MobileBridgeRedirect } from "../../components/MobileBridgeRedirect";
 import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";
 import { EncObjectInfo } from "../../components/EncObjectInfo";
-import { EncPopupCloseFix } from "../../components/EncPopupCloseFix";
 import { ArrivalPlannerBridgeButton } from "../../components/ArrivalPlannerBridgeButton";
 import { MapCursorReadout } from "../../components/MapCursorReadout";
 import { MapFloatingControlsContext } from "../../components/MapFloatingControlsContext";
@@ -19,7 +18,6 @@ export default function BridgePage() {
       <BridgeTrackedAisTargets />
       <AisMapReadyRetry />
       <EncObjectInfo />
-      <EncPopupCloseFix />
       <MapCursorReadout />
       <MapFloatingControlsContext />
     </>

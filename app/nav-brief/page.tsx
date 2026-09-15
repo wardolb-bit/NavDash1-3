@@ -280,6 +280,7 @@ export default function NavBriefBuilderPage() {
     setNoteConfirmation(note ? `✓ ADDED TO PRINT · ${selectedWp.name}` : `✓ MANUAL NOTE CLEARED · ${selectedWp.name}`);
   }
   function refreshInputs() { const current = readCurrentRoute(); if (current) { setRoute(current); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); setSelectedWaypoint(value => value || current.waypoints[0]?.id || ""); } setUserMarks(readUserMarks()); setAmi(readAmi()); }
+  function clearAmiRoute() { try { window.localStorage.removeItem(AMI_OVERLAY_STORAGE_KEY); } catch {} setAmi(null); setAmiFile(""); setAmiError(""); window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: null })); }
 
   const status = [
     { label: "ROUTE", value: route ? "READY" : "STANDBY", detail: route ? `${route.waypoints.length} WPTS` : "NO ROUTE" },
@@ -309,7 +310,7 @@ export default function NavBriefBuilderPage() {
       <header className={`no-print border ${panel}`}>
         <div className="flex min-h-[66px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div><div className={`text-[10px] font-black uppercase tracking-[.22em] ${accent}`}>M/V MB480 · NAVDASH 1.3</div><div className="mt-1 flex items-baseline gap-3"><h1 className="text-[24px] font-black tracking-tight">NAV BRIEF</h1><span className={`text-[11px] font-bold uppercase tracking-[.12em] ${muted}`}>Voyage Planning Console</span></div></div>
-          <div className="flex flex-wrap items-center gap-2"><button onClick={refreshInputs} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Refresh Inputs</button><button onClick={toggleTheme} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>{nightMode ? "Day Mode" : "Night Mode"}</button><button onClick={() => window.print()} className="border border-[#c9a227] bg-[#c9a227] px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] text-black hover:bg-[#d6b63b]">Print / PDF</button></div>
+          <div className="flex flex-wrap items-center gap-2"><button onClick={() => { window.location.href = "/bridge"; }} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Main</button><button onClick={refreshInputs} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Refresh Inputs</button><button onClick={clearAmiRoute} disabled={!ami} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control} disabled:opacity-40`}>Clear AMI Route</button><button onClick={toggleTheme} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>{nightMode ? "Day Mode" : "Night Mode"}</button><button onClick={() => window.print()} className="border border-[#c9a227] bg-[#c9a227] px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] text-black hover:bg-[#d6b63b]">Print / PDF</button></div>
         </div>
       </header>
 

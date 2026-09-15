@@ -278,6 +278,27 @@ export function EncObjectInfo() {
       document.head.appendChild(style);
     };
 
+    const guardPopup = (popup: any) => {
+      const element = popup?.getElement?.() as HTMLElement | null;
+      if (!element) return;
+      element.style.pointerEvents = "auto";
+      const stop = (event: Event) => event.stopPropagation();
+      element.addEventListener("click", stop);
+      element.addEventListener("pointerdown", stop);
+      element.addEventListener("touchstart", stop, { passive: true });
+      const close = element.querySelector(".leaflet-popup-close-button") as HTMLElement | null;
+      if (close && !close.dataset.navdashEncCloseBound) {
+        close.dataset.navdashEncCloseBound = "true";
+        const closePopup = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try { map.closePopup(popup); } catch {}
+        };
+        close.addEventListener("click", closePopup);
+        close.addEventListener("pointerup", closePopup);
+      }
+    };
+
     const identify = async (event: any) => {
       if (!active || !map || !L) return;
       const lat = Number(event?.latlng?.lat);
@@ -305,6 +326,7 @@ export function EncObjectInfo() {
         .setLatLng(event.latlng)
         .setContent('<div class="navdash-enc-loading">Querying NOAA ENC…</div>')
         .openOn(map);
+      guardPopup(popup);
 
       try {
         const response = await fetch(`/api/noaa-enc-identify?${params.toString()}`, { cache: "no-store", signal: pendingController.signal });

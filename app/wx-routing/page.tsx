@@ -2883,7 +2883,7 @@ export default function WxRoutingPage() {
   return (
     <main className={pageClass}>
       <div className="mx-auto flex max-w-none flex-col gap-4 p-4 xl:min-h-[calc(100vh-73px)]">
-        <header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <header className={`flex flex-col gap-3 border p-3 lg:flex-row lg:items-center lg:justify-between ${dayMode ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#071019] text-[#dbe5ee]"}`}>
           <div>
             <div className={labelClass}>NavDash 1.3 Weather</div>
             <h1 className="text-3xl font-black uppercase tracking-wide">WX Routing</h1>
