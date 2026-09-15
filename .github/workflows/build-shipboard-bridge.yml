@@ -44,6 +44,10 @@ jobs:
         shell: pwsh
         run: node patch-position.js
 
+      - name: Add automatic secure tunnel fallback
+        shell: pwsh
+        run: node patch-tunnel.js
+
       - name: Upload patched bridge source
         uses: actions/upload-artifact@v4
         with:
