@@ -196,17 +196,6 @@ function enhance() {
       const isSelected = selectedIndex === index;
       const dimmed = selectedIndex >= 0 && !isSelected;
 
-      const windDir = parseDirection(cells[3]?.textContent || "");
-      if (windDir !== null && !isSelected) {
-        const arrowY = Math.max(64, point.windY - 28);
-        const arrow = svgEl("g", { transform: `translate(${point.x} ${arrowY}) rotate(${windDir + 180})`, opacity: dimmed ? .32 : .95 });
-        arrow.append(
-          svgEl("line", { x1: -9, y1: 0, x2: 9, y2: 0, stroke: "#67e8f9", "stroke-width": 2.2, "stroke-linecap": "round" }),
-          svgEl("path", { d: "M 9 0 L 3 -4.5 M 9 0 L 3 4.5", fill: "none", stroke: "#67e8f9", "stroke-width": 2.2, "stroke-linecap": "round" })
-        );
-        enhancement.append(arrow);
-      }
-
       const waveDir = parseDirection(cells[7]?.textContent || "");
       if (waveDir !== null && !isSelected) {
         const arrowY = Math.max(12, point.seaY - 34);
