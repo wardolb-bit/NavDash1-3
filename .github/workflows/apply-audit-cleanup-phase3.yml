@@ -1,0 +1,50 @@
+name: Apply NavDash cleanup phase 3
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-audit-cleanup-phase3.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Refresh lockfile
+        run: npm install --no-audit --no-fund
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Orphan check
+        run: npm run check:orphans
+      - name: Production build
+        run: npm run build
+      - name: HTTP smoke test
+        run: |
+          npm run start -- -H 127.0.0.1 -p 3000 > /tmp/navdash.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/bridge >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/bridge >/dev/null
+          curl -fsS http://127.0.0.1:3000/wx-routing >/dev/null
+          curl -fsS http://127.0.0.1:3000/nav-brief >/dev/null
+      - name: Commit lockfile and remove one-shot workflow
+        run: |
+          rm .github/workflows/apply-audit-cleanup-phase3.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Audit cleanup phase 3: add engineering guardrails"
+          git push origin HEAD:audit-cleanup-preview-2026-09-15
