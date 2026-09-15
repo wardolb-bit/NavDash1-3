@@ -270,38 +270,36 @@ export default function RouteWeatherLabPage() {
       }
 
       const map = L.map(mapEl.current, { attributionControl: false, zoomControl: true }).setView([20, 0], 3);
+      const encPane = map.createPane("routeWeatherEnc");
+      encPane.style.zIndex = "200";
       const isNight = () => document.documentElement.dataset.navdashTheme !== "day" && !document.documentElement.classList.contains("day-mode");
-      const encDisplayParams = (night: boolean) => JSON.stringify({
+      const encDisplayParams = () => JSON.stringify({
         ECDISParameters: {
-          version: "11.2",
+          version: "10.9",
           DynamicParameters: {
             Parameter: [
-              { name: "AreaSymbolizationType", value: 2 },
-              { name: "ColorScheme", value: night ? 5 : 0 },
-              { name: "DisplayCategory", value: "1,2,4" },
-              { name: "DisplayDepthUnits", value: 1 },
-              { name: "HonorScamin", value: 1 },
-              { name: "PointSymbolizationType", value: 2 },
-              { name: "TwoDepthShades", value: 1 },
+              { name: "ColorScheme", value: 5 },
+              { name: "DisplayFrames", value: 2 },
+              { name: "DisplayFrameText", value: 0 },
             ],
           },
         },
       });
 
+      const night = isNight();
       const encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
-        layers: "1,2,3,4,5,6,7",
+        pane: "routeWeatherEnc",
+        layers: night ? "1,2,3,4,5,6,7" : "0,1,2,3,4,5,6,7",
         format: "image/png",
-        transparent: false,
+        transparent: !night,
         version: "1.1.1",
         tileSize: 512,
         maxZoom: 18,
-        display_params: encDisplayParams(isNight()),
+        ...(night ? { display_params: encDisplayParams() } : {}),
       } as any).addTo(map);
 
       const applyBrightness = (value = readEncBrightness()) => {
-        const brightness = clampEncBrightness(value);
-        const container = encLayer.getContainer?.() as HTMLElement | undefined;
-        if (container) container.style.filter = `brightness(${brightness}%)`;
+        encPane.style.filter = `brightness(${clampEncBrightness(value)}%)`;
       };
 
       const closeBrightnessMenu = () => {
@@ -372,7 +370,12 @@ export default function RouteWeatherLabPage() {
       document.addEventListener("pointerdown", closeBrightnessMenu, true);
 
       const applyEncPalette = () => {
-        encLayer.setParams({ display_params: encDisplayParams(isNight()) });
+        const nextNight = isNight();
+        encLayer.setParams({
+          layers: nextNight ? "1,2,3,4,5,6,7" : "0,1,2,3,4,5,6,7",
+          transparent: nextNight ? false : true,
+          display_params: nextNight ? encDisplayParams() : "",
+        });
         applyBrightness();
       };
       themeObserver = new MutationObserver(applyEncPalette);
