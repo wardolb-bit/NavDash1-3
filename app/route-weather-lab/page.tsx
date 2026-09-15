@@ -254,8 +254,8 @@ export default function RouteWeatherLabPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let themeObserver: MutationObserver | null = null;
     let brightnessMenu: HTMLDivElement | null = null;
+    let encLayer: any = null;
 
     async function init() {
       if (!mapEl.current || mapRef.current) return;
@@ -272,6 +272,7 @@ export default function RouteWeatherLabPage() {
       const map = L.map(mapEl.current, { attributionControl: false, zoomControl: true }).setView([20, 0], 3);
       const encPane = map.createPane("routeWeatherEnc");
       encPane.style.zIndex = "200";
+
       const isNight = () => {
         try {
           return window.localStorage.getItem("navConsoleTheme") !== "day";
@@ -279,6 +280,7 @@ export default function RouteWeatherLabPage() {
           return document.documentElement.dataset.navdashTheme !== "day";
         }
       };
+
       const encDisplayParams = () => JSON.stringify({
         ECDISParameters: {
           version: "10.9",
@@ -292,20 +294,35 @@ export default function RouteWeatherLabPage() {
         },
       });
 
-      const night = isNight();
-      const encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
-        pane: "routeWeatherEnc",
-        layers: night ? "1,2,3,4,5,6,7" : "0,1,2,3,4,5,6,7",
-        format: "image/png",
-        transparent: !night,
-        version: "1.1.1",
-        tileSize: 512,
-        maxZoom: 18,
-        ...(night ? { display_params: encDisplayParams() } : {}),
-      } as any).addTo(map);
-
       const applyBrightness = (value = readEncBrightness()) => {
         encPane.style.filter = `brightness(${clampEncBrightness(value)}%)`;
+      };
+
+      const createEncLayer = (night: boolean) => {
+        if (encLayer) {
+          try { map.removeLayer(encLayer); } catch {}
+          encLayer = null;
+        }
+
+        if (mapEl.current) {
+          mapEl.current.style.background = night ? "#071019" : "#dbe5e8";
+        }
+
+        encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
+          pane: "routeWeatherEnc",
+          layers: night ? "1,2,3,4,5,6,7" : "0,1,2,3,4,5,6,7",
+          format: "image/png",
+          transparent: true,
+          version: "1.1.1",
+          tileSize: 512,
+          maxZoom: 18,
+          updateWhenZooming: false,
+          keepBuffer: 2,
+          ...(night ? { display_params: encDisplayParams() } : {}),
+        } as any).addTo(map);
+
+        encLayer.on?.("load", () => applyBrightness());
+        applyBrightness();
       };
 
       const closeBrightnessMenu = () => {
@@ -376,22 +393,15 @@ export default function RouteWeatherLabPage() {
         brightnessMenu = menu;
       };
 
-      encLayer.on("load", () => applyBrightness());
-      applyBrightness();
+      const onThemeChange = (event: Event) => {
+        const next = (event as CustomEvent<"bridge-night" | "day">).detail;
+        createEncLayer(next !== "day");
+      };
+
+      createEncLayer(isNight());
       mapEl.current.addEventListener("contextmenu", openBrightnessMenu);
       document.addEventListener("pointerdown", onDocumentPointerDown, true);
-
-      const applyEncPalette = () => {
-        const nextNight = isNight();
-        encLayer.setParams({
-          layers: nextNight ? "1,2,3,4,5,6,7" : "0,1,2,3,4,5,6,7",
-          transparent: nextNight ? false : true,
-          display_params: nextNight ? encDisplayParams() : "",
-        });
-        applyBrightness();
-      };
-      themeObserver = new MutationObserver(applyEncPalette);
-      themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-navdash-theme"] });
+      window.addEventListener("navdash-theme-change", onThemeChange);
 
       routeLayerRef.current = L.layerGroup().addTo(map);
       weatherLayerRef.current = L.layerGroup().addTo(map);
@@ -399,14 +409,15 @@ export default function RouteWeatherLabPage() {
       (map as any).__routeWeatherCleanup = () => {
         mapEl.current?.removeEventListener("contextmenu", openBrightnessMenu);
         document.removeEventListener("pointerdown", onDocumentPointerDown, true);
+        window.removeEventListener("navdash-theme-change", onThemeChange);
         closeBrightnessMenu();
       };
       setTimeout(() => map.invalidateSize(), 100);
     }
+
     init();
     return () => {
       cancelled = true;
-      themeObserver?.disconnect();
       (mapRef.current as any)?.__routeWeatherCleanup?.();
       mapRef.current?.remove();
       mapRef.current = null;
