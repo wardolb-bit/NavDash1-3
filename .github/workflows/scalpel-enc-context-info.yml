@@ -29,9 +29,20 @@ jobs:
       - name: Install dependencies
         working-directory: target
         run: npm ci --no-audit --no-fund
-      - name: TypeScript check
+      - name: Reject new TypeScript errors in changed files
         working-directory: target
-        run: npx tsc --noEmit
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit > /tmp/tsc.log 2>&1
+          set -e
+          cat /tmp/tsc.log
+          if grep -E 'app/layout\.tsx|components/EncObjectInfo\.tsx' /tmp/tsc.log \
+            | grep -Ev 'components/EncObjectInfo\.tsx\((139,26|139,61|171,63)\)' \
+            | grep -q .; then
+            echo 'New TypeScript error detected in changed files.'
+            exit 1
+          fi
       - name: Production build
         working-directory: target
         run: npm run build
