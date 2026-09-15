@@ -1,0 +1,40 @@
+name: Port main weather fixes to preview
+
+on:
+  push:
+    paths:
+      - '.github/workflows/port-main-weather-fixes-preview.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  port:
+    if: github.ref == 'refs/heads/audit-cleanup-preview-2026-09-15'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply preview weather fixes
+        run: python scripts/port-main-weather-fixes-preview.py
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Orphan check
+        run: npm run check:orphans
+      - name: Production build
+        run: npm run build
+      - name: Commit validated preview fixes
+        run: |
+          rm .github/workflows/port-main-weather-fixes-preview.yml
+          rm scripts/port-main-weather-fixes-preview.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/api/noaa-charts/wms/route.ts app/route-weather-lab/page.tsx .github/workflows/port-main-weather-fixes-preview.yml scripts/port-main-weather-fixes-preview.py
+          git commit -m "Port production weather map fixes to preview"
+          git push origin HEAD:audit-cleanup-preview-2026-09-15
