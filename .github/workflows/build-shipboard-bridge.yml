@@ -40,6 +40,10 @@ jobs:
           [IO.File]::WriteAllBytes('NavDash-Shipboard-Bridge.js', [Convert]::FromBase64String($base64))
           Write-Host "Reassembled $((Get-Item 'NavDash-Shipboard-Bridge.js').Length) bytes"
 
+      - name: Add GGA/RMC position support
+        shell: pwsh
+        run: node patch-position.js
+
       - name: Install dependencies
         shell: pwsh
         run: npm install
