@@ -2,8 +2,9 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
+import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
-const NOAA_ENC_WMS = "https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer";
+const NOAA_ENC_WMS = "/api/noaa-charts/wms";
 const MAP_ID = "route-weather-lab-map";
 
 type OwnShip = {
@@ -71,6 +72,8 @@ function vesselIconHtml(orientation: number) {
 }
 
 export default function WeatherChartLayer() {
+  const { nightMode } = useBridgeTheme();
+
   useLayoutEffect(() => {
     let cancelled = false;
 
@@ -89,6 +92,16 @@ export default function WeatherChartLayer() {
 
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    const host = document.getElementById(MAP_ID);
+    const pane = host?.querySelector<HTMLElement>(".leaflet-route-weather-enc-pane");
+    if (!host || !pane) return;
+    host.style.background = nightMode ? "#02070b" : "#dbe7ed";
+    pane.style.filter = nightMode
+      ? "brightness(.40) contrast(1.35) saturate(.72)"
+      : "none";
+  }, [nightMode]);
 
   useEffect(() => {
     let disposed = false;
@@ -118,13 +131,23 @@ export default function WeatherChartLayer() {
       map = nextMap;
 
       try {
+        if (!map.getPane("route-weather-enc")) {
+          const encPane = map.createPane("route-weather-enc");
+          encPane.style.zIndex = "250";
+          encPane.style.filter = nightMode
+            ? "brightness(.40) contrast(1.35) saturate(.72)"
+            : "none";
+        }
+        host.style.background = nightMode ? "#02070b" : "#dbe7ed";
+
         chartLayer = L.tileLayer.wms(NOAA_ENC_WMS, {
+          pane: "route-weather-enc",
           layers: "1,2,3,4,5,6,7",
           format: "image/png",
-          transparent: true,
+          transparent: false,
           version: "1.1.1",
-          opacity: 0.85,
-          tileSize: 512,
+          opacity: 1,
+          tileSize: 256,
         } as any).addTo(map);
       } catch {}
 
