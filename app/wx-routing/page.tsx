@@ -1702,7 +1702,7 @@ export default function WxRoutingPage() {
     if (!map) return;
 
     if (map.getLayer(WX_WIND_LAYER_ID)) {
-      map.setLayoutProperty(WX_WIND_LAYER_ID, "visibility", showGribPointLayer ? "visible" : "none");
+      map.setLayoutProperty(WX_WIND_LAYER_ID, "visibility", "none");
     }
     if (map.getLayer(WX_POINT_LAYER_ID)) {
       map.setLayoutProperty(WX_POINT_LAYER_ID, "visibility", showGribPointLayer ? "visible" : "none");
