@@ -340,8 +340,12 @@ export default function RouteWeatherLabPage() {
           ...(night ? { display_params: encDisplayParams() } : {}),
         } as any).addTo(map);
 
-        encLayer.on?.("load", () => applyBrightness());
-        applyBrightness();
+        if (night) {
+          encLayer.on?.("load", () => applyBrightness());
+          applyBrightness();
+        } else {
+          encPane.style.filter = "";
+        }
       };
 
       const closeBrightnessMenu = () => {
@@ -358,7 +362,7 @@ export default function RouteWeatherLabPage() {
       const adjustBrightness = (delta: number) => {
         const next = clampEncBrightness(readEncBrightness() + delta);
         try { window.localStorage.setItem(ENC_BRIGHTNESS_KEY, String(next)); } catch {}
-        applyBrightness(next);
+        if (isNight()) applyBrightness(next);
         window.dispatchEvent(new CustomEvent("navdash-enc-brightness-change", { detail: next }));
         return next;
       };
@@ -591,17 +595,6 @@ export default function RouteWeatherLabPage() {
           `<b>Wind source:</b> ${p.source}`,
           p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).addTo(layer);
-
-        if (showWind && wind !== null && p.windDirectionDeg !== null && p.windDirectionDeg !== undefined) {
-          const flowDirection = (p.windDirectionDeg + 180) % 360;
-          const arrow = L.divIcon({
-            className: "",
-            html: `<div style="width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:#7dd3fc;font-size:18px;font-weight:900;text-shadow:0 1px 3px #000;transform:rotate(${flowDirection}deg)">➤</div>`,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          });
-          L.marker([routePoint.lat, routePoint.lon], { icon: arrow, interactive: false }).addTo(layer);
-        }
       });
 
       if (expectedVesselNm !== null) {
@@ -778,7 +771,7 @@ export default function RouteWeatherLabPage() {
 
           <div className="relative overflow-hidden border border-slate-800">
             <div id="route-weather-lab-map" ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />
-            {weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • arrows = wind flow • hover for details</div>}
+            {weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • hover for details</div>}
           </div>
 
           {weather && mode === "time" && (
