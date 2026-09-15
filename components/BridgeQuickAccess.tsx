@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 export function BridgeQuickAccess() {
   const pathname = usePathname();
+  const router = useRouter();
   const isMainNavDashRoute = pathname === "/bridge" || pathname === "/navdash";
   const [target, setTarget] = useState<HTMLElement | null>(null);
   const [dayMode, setDayMode] = useState(false);
@@ -58,7 +59,16 @@ export function BridgeQuickAccess() {
   return createPortal(
     <>
       <Link href="/celestial" className={buttonClass}>Star Finder</Link>
-      <Link href="/route-weather-lab" className={buttonClass}>Weather</Link>
+      <Link
+        href="/route-weather-lab"
+        className={buttonClass}
+        onClick={(event) => {
+          event.preventDefault();
+          router.push("/route-weather-lab");
+        }}
+      >
+        Weather
+      </Link>
       <Link href="/tides" className={buttonClass}>Tides</Link>
       <Link href="/position-report" className={buttonClass}>Position Report</Link>
       <Link href="/nav-brief" className={buttonClass}>Nav Brief</Link>
