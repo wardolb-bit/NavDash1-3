@@ -30,6 +30,7 @@ data/gshhg/
 
 # Local weather cache can be regenerated or restored from the full USB backup.
 data/grib/*.tmp
+data/grib/current-grib*
 wgrib-full.txt
 wgrib-test.txt
 

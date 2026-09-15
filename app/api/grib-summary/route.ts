@@ -3,10 +3,22 @@ import { promises as fs } from "fs";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
+import { deleteR2Object, getR2Object, putR2Object } from "../../../lib/r2Storage";
 
 export const runtime = "nodejs";
 
 const execFileAsync = promisify(execFile);
+
+const R2_GRIB_SUMMARY_KEY = "runtime/grib/current-grib-summary.json";
+
+function r2Configured() {
+  return Boolean(
+    process.env.R2_ENDPOINT &&
+    process.env.R2_ACCESS_KEY_ID &&
+    process.env.R2_SECRET_ACCESS_KEY &&
+    process.env.R2_BUCKET_NAME
+  );
+}
 
 type SampleRecord = {
   valid: string;
@@ -110,21 +122,26 @@ function routeStatePath() {
   return process.env.NAV_ROUTE_STATE_PATH || path.join(process.env.NAVDASH_DATA_DIR || path.join(process.cwd(), "data"), "loaded-route.json");
 }
 
-async function savePersistedGrib(buffer: Buffer, safeName: string, summary: PersistedGribSummary) {
+async function savePersistedGrib(safeName: string, summary: PersistedGribSummary) {
+  const nextSummary = { ...summary, savedFileName: "" };
+  const serialized = JSON.stringify(nextSummary, null, 2);
+
+  if (r2Configured()) {
+    await putR2Object(R2_GRIB_SUMMARY_KEY, serialized, "application/json");
+    return nextSummary;
+  }
+
   const dir = gribDataDir();
   await fs.mkdir(dir, { recursive: true });
-
-  const savedFileName = `current-grib${path.extname(safeName) || ".grb2"}`;
-  const savedFilePath = path.join(dir, savedFileName);
-  const nextSummary = { ...summary, savedFileName };
-
-  await fs.writeFile(savedFilePath, buffer);
-  await fs.writeFile(gribSummaryPath(), JSON.stringify(nextSummary, null, 2), "utf8");
-
+  await fs.writeFile(gribSummaryPath(), serialized, "utf8");
   return nextSummary;
 }
 
 async function clearPersistedGrib() {
+  if (r2Configured()) {
+    try { await deleteR2Object(R2_GRIB_SUMMARY_KEY); } catch {}
+  }
+
   const dir = gribDataDir();
 
   try {
@@ -837,7 +854,7 @@ export async function POST(request: Request) {
     }
 
     const loadedAt = new Date().toISOString();
-    const persisted = await savePersistedGrib(buffer, safeName, {
+    const persisted = await savePersistedGrib(safeName, {
       hasGrib: true,
       fileName: file.name,
       fileSize: file.size,
@@ -869,10 +886,21 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+  if (r2Configured()) {
+    try {
+      const response = await getR2Object(R2_GRIB_SUMMARY_KEY);
+      if (response.ok) {
+        const summary = await response.json();
+        return Response.json({ hasGrib: true, ...summary });
+      }
+    } catch {
+      // Fall through to the local cache for standalone/local operation.
+    }
+  }
+
   try {
     const raw = await fs.readFile(gribSummaryPath(), "utf8");
     const summary = JSON.parse(raw);
-
     return Response.json({ hasGrib: true, ...summary });
   } catch {
     return Response.json({ hasGrib: false });
