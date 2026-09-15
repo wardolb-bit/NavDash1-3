@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import SpeedSourceSelector from "./SpeedSourceSelector";
+import WeatherChartLayer from "./WeatherChartLayer";
 
 export default function RouteWeatherLabLayout({ children }: { children: ReactNode }) {
   return (
@@ -58,7 +59,23 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
         html[data-navdash-theme="day"] main [class*="text-cyan-400"] {
           color: #075f68 !important;
         }
+
+        html:not([data-navdash-theme="day"]) #route-weather-lab-map {
+          background: #02070b !important;
+        }
+        html:not([data-navdash-theme="day"]) #route-weather-lab-map .leaflet-control-zoom a {
+          background: #071019 !important;
+          color: #7fa88a !important;
+          border-color: rgba(127,168,138,.3) !important;
+        }
+        html:not([data-navdash-theme="day"]) #route-weather-lab-map .leaflet-tooltip {
+          background: #071019 !important;
+          color: #7fa88a !important;
+          border-color: rgba(127,168,138,.35) !important;
+          box-shadow: 0 4px 14px rgba(0,0,0,.45) !important;
+        }
       `}</style>
+      <WeatherChartLayer />
       {children}
       <SpeedSourceSelector />
     </>
