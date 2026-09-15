@@ -155,7 +155,6 @@ type ScenarioSummary = {
 const MAPLIBRE_CSS_ID = "maplibre-css";
 const WX_SOURCE_ID = "navdash-wx-routing-source";
 const WX_POINT_LAYER_ID = "navdash-wx-routing-points";
-const WX_WIND_LAYER_ID = "navdash-wx-routing-wind";
 const WX_LABEL_LAYER_ID = "navdash-wx-routing-labels";
 const ROUTE_SOURCE_ID = "navdash-wx-routing-route-source";
 const ROUTE_LINE_LAYER_ID = "navdash-wx-routing-route-line";
@@ -1616,25 +1615,6 @@ export default function WxRoutingPage() {
     });
 
     map.addLayer({
-      id: WX_WIND_LAYER_ID,
-      type: "symbol",
-      source: WX_SOURCE_ID,
-      layout: {
-        visibility: "none",
-        "text-field": "^",
-        "text-size": ["interpolate", ["linear"], ["zoom"], 2, 14, 8, 22],
-        "text-rotate": ["get", "rotation"],
-        "text-allow-overlap": true,
-        "text-ignore-placement": true,
-      },
-      paint: {
-        "text-color": nightMode ? "#f8fafc" : "#0f172a",
-        "text-halo-color": nightMode ? "#020617" : "#ffffff",
-        "text-halo-width": 2,
-      },
-    });
-
-    map.addLayer({
       id: WX_LABEL_LAYER_ID,
       type: "symbol",
       source: WX_SOURCE_ID,
@@ -1701,9 +1681,6 @@ export default function WxRoutingPage() {
     const map = mapRef.current;
     if (!map) return;
 
-    if (map.getLayer(WX_WIND_LAYER_ID)) {
-      map.setLayoutProperty(WX_WIND_LAYER_ID, "visibility", "none");
-    }
     if (map.getLayer(WX_POINT_LAYER_ID)) {
       map.setLayoutProperty(WX_POINT_LAYER_ID, "visibility", showGribPointLayer ? "visible" : "none");
     }
