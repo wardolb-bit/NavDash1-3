@@ -25,6 +25,12 @@ function parseNumber(text: string) {
   return match ? Number(match[0]) : null;
 }
 
+function removeMapWindArrows() {
+  document.querySelectorAll<HTMLElement>(".leaflet-marker-icon").forEach((icon) => {
+    if (icon.textContent?.trim() === "➤") icon.remove();
+  });
+}
+
 function addLabel(group: SVGGElement, x: number, y: number, text: string, color: string, strong = false) {
   const width = Math.max(58, text.length * 6.3 + 18);
   const height = strong ? 25 : 22;
@@ -115,6 +121,8 @@ function deconflictWaypointLabels(svg: SVGSVGElement) {
 }
 
 function enhance() {
+  removeMapWindArrows();
+
   const svg = document.querySelector<SVGSVGElement>('svg[viewBox="0 0 1000 160"]');
   if (!svg) return;
 
