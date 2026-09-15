@@ -49,6 +49,21 @@ function ownShipPosition() {
   return lat === null || lon === null ? null : { lat, lon };
 }
 
+function ownShipSog() {
+  const text = document.getElementById("bc2-sog")?.textContent ?? "";
+  const match = text.match(/(-?\d+(?:\.\d+)?)/);
+  const sog = match ? Number(match[1]) : NaN;
+  return Number.isFinite(sog) && sog > 0.1 ? sog : null;
+}
+
+function ttgText(distance: number, sog: number | null) {
+  if (!Number.isFinite(distance) || sog === null) return "--";
+  const totalMinutes = Math.max(0, Math.round((distance / sog) * 60));
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
 function findMap() {
   const host = document.getElementById("v12-map");
   if (!host) return { host: null, map: null };
@@ -83,15 +98,16 @@ export function MapCursorReadout() {
       const ship = ownShipPosition();
       const positionText = `${ddm(cursor.lat, true)}  ${ddm(cursor.lon, false)}`;
       if (!ship) {
-        overlay.textContent = `${positionText}   RNG --   BRG --`;
+        overlay.textContent = `${positionText}   RNG --   BRG --   TTG: --`;
         return;
       }
 
-      overlay.textContent = `${positionText}   RNG ${distanceNm(ship, cursor).toFixed(2)} NM   BRG ${bearing(ship, cursor).toFixed(1)}°T`;
+      const rangeNm = distanceNm(ship, cursor);
+      overlay.textContent = `${positionText}   RNG ${rangeNm.toFixed(2)} NM   BRG ${bearing(ship, cursor).toFixed(1)}°T   TTG: ${ttgText(rangeNm, ownShipSog())}`;
     };
 
     const onMouseOut = () => {
-      if (overlay) overlay.textContent = "CURSOR --   RNG --   BRG --";
+      if (overlay) overlay.textContent = "CURSOR --   RNG --   BRG --   TTG: --";
     };
 
     const attach = () => {
@@ -102,7 +118,7 @@ export function MapCursorReadout() {
 
       overlay = document.createElement("div");
       overlay.id = "navdash-map-cursor-readout";
-      overlay.textContent = "CURSOR --   RNG --   BRG --";
+      overlay.textContent = "CURSOR --   RNG --   BRG --   TTG: --";
       Object.assign(overlay.style, {
         position: "absolute",
         left: "8px",
