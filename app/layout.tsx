@@ -142,6 +142,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 closeMenu();
               };
 
+              const invokeEncInfo = (clientX, clientY) => {
+                const surface = getMapSurface();
+                const leafletMap = surface?.__navdashLeafletMap;
+                if (!(surface instanceof HTMLElement) || !leafletMap) return;
+                const rect = surface.getBoundingClientRect();
+                const latlng = leafletMap.containerPointToLatLng([clientX - rect.left, clientY - rect.top]);
+                window.dispatchEvent(new CustomEvent("navdash-enc-info-request", {
+                  detail: { lat: Number(latlng.lat), lon: Number(latlng.lng) },
+                }));
+                closeMenu();
+              };
+
               const buildMenuItem = (menu, text, action, options = {}) => {
                 const theme = menuTheme();
                 const row = document.createElement("button");
@@ -192,6 +204,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
                 if (!(group instanceof HTMLElement) || !(pan instanceof HTMLButtonElement)) return;
 
+                buildMenuItem(menu, "INFO", () => invokeEncInfo(clientX, clientY));
+                addSeparator(menu);
                 buildMenuItem(menu, "PAN", () => invokeButton("PAN"), { active: pan.style.border.includes("34,211,238") });
                 buildMenuItem(menu, "FROM SHIP", () => invokeButton("FROM SHIP"), { active: fromShip instanceof HTMLButtonElement && fromShip.style.border.includes("34,211,238"), disabled: !(fromShip instanceof HTMLButtonElement) });
                 buildMenuItem(menu, "TWO POINTS", () => invokeButton("TWO POINTS"), { active: twoPoints instanceof HTMLButtonElement && twoPoints.style.border.includes("34,211,238"), disabled: !(twoPoints instanceof HTMLButtonElement) });

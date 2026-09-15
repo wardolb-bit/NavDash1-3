@@ -245,8 +245,6 @@ export function EncObjectInfo() {
     let timer = 0;
     let map: any = null;
     let L: any = null;
-    let control: any = null;
-    let active = false;
     let pendingController: AbortController | null = null;
 
     const ensureStyles = () => {
@@ -256,8 +254,6 @@ export function EncObjectInfo() {
       style.textContent = `
         .leaflet-pane.navdash-enc-popup-pane{z-index:2000!important;pointer-events:none}
         .leaflet-pane.navdash-enc-popup-pane .leaflet-popup{pointer-events:auto}
-        .navdash-enc-control{display:block;border:1px solid rgba(105,215,235,.55);background:rgba(7,16,25,.92);color:#d9fbff;border-radius:4px;padding:7px 9px;font:800 11px/1 system-ui,sans-serif;letter-spacing:.06em;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.28)}
-        .navdash-enc-control[data-active="true"]{border-color:#f1d56b;color:#f1d56b;background:rgba(29,25,10,.96)}
         .navdash-enc-popup .leaflet-popup-content-wrapper{background:#071019;color:#dbe8ef;border:1px solid rgba(105,215,235,.42);border-radius:7px;box-shadow:0 8px 24px rgba(0,0,0,.42)}
         .navdash-enc-popup .leaflet-popup-tip{background:#071019}
         .navdash-enc-popup .leaflet-popup-content{margin:13px 15px;min-width:280px;max-width:390px}
@@ -269,18 +265,14 @@ export function EncObjectInfo() {
         .navdash-enc-source{font:700 8px/1.35 system-ui,sans-serif;letter-spacing:.06em;color:#6f8794;margin:8px 0 0}
         .navdash-enc-raw{margin-top:7px}.navdash-enc-raw summary{cursor:pointer;color:#7e9cab;font:800 9px/1.2 system-ui,sans-serif;letter-spacing:.08em}.navdash-enc-raw section{border-top:1px solid rgba(255,255,255,.09);padding:6px 0}.navdash-enc-raw section>strong{display:block;color:#69d7eb;font:800 9px/1.2 system-ui,sans-serif;margin-bottom:4px}.navdash-enc-raw section>div{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:1px 0;font:600 9px/1.25 system-ui,sans-serif}.navdash-enc-raw span{color:#748b97}.navdash-enc-raw b{color:#cfdbe1;text-align:right;overflow-wrap:anywhere}
         .navdash-enc-empty,.navdash-enc-error,.navdash-enc-loading{font:600 11px/1.35 system-ui,sans-serif;color:#a9bbc5;padding:4px 0}
-        html[data-navdash-theme="day"] .navdash-enc-control{background:rgba(255,255,255,.96);color:#16323f;border-color:rgba(25,99,120,.45)}
-        html[data-navdash-theme="day"] .navdash-enc-control[data-active="true"]{background:#fff8d8;color:#765e00;border-color:#b89000}
         html[data-navdash-theme="day"] .navdash-enc-popup .leaflet-popup-content-wrapper,html[data-navdash-theme="day"] .navdash-enc-popup .leaflet-popup-tip{background:#fff;color:#15222a}
         html[data-navdash-theme="day"] .navdash-enc-name,html[data-navdash-theme="day"] .navdash-enc-row strong{color:#15222a}
       `;
       document.head.appendChild(style);
     };
 
-    const identify = async (event: any) => {
-      if (!active || !map || !L) return;
-      const lat = Number(event?.latlng?.lat);
-      const lon = Number(event?.latlng?.lng);
+    const identifyAt = async (lat: number, lon: number) => {
+      if (!map || !L) return;
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
 
       pendingController?.abort();
@@ -301,7 +293,7 @@ export function EncObjectInfo() {
       });
 
       const popup = L.popup({ className: "navdash-enc-popup", maxWidth: 420, closeButton: true, pane: "navdashEncPopupPane" })
-        .setLatLng(event.latlng)
+        .setLatLng([lat, lon])
         .setContent('<div class="navdash-enc-loading">Querying NOAA ENC…</div>')
         .openOn(map);
 
@@ -346,37 +338,24 @@ export function EncObjectInfo() {
       popupPane.classList.add("navdash-enc-popup-pane");
       popupPane.style.zIndex = "2000";
 
-      control = L.control({ position: "topleft" });
-      control.onAdd = () => {
-        const button = L.DomUtil.create("button", "navdash-enc-control") as HTMLButtonElement;
-        button.type = "button";
-        button.textContent = "ENC INFO";
-        button.title = "Interrogate live NOAA ENC chart objects";
-        button.setAttribute("data-active", "false");
-        L.DomEvent.disableClickPropagation(button);
-        L.DomEvent.on(button, "click", (event: Event) => {
-          L.DomEvent.preventDefault(event);
-          active = !active;
-          button.setAttribute("data-active", String(active));
-          element.style.cursor = active ? "crosshair" : "";
-          if (!active) map.closePopup();
-        });
-        return button;
-      };
-      control.addTo(map);
-      map.on("click", identify);
     };
 
+    const onIdentifyRequest = (event: Event) => {
+      const detail = (event as CustomEvent<{ lat?: number; lon?: number }>).detail;
+      const lat = Number(detail?.lat);
+      const lon = Number(detail?.lon);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+      void identifyAt(lat, lon);
+    };
+
+    window.addEventListener("navdash-enc-info-request", onIdentifyRequest);
     void attach();
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
       pendingController?.abort();
-      try { if (map) map.off("click", identify); } catch {}
-      try { if (control && map) map.removeControl(control); } catch {}
-      const element = document.getElementById(MAP_ELEMENT_ID);
-      if (element) element.style.cursor = "";
+      window.removeEventListener("navdash-enc-info-request", onIdentifyRequest);
     };
   }, []);
 
