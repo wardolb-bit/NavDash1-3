@@ -907,6 +907,8 @@ function decodeOwnShipPosition(sentence: string): OwnShip | null {
   }
 }
 
+const WX_DEPARTURE_TIME_STORAGE_KEY = "navdash-wx-routing-departure-time-v1";
+
 export default function WxRoutingPage() {
   const { nightMode, dayMode, toggleTheme } = useBridgeTheme();
   const mapElRef = useRef<HTMLDivElement | null>(null);
@@ -940,6 +942,7 @@ export default function WxRoutingPage() {
   const [routeStatus, setRouteStatus] = useState("No route loaded");
   const [planningSpeed, setPlanningSpeed] = useState("6.5");
   const [departureTime, setDepartureTime] = useState("");
+  const [departureTimeLoaded, setDepartureTimeLoaded] = useState(false);
   const [whatIfSpeed, setWhatIfSpeed] = useState("8.0");
   const [whatIfDelayHours, setWhatIfDelayHours] = useState("0");
   const [activePanel, setActivePanel] = useState<WxRoutingPanel>("ROUTE");
@@ -955,6 +958,22 @@ export default function WxRoutingPage() {
   const [departureLon, setDepartureLon] = useState("");
   const [departureCourse, setDepartureCourse] = useState("");
   const [selectedRouteLeg, setSelectedRouteLeg] = useState<RouteLegForecast | null>(null);
+
+  useEffect(() => {
+    try {
+      const savedDepartureTime = window.localStorage.getItem(WX_DEPARTURE_TIME_STORAGE_KEY) || "";
+      setDepartureTime(savedDepartureTime);
+    } catch {}
+    setDepartureTimeLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!departureTimeLoaded) return;
+    try {
+      if (departureTime) window.localStorage.setItem(WX_DEPARTURE_TIME_STORAGE_KEY, departureTime);
+      else window.localStorage.removeItem(WX_DEPARTURE_TIME_STORAGE_KEY);
+    } catch {}
+  }, [departureTime, departureTimeLoaded]);
 
   const timeline = gribSummary?.timeline || [];
   const selectedTime = timeline[selectedIndex] || null;
