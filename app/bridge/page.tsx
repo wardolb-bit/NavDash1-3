@@ -1,5 +1,6 @@
 import NavDashConsole from "../NavDashConsole";
 import { MainMapAisTargets } from "../../components/MainMapAisTargets";
+import { BridgeTrackedAisTargets } from "../../components/BridgeTrackedAisTargets";
 import { MobileBridgeRedirect } from "../../components/MobileBridgeRedirect";
 import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";
 import { EncObjectInfo } from "../../components/EncObjectInfo";
@@ -15,6 +16,7 @@ export default function BridgePage() {
       <NavDashConsole />
       <ArrivalPlannerBridgeButton />
       <MainMapAisTargets />
+      <BridgeTrackedAisTargets />
       <AisMapReadyRetry />
       <EncObjectInfo />
       <EncPopupCloseFix />
