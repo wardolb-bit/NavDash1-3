@@ -27,6 +27,22 @@ body:has(.navdash-current-console) > nav {
   color: #6f9278 !important;
 }
 
+/* AIS target info cards only. Keep Leaflet/ENC popups untouched. */
+.navdash-v12-night .leaflet-navmap-main-ais-targets-v1-pane .leaflet-tooltip {
+  background: #050a0f !important;
+  border: 1px solid rgba(127,168,138,.38) !important;
+  color: #7fa88a !important;
+  box-shadow: 0 3px 12px rgba(0,0,0,.55) !important;
+}
+
+.navdash-v12-night .leaflet-navmap-main-ais-targets-v1-pane .leaflet-tooltip strong {
+  color: #9bc1a5 !important;
+}
+
+.navdash-v12-night .leaflet-navmap-main-ais-targets-v1-pane .leaflet-tooltip-top::before {
+  border-top-color: #050a0f !important;
+}
+
 #bc-v2-instruments label {
   display: block;
   margin-bottom: 4px;
