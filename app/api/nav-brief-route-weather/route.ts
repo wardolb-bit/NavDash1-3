@@ -82,9 +82,17 @@ export async function POST(request: NextRequest) {
     }
 
     const origin = new URL(request.url).origin;
+    const authHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    const cookie = request.headers.get("cookie");
+    const authorization = request.headers.get("authorization");
+    const protectionBypass = request.headers.get("x-vercel-protection-bypass");
+    if (cookie) authHeaders.Cookie = cookie;
+    if (authorization) authHeaders.Authorization = authorization;
+    if (protectionBypass) authHeaders["x-vercel-protection-bypass"] = protectionBypass;
+
     const windResponse = await fetch(`${origin}/api/noaa-route-weather`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders,
       cache: "no-store",
       body: JSON.stringify({ waypoints: route }),
     });
@@ -103,7 +111,7 @@ export async function POST(request: NextRequest) {
       try {
         const waveResponse = await fetch(`${origin}/api/gfs-wave-route`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: authHeaders,
           cache: "no-store",
           body: JSON.stringify({
             points: basePoints.map((point) => ({ lat: point.lat, lon: point.lon, distanceNm: point.distanceNm })),
