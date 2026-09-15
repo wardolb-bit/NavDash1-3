@@ -133,6 +133,36 @@ function formatWhen(date: Date) {
   }).format(date);
 }
 
+function safeWhen(value: Date | string | null | undefined) {
+  const date = value instanceof Date ? value : new Date(value || "");
+  return Number.isFinite(date.getTime()) ? formatWhen(date) : "--";
+}
+
+function finiteNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function normalizeForecastPoint(point: ForecastPoint): ForecastPoint | null {
+  const lat = finiteNumber(point?.lat);
+  const lon = finiteNumber(point?.lon);
+  const distanceNm = finiteNumber(point?.distanceNm);
+  if (lat === null || lon === null || distanceNm === null) return null;
+  return {
+    ...point,
+    lat,
+    lon,
+    distanceNm,
+    windKt: finiteNumber(point?.windKt),
+    windDirectionDeg: finiteNumber(point?.windDirectionDeg),
+    gustKt: finiteNumber(point?.gustKt),
+    waveHeightFt: finiteNumber(point?.waveHeightFt),
+    wavePeriodSec: finiteNumber(point?.wavePeriodSec),
+    waveDirectionDeg: finiteNumber(point?.waveDirectionDeg),
+    source: typeof point?.source === "string" ? point.source : "Weather data unavailable",
+    waveSource: typeof point?.waveSource === "string" ? point.waveSource : undefined,
+  };
+}
+
 function compass(deg: number | null | undefined) {
   if (deg === null || deg === undefined || !Number.isFinite(deg)) return "--";
   const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
@@ -287,35 +317,43 @@ export default function RouteWeatherLabPage() {
     const count = weather.frames[0]?.points?.length || 0;
     const rows: EncounterPoint[] = [];
     for (let i = 0; i < count; i += 1) {
-      const first = weather.frames[0].points[i];
+      const first = normalizeForecastPoint(weather.frames[0].points[i]);
       if (!first) continue;
       const eta = new Date(dep.getTime() + (first.distanceNm / speedKt) * 3600000);
       let bestFrame = weather.frames[0];
       let bestDelta = Math.abs(new Date(bestFrame.validAt).getTime() - eta.getTime());
       for (const frame of weather.frames) {
-        const delta = Math.abs(new Date(frame.validAt).getTime() - eta.getTime());
+        const frameTime = new Date(frame.validAt).getTime();
+        if (!Number.isFinite(frameTime)) continue;
+        const delta = Math.abs(frameTime - eta.getTime());
         if (delta < bestDelta) {
           bestFrame = frame;
           bestDelta = delta;
         }
       }
-      const p = bestFrame.points[i];
+      const p = normalizeForecastPoint(bestFrame.points[i]);
       if (!p) continue;
       rows.push({ ...p, eta, validAt: new Date(bestFrame.validAt), deltaHours: bestDelta / 3600000 });
     }
     return rows;
   }, [weather, speedKt, departure]);
 
+  const safeFrameIndex = weather?.frames?.length
+    ? Math.max(0, Math.min(frameIndex, weather.frames.length - 1))
+    : 0;
+
   const displayedPoints = useMemo<ForecastPoint[]>(() => {
     if (!weather) return [];
     if (mode === "encounter") return encounter;
-    return weather.frames[frameIndex]?.points || [];
-  }, [weather, encounter, mode, frameIndex]);
+    return (weather.frames[safeFrameIndex]?.points || [])
+      .map((point) => normalizeForecastPoint(point))
+      .filter((point): point is ForecastPoint => point !== null);
+  }, [weather, encounter, mode, safeFrameIndex]);
 
   const maxSeas = useMemo(() => maxBy(encounter, "waveHeightFt") as EncounterPoint | null, [encounter]);
   const maxWind = useMemo(() => maxBy(encounter, "windKt") as EncounterPoint | null, [encounter]);
   const maxGust = useMemo(() => maxBy(encounter, "gustKt") as EncounterPoint | null, [encounter]);
-  const selectedFrame = weather?.frames?.[frameIndex];
+  const selectedFrame = weather?.frames?.[safeFrameIndex];
   const profileMaxSea = useMemo(() => Math.max(1, ...displayedPoints.map((p) => p.waveHeightFt || 0)), [displayedPoints]);
   const profileMaxWind = useMemo(() => Math.max(1, ...displayedPoints.map((p) => p.windKt || 0)), [displayedPoints]);
 
@@ -426,7 +464,7 @@ export default function RouteWeatherLabPage() {
             weight: 2,
             fillColor: "#22d3ee",
             fillOpacity: 0.95,
-          }).bindTooltip(`<b>EXPECTED VESSEL POSITION</b><br/>${expectedVesselNm.toFixed(0)} NM along route<br/>${formatWhen(new Date(selectedFrame.validAt))}`, {
+          }).bindTooltip(`<b>EXPECTED VESSEL POSITION</b><br/>${expectedVesselNm.toFixed(0)} NM along route<br/>${safeWhen(selectedFrame.validAt)}`, {
             direction: "top",
             opacity: 0.98,
           }).addTo(layer);
@@ -537,7 +575,7 @@ export default function RouteWeatherLabPage() {
 
   function occurrence(point: EncounterPoint | null) {
     if (!point) return null;
-    return `Occurs ${point.distanceNm.toFixed(0)} NM along route • ETA ${formatWhen(point.eta)}`;
+    return `Occurs ${point.distanceNm.toFixed(0)} NM along route • ETA ${safeWhen(point.eta)}`;
   }
 
   function profileXDistance(distanceNm: number) {
@@ -580,7 +618,7 @@ export default function RouteWeatherLabPage() {
               <div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MODE</div><div className="mt-1 text-xs font-black text-cyan-200">{mode === "encounter" ? "ROUTE ENCOUNTER" : "WEATHER TIME"}</div></div>
               <div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX SEAS</div><div className="mt-1 text-lg font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "--" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div></div>
               <div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX WIND</div><div className="mt-1 text-lg font-black text-cyan-300">{maxWind?.windKt == null ? "--" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div></div>
-              <div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div><div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : `${totalNm.toFixed(0)} NM`}</div></div>
+              <div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div><div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? safeWhen(selectedFrame.validAt) : `${totalNm.toFixed(0)} NM`}</div></div>
             </div>
           )}
 
@@ -591,8 +629,8 @@ export default function RouteWeatherLabPage() {
 
           {weather && mode === "time" && (
             <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div>
-              <input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} />
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? safeWhen(selectedFrame.validAt) : "--"}</span></div>
+              <input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={safeFrameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} />
               <div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>EARLIEST</span><span>GHOST VESSEL SHOWS EXPECTED POSITION</span><span>LATEST</span></div>
             </div>
           )}
@@ -692,8 +730,8 @@ export default function RouteWeatherLabPage() {
 
       {weather && displayedPoints.length > 0 && (
         <section className="border border-slate-700/50 bg-[#071019] p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs font-black text-slate-200">{mode === "encounter" ? "Conditions matched to vessel ETA at each sample" : `Snapshot valid ${selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}`}</div></div>{mode === "encounter" && <div className="text-[9px] text-slate-500">ETA match tolerance shown in VALID column</div>}</div>
-          <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-[10px]"><thead className="border-b border-slate-800 text-slate-500"><tr><th className="p-2">NM</th><th className="p-2">ETA / VALID</th><th className="p-2">WIND</th><th className="p-2">GUST</th><th className="p-2">SEAS</th><th className="p-2">PERIOD</th><th className="p-2">WAVE DIR</th><th className="p-2">SOURCE</th></tr></thead><tbody>{displayedPoints.map((p, i) => { const enc = mode === "encounter" ? (p as EncounterPoint) : null; return <tr key={i} className={`border-b border-slate-900 ${focusedIndex === i ? "bg-cyan-400/10" : ""}`} onMouseEnter={() => setFocusedIndex(i)} onMouseLeave={() => setFocusedIndex(null)}><td className="p-2 font-black text-slate-200">{p.distanceNm.toFixed(0)}</td><td className="p-2 text-slate-400">{enc ? <><div>{formatWhen(enc.eta)}</div><div className="text-[8px] text-slate-600">valid {formatWhen(enc.validAt)} • Δ {enc.deltaHours.toFixed(1)}h</div></> : selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</td><td className="p-2 font-black text-cyan-200">{p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td className="p-2">{p.gustKt == null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="p-2 font-black" style={{ color: seaColor(p.waveHeightFt) }}>{p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td className="p-2">{p.wavePeriodSec == null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td className="p-2">{p.waveDirectionDeg == null ? "--" : `${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°`}</td><td className="p-2 text-[8px] text-slate-500">{p.waveSource ? `${p.source} • ${p.waveSource}` : p.source}</td></tr>; })}</tbody></table></div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs font-black text-slate-200">{mode === "encounter" ? "Conditions matched to vessel ETA at each sample" : `Snapshot valid ${selectedFrame ? safeWhen(selectedFrame.validAt) : "--"}`}</div></div>{mode === "encounter" && <div className="text-[9px] text-slate-500">ETA match tolerance shown in VALID column</div>}</div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-[10px]"><thead className="border-b border-slate-800 text-slate-500"><tr><th className="p-2">NM</th><th className="p-2">ETA / VALID</th><th className="p-2">WIND</th><th className="p-2">GUST</th><th className="p-2">SEAS</th><th className="p-2">PERIOD</th><th className="p-2">WAVE DIR</th><th className="p-2">SOURCE</th></tr></thead><tbody>{displayedPoints.map((p, i) => { const enc = mode === "encounter" ? (p as EncounterPoint) : null; return <tr key={i} className={`border-b border-slate-900 ${focusedIndex === i ? "bg-cyan-400/10" : ""}`} onMouseEnter={() => setFocusedIndex(i)} onMouseLeave={() => setFocusedIndex(null)}><td className="p-2 font-black text-slate-200">{p.distanceNm.toFixed(0)}</td><td className="p-2 text-slate-400">{enc ? <><div>{safeWhen(enc.eta)}</div><div className="text-[8px] text-slate-600">valid {safeWhen(enc.validAt)} • Δ {enc.deltaHours.toFixed(1)}h</div></> : selectedFrame ? safeWhen(selectedFrame.validAt) : "--"}</td><td className="p-2 font-black text-cyan-200">{p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td className="p-2">{p.gustKt == null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="p-2 font-black" style={{ color: seaColor(p.waveHeightFt) }}>{p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td className="p-2">{p.wavePeriodSec == null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td className="p-2">{p.waveDirectionDeg == null ? "--" : `${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°`}</td><td className="p-2 text-[8px] text-slate-500">{p.waveSource ? `${p.source} • ${p.waveSource}` : p.source}</td></tr>; })}</tbody></table></div>
         </section>
       )}
     </main>
