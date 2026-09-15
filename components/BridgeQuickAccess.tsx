@@ -59,16 +59,13 @@ export function BridgeQuickAccess() {
   return createPortal(
     <>
       <Link href="/celestial" className={buttonClass}>Star Finder</Link>
-      <Link
-        href="/route-weather-lab"
+      <button
+        type="button"
         className={buttonClass}
-        onClick={(event) => {
-          event.preventDefault();
-          router.push("/route-weather-lab");
-        }}
+        onClick={() => router.push("/route-weather-lab")}
       >
         Weather
-      </Link>
+      </button>
       <Link href="/tides" className={buttonClass}>Tides</Link>
       <Link href="/position-report" className={buttonClass}>Position Report</Link>
       <Link href="/nav-brief" className={buttonClass}>Nav Brief</Link>
