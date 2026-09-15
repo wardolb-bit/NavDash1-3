@@ -21,49 +21,24 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-
           p = Path('app/celestial/bridge/page.tsx')
           s = p.read_text()
-          old_import = 'import { useEffect, useMemo, useState } from "react";\n'
-          new_import = old_import + 'import Link from "next/link";\n'
-          if s.count(old_import) != 1:
-              raise SystemExit('Unexpected React import count')
-          s = s.replace(old_import, new_import, 1)
-          old_link = '<a href="/" className={`${btn} inline-flex items-center`}>MAIN</a>'
-          new_link = '<Link href="/" className={`${btn} inline-flex items-center`}>MAIN</Link>'
-          if s.count(old_link) != 1:
-              raise SystemExit('Unexpected MAIN anchor count')
-          s = s.replace(old_link, new_link, 1)
-          p.write_text(s)
+          a = 'import { useEffect, useMemo, useState } from "react";\n'
+          if s.count(a) != 1: raise SystemExit('Unexpected React import count')
+          s = s.replace(a, a + 'import Link from "next/link";\n', 1)
+          old = '<a href="/" className={`${btn} inline-flex items-center`}>MAIN</a>'
+          new = '<Link href="/" className={`${btn} inline-flex items-center`}>MAIN</Link>'
+          if s.count(old) != 1: raise SystemExit('Unexpected MAIN anchor count')
+          p.write_text(s.replace(old, new, 1))
 
           cfg = Path('next.config.mjs')
           c = cfg.read_text()
-          old = '''/** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    cpus: 1,
-    workerThreads: true,
-    webpackBuildWorker: false,
-    serverComponentsExternalPackages: ["pdf-parse"],
-  },
-};
-
-export default nextConfig;
-'''
-          new = '''/** @type {import('next').NextConfig} */
-const nextConfig = {
-  serverExternalPackages: ["pdf-parse"],
-  experimental: {
-    cpus: 1,
-    webpackBuildWorker: false,
-  },
-};
-
-export default nextConfig;
-'''
-          if c != old:
-              raise SystemExit('Unexpected next.config.mjs contents')
-          cfg.write_text(new)
+          if c.count('    workerThreads: true,\n') != 1: raise SystemExit('workerThreads line mismatch')
+          if c.count('    serverComponentsExternalPackages: ["pdf-parse"],\n') != 1: raise SystemExit('external package line mismatch')
+          c = c.replace('    workerThreads: true,\n', '', 1)
+          c = c.replace('    serverComponentsExternalPackages: ["pdf-parse"],\n', '', 1)
+          c = c.replace('const nextConfig = {\n', 'const nextConfig = {\n  serverExternalPackages: ["pdf-parse"],\n', 1)
+          cfg.write_text(c)
           PY
       - name: Upgrade supported framework stack
         run: npm install next@15 react@19 react-dom@19 eslint-config-next@15 @types/react@19 @types/react-dom@19 --save-exact --no-audit --no-fund
