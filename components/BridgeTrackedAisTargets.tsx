@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
 const AIS_NAME_CACHE_KEY = "navdash-ais-name-cache-v1";
+const TRACKED_TARGETS_KEY = "navdash-tracked-ais-targets-v1";
 const TARGET_MAX_AGE_MS = 30 * 60 * 1000;
 const OWN_SHIP_MAX_AGE_MS = 2 * 60 * 1000;
 const PICK_RADIUS_PX = 22;
@@ -157,6 +158,20 @@ function namesFromCache() {
   return names;
 }
 
+function trackedFromStorage() {
+  const tracked = new Set<number>();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TRACKED_TARGETS_KEY) || "[]");
+    if (Array.isArray(parsed)) {
+      for (const value of parsed) {
+        const mmsi = Number(value);
+        if (Number.isFinite(mmsi)) tracked.add(mmsi);
+      }
+    }
+  } catch {}
+  return tracked;
+}
+
 function formatTcpa(minutes: number) {
   if (minutes < 60) return `${Math.round(minutes)} MIN`;
   return `${(minutes / 60).toFixed(1)} HR`;
@@ -173,7 +188,7 @@ export function BridgeTrackedAisTargets() {
     let names = namesFromCache();
     let ownShip: OwnShip | null = null;
     const targets = new Map<number, Target>();
-    const tracked = new Set<number>();
+    const tracked = trackedFromStorage();
 
     const panel = document.createElement("section");
     panel.id = "bc2-tracked-targets";
@@ -182,6 +197,9 @@ export function BridgeTrackedAisTargets() {
     systemStrip?.parentElement?.insertBefore(panel, systemStrip);
 
     const isDay = () => document.documentElement.dataset.navdashTheme === "day" || document.documentElement.classList.contains("day-mode");
+    const persistTracked = () => {
+      try { localStorage.setItem(TRACKED_TARGETS_KEY, JSON.stringify(Array.from(tracked))); } catch {}
+    };
 
     const render = () => {
       if (disposed) return;
@@ -228,6 +246,7 @@ export function BridgeTrackedAisTargets() {
         row.append(name, cpa, tcpa);
         row.addEventListener("click", () => {
           tracked.delete(mmsi);
+          persistTracked();
           render();
         });
         panel.appendChild(row);
@@ -259,6 +278,7 @@ export function BridgeTrackedAisTargets() {
       event.stopImmediatePropagation();
       if (tracked.has(nearest.mmsi)) tracked.delete(nearest.mmsi);
       else tracked.add(nearest.mmsi);
+      persistTracked();
       render();
     };
 
