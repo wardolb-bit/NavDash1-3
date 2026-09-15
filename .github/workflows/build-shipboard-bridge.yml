@@ -7,6 +7,12 @@ on:
     paths:
       - 'shipboard-bridge/**'
       - '.github/workflows/build-shipboard-bridge.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'shipboard-bridge/**'
+      - '.github/workflows/build-shipboard-bridge.yml'
   workflow_dispatch:
 
 jobs:
@@ -24,8 +30,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: shipboard-bridge/package-lock.json
 
       - name: Reassemble bridge source
         shell: pwsh
