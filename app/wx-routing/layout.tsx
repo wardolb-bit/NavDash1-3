@@ -4,6 +4,7 @@ import WeatherMapUxOverlay from "./WeatherMapUxOverlay";
 import WeatherRouteRecommendation from "./WeatherRouteRecommendation";
 import WeatherRoutingDataBridge from "./WeatherRoutingDataBridge";
 import WeatherSourceSelector from "./WeatherSourceSelector";
+import { WxRoutingBridgeSkin } from "../../components/WxRoutingBridgeSkin";
 
 export default function WxRoutingLayout({ children }: { children: ReactNode }) {
   return (
@@ -12,6 +13,7 @@ export default function WxRoutingLayout({ children }: { children: ReactNode }) {
       <WeatherSourceSelector />
       <WeatherEncBaseLayer />
       <WeatherMapUxOverlay />
+      <WxRoutingBridgeSkin />
       {children}
       <WeatherRouteRecommendation />
     </>
