@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
   const query = normalizedQuery(cacheIdentity);
   const utcDay = new Date().toISOString().slice(0, 10);
   const digest = createHash("sha256").update(query).digest("hex");
-  const cacheKey = `noaa/mcs-export-v2/${utcDay}/${digest}.png`;
+  const cacheKey = `noaa/mcs-export-v3/${utcDay}/${digest}.png`;
 
   try {
     const cached = await getR2Object(cacheKey);
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
         status: 200,
         headers: {
           "content-type": cached.headers.get("content-type") || "image/png",
-          "cache-control": "public, max-age=86400, immutable",
+          "cache-control": "no-store",
           "x-navdash-enc-cache": "HIT",
           "x-navdash-enc-source": "NOAA Maritime Chart Service export",
         },
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "content-type": contentType,
-        "cache-control": "public, max-age=86400, immutable",
+        "cache-control": "no-store",
         "x-navdash-enc-cache": "MISS",
         "x-navdash-enc-source": "NOAA Maritime Chart Service export",
         "x-navdash-enc-sr": sr,
