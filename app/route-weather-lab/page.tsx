@@ -203,6 +203,7 @@ export default function RouteWeatherLabPage() {
   const mapRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const weatherLayerRef = useRef<any>(null);
+  const autoLoadStartedRef = useRef(false);
   const [route, setRoute] = useState<Waypoint[]>([]);
   const [routeName, setRouteName] = useState("No route loaded");
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
@@ -226,6 +227,12 @@ export default function RouteWeatherLabPage() {
 
   const totalNm = useMemo(() => routeLengthNm(route), [route]);
   const waypointDistances = useMemo(() => routeWaypointDistances(route), [route]);
+
+  useEffect(() => {
+    if (autoLoadStartedRef.current) return;
+    autoLoadStartedRef.current = true;
+    void loadCurrentRoute(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -496,44 +503,15 @@ export default function RouteWeatherLabPage() {
     }
   }
 
-  async function loadCurrentRoute() {
-    setLoadingCurrentRoute(true);
-    setStatus("Loading current NavDash route…");
-    try {
-      const response = await fetch("/api/route-state", { cache: "no-store" });
-      const json = await response.json();
-      if (!response.ok) throw new Error(json?.error || "Could not read current NavDash route.");
-      if (!json?.hasRoute) throw new Error("There is no current shared NavDash route loaded.");
-      const parsed: Waypoint[] = (Array.isArray(json?.waypoints) ? json.waypoints : [])
-        .map((wp: any, index: number) => ({
-          name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `WP${String(index + 1).padStart(2, "0")}`,
-          lat: Number(wp?.lat ?? wp?.latitude),
-          lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-        }))
-        .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
-      if (parsed.length < 2) throw new Error("The current NavDash route does not contain enough usable waypoints.");
-      setRoute(parsed);
-      setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route");
-      setWeather(null);
-      setFrameIndex(0);
-      setFocusedIndex(null);
-      setStatus(`${parsed.length} waypoints loaded from the current NavDash route. Ready to analyze route weather.`);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not load current NavDash route.");
-    } finally {
-      setLoadingCurrentRoute(false);
-    }
-  }
-
-  async function analyze() {
-    if (route.length < 2) return;
+  async function analyzeWaypoints(waypoints: Waypoint[]) {
+    if (waypoints.length < 2) return;
     setStatus("Sampling route weather…");
     setWeather(null);
     try {
       const windResponse = await fetch("/api/noaa-route-weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ waypoints: route }),
+        body: JSON.stringify({ waypoints }),
       });
       const windJson = await windResponse.json();
       if (!windResponse.ok) throw new Error(windJson?.error || "Route weather request failed.");
@@ -571,6 +549,40 @@ export default function RouteWeatherLabPage() {
     }
   }
 
+  async function loadCurrentRoute(autoAnalyze = false) {
+    setLoadingCurrentRoute(true);
+    setStatus("Loading current NavDash route…");
+    try {
+      const response = await fetch("/api/route-state", { cache: "no-store" });
+      const json = await response.json();
+      if (!response.ok) throw new Error(json?.error || "Could not read current NavDash route.");
+      if (!json?.hasRoute) throw new Error("There is no current shared NavDash route loaded.");
+      const parsed: Waypoint[] = (Array.isArray(json?.waypoints) ? json.waypoints : [])
+        .map((wp: any, index: number) => ({
+          name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `WP${String(index + 1).padStart(2, "0")}`,
+          lat: Number(wp?.lat ?? wp?.latitude),
+          lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+        }))
+        .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+      if (parsed.length < 2) throw new Error("The current NavDash route does not contain enough usable waypoints.");
+      setRoute(parsed);
+      setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route");
+      setWeather(null);
+      setFrameIndex(0);
+      setFocusedIndex(null);
+      if (autoAnalyze) await analyzeWaypoints(parsed);
+      else setStatus(`${parsed.length} waypoints loaded from the current NavDash route. Ready to analyze route weather.`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Could not load current NavDash route.");
+    } finally {
+      setLoadingCurrentRoute(false);
+    }
+  }
+
+  async function analyze() {
+    await analyzeWaypoints(route);
+  }
+
   function occurrence(point: EncounterPoint | null) {
     if (!point) return null;
     return `Occurs ${point.distanceNm.toFixed(0)} NM along route • ETA ${formatWhen(point.eta)}`;
@@ -605,7 +617,7 @@ export default function RouteWeatherLabPage() {
         <section className="border border-slate-700/50 bg-[#071019] p-2">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && loadRouteFile(e.target.files[0])} /></label>
-            <button type="button" onClick={loadCurrentRoute} disabled={loadingCurrentRoute} className="border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{loadingCurrentRoute ? "LOADING CURRENT ROUTE…" : "LOAD CURRENT ROUTE"}</button>
+            <button type="button" onClick={() => loadCurrentRoute(false)} disabled={loadingCurrentRoute} className="border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{loadingCurrentRoute ? "LOADING CURRENT ROUTE…" : "LOAD CURRENT ROUTE"}</button>
             <button type="button" disabled={route.length < 2} onClick={analyze} className="border border-emerald-400/40 bg-[#08130f] px-3 py-2 text-[10px] font-black text-emerald-200 disabled:opacity-40">ANALYZE ROUTE</button>
             <button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button>
             <button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button>
