@@ -97,21 +97,30 @@ function directGribUrl(run: ModelRun, forecastHour: number) {
   return `${NOMADS}/pub/data/nccf/com/gfs/prod${gribDirectory(run)}/${gribFileName(run, forecastHour)}`;
 }
 
-async function latestModelRun() {
+function forecastHourFor(run: ModelRun, validAt: Date) {
+  const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
+  return Math.max(0, Math.min(120, rawHour));
+}
+
+async function modelRunFor(validTimes: Date[]) {
   for (const run of candidateRuns()) {
+    const forecastHours = Array.from(new Set(validTimes.map((validAt) => forecastHourFor(run, validAt))));
     try {
-      const response = await fetch(`${directGribUrl(run, 0)}.idx`, {
-        headers: { "User-Agent": USER_AGENT, Accept: "text/plain" },
-        cache: "no-store",
-      });
-      if (!response.ok) continue;
-      const text = await response.text();
-      if (text.includes(":HTSGW:") && text.includes(":PERPW:")) return run;
+      const checks = await Promise.all(forecastHours.map(async (forecastHour) => {
+        const response = await fetch(`${directGribUrl(run, forecastHour)}.idx`, {
+          headers: { "User-Agent": USER_AGENT, Accept: "text/plain" },
+          cache: "no-store",
+        });
+        if (!response.ok) return false;
+        const text = await response.text();
+        return text.includes(":HTSGW:") && text.includes(":PERPW:") && text.includes(":DIRPW:");
+      }));
+      if (checks.every(Boolean)) return run;
     } catch {
-      // Try the previous cycle.
+      // Try the previous completed cycle.
     }
   }
-  throw new Error("No current NOAA GFS Wave model cycle is available from NOMADS.");
+  throw new Error("No complete NOAA GFS Wave model cycle is available for all requested forecast hours.");
 }
 
 function routeBounds(points: Point[]): Bounds {
@@ -176,9 +185,9 @@ async function fetchWaveFields(run: ModelRun, forecastHour: number, bounds: Boun
       const product = parseProduct(field.section4);
       if (product.parameterCategory !== 0) continue;
       let target: keyof WaveFields | null = null;
-      if (product.parameterNumber === 3) target = "height";       // HTSGW
-      else if (product.parameterNumber === 11) target = "period"; // PERPW
-      else if (product.parameterNumber === 10) target = "direction"; // DIRPW
+      if (product.parameterNumber === 3) target = "height";
+      else if (product.parameterNumber === 11) target = "period";
+      else if (product.parameterNumber === 10) target = "direction";
       if (!target || result[target]) continue;
       const grid = parseGrid(field.section3);
       const { values } = decodeFieldValues(field);
@@ -264,7 +273,7 @@ export async function POST(request: Request) {
     }
 
     const [run, noaaResponse] = await Promise.all([
-      latestModelRun(),
+      modelRunFor(validTimes),
       fetch(`${new URL(request.url).origin}/api/noaa-route-weather`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -288,8 +297,7 @@ export async function POST(request: Request) {
     let gribFailures = 0;
 
     for (const validAt of validTimes) {
-      const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
-      const forecastHour = Math.max(0, Math.min(120, rawHour));
+      const forecastHour = forecastHourFor(run, validAt);
       let waveFields: WaveFields | null = null;
       try {
         waveFields = await fetchWaveFields(run, forecastHour, bounds);
