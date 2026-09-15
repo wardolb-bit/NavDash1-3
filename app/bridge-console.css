@@ -17,6 +17,16 @@ body:has(.navdash-current-console) > nav {
   text-decoration: none;
 }
 
+/* Night bridge palette: keep neutral text readable without near-white glare. */
+.navdash-v12-night {
+  color: #93a4b2;
+}
+
+.navdash-v12-night .text-slate-100,
+.navdash-v12-night .text-white {
+  color: #93a4b2 !important;
+}
+
 #bc-v2-instruments label {
   display: block;
   margin-bottom: 4px;
@@ -27,13 +37,13 @@ body:has(.navdash-current-console) > nav {
 
 #bc-v2-instruments .bc2-big-grid strong {
   display: block;
-  color: #edf4fa;
+  color: #9fb3c2;
   font: 850 31px/1 system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
 
 #bc-v2-instruments .bc2-small-grid strong {
-  color: #edf4fa;
+  color: #9fb3c2;
   font: 800 19px/1.15 system-ui, sans-serif;
   font-variant-numeric: tabular-nums;
 }
