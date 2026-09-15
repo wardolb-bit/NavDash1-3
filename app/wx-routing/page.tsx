@@ -988,7 +988,11 @@ export default function WxRoutingPage() {
     return formatDateTimeLocal(new Date(departure.getTime() + whatIfDelay * 3600000));
   }, [departureTime, whatIfDelay]);
   const projectionEnabled = projectionMode !== "off";
-  const useAisOrigin = projectionMode !== "departure";
+  const departureDate = departureTime ? new Date(departureTime) : null;
+  const departureIsPast = Boolean(
+    departureDate && !Number.isNaN(departureDate.getTime()) && departureDate.getTime() <= Date.now(),
+  );
+  const useAisOrigin = projectionMode !== "departure" || (departureIsPast && Boolean(ownShip));
   const departurePosition = useMemo(() => {
     const lat = Number(departureLat);
     const lon = Number(departureLon);
@@ -1002,14 +1006,18 @@ export default function WxRoutingPage() {
     if (!selectedTime || !Number.isFinite(planningSpeedKt) || planningSpeedKt < 0) return null;
 
     const departureStart = departureTime ? new Date(departureTime) : null;
-    const originPosition = projectionMode === "departure" ? departurePosition : ownShip;
-    const positionSource = projectionMode === "departure" ? "departure position/time" : "current AIS position";
-    const elapsedHours = projectionMode === "departure"
-      ? hoursBetweenDateAndUtcValid(departureStart, selectedTime.valid)
-      : Math.max(
+    const originPosition = useAisOrigin ? ownShip : departurePosition;
+    const positionSource = useAisOrigin
+      ? projectionMode === "departure"
+        ? "current AIS position (past departure)"
+        : "current AIS position"
+      : "departure position/time";
+    const elapsedHours = useAisOrigin
+      ? Math.max(
           hoursBetweenDateAndUtcValid(new Date(), selectedTime.valid),
           forecastLeadHoursForSelection(timeline, selectedIndex, "", selectedTime.valid),
-        );
+        )
+      : hoursBetweenDateAndUtcValid(departureStart, selectedTime.valid);
 
     if (planningSpeedKt === 0) {
       const stationaryPosition = originPosition || (route.length ? route[0] : null);
@@ -1055,9 +1063,9 @@ export default function WxRoutingPage() {
       };
     }
 
-    const originProgress = projectionMode === "departure"
-      ? projectionOriginProgress(route, departurePosition)
-      : planningOriginProgress(route, ownShip, true);
+    const originProgress = useAisOrigin
+      ? planningOriginProgress(route, ownShip, true)
+      : projectionOriginProgress(route, departurePosition);
     const projectedDistance = Math.min(routeDistanceNm, originProgress + elapsedHours * planningSpeedKt);
     const next = interpolateRouteAtDistance(route, projectedDistance);
     if (!next) return null;
@@ -1068,7 +1076,7 @@ export default function WxRoutingPage() {
       forecastLeadHours: elapsedHours,
       positionSource,
     };
-  }, [departurePosition, departureTime, departureCourseDeg, ownShip, planningSpeedKt, projectionEnabled, projectionMode, route, routeDistanceNm, selectedIndex, selectedTime, timeline]);
+  }, [departurePosition, departureTime, departureCourseDeg, ownShip, planningSpeedKt, projectionEnabled, projectionMode, route, routeDistanceNm, selectedIndex, selectedTime, timeline, useAisOrigin]);
 
   projectionRef.current = projection;
   planningSpeedRef.current = planningSpeedKt;
@@ -1163,14 +1171,14 @@ export default function WxRoutingPage() {
     const legForecasts: RouteLegForecast[] = [];
     const selectedValid = selectedTime?.valid;
     const routeForecast = gribSummary?.routeForecast || null;
-    const originProgress = projectionMode === "departure"
-    ? projectionOriginProgress(route, departurePosition)
-    : routeProgressNearestPosition(route, ownShip);
-  const etaBaseDate = projectionMode === "departure"
-    ? (departureTime ? new Date(departureTime) : null)
-    : ownShip?.receivedAt
+    const originProgress = useAisOrigin
+      ? routeProgressNearestPosition(route, ownShip)
+      : projectionOriginProgress(route, departurePosition);
+  const etaBaseDate = useAisOrigin
+    ? ownShip?.receivedAt
       ? new Date(ownShip.receivedAt)
-      : new Date();
+      : new Date()
+    : (departureTime ? new Date(departureTime) : null);
   let cumulativeEndNm = 0;
 
     if (coordinates.length < 2 || route.length < 2 || !routeForecast?.routePoints?.length) {
@@ -1253,7 +1261,7 @@ export default function WxRoutingPage() {
     }
 
     return { features, legForecasts };
-  }, [departurePosition, departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, projectionMode, route, selectedIndex, selectedTime?.valid]);
+  }, [departurePosition, departureTime, gribSummary?.routeForecast, ownShip, planningSpeedKt, projectionMode, route, selectedIndex, selectedTime?.valid, useAisOrigin]);
 
   const routeExposureSummary = useMemo(() => {
     return summarizeScenarioLegs(routeExposure.legForecasts, projectionEnabled && projectedForecast.usingRouteSample ? [projectedForecast.row] : []);
