@@ -1,12 +1,9 @@
 import type { ReactNode } from "react";
-import WeatherChartLayer from "./WeatherChartLayer";
-import WeatherPlanStateSync from "./WeatherPlanStateSync";
 
 export default function RouteWeatherLabLayout({ children }: { children: ReactNode }) {
   return (
     <>
       <style>{`
-        /* Hide the voyage profile. Route-leg hover on the map remains the weather detail view. */
         main svg[viewBox="0 0 1000 160"] {
           display: none !important;
         }
@@ -14,7 +11,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           display: none !important;
         }
 
-        /* Keep the voyage controls inside their panel on iPad/narrow sidebars. */
         aside > section:first-child .grid.grid-cols-2 {
           grid-template-columns: minmax(0, 1fr) !important;
           align-items: stretch;
@@ -38,7 +34,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           letter-spacing: -.015em;
         }
 
-        /* Route Weather day mode: remove hard-coded night panels without changing Bridge Night. */
         html[data-navdash-theme="day"] main [class*="bg-[#050a0f]"],
         html[data-navdash-theme="day"] main [class*="bg-[#08131b]"],
         html[data-navdash-theme="day"] main [class*="bg-[#08130f]"],
@@ -54,7 +49,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           background-color: var(--nd-panel-alt) !important;
         }
 
-        /* Route Weather day mode: force the pale cyan family to a darker teal for contrast. */
         html[data-navdash-theme="day"] main .text-cyan-200,
         html[data-navdash-theme="day"] main .text-cyan-300,
         html[data-navdash-theme="day"] main .text-cyan-400,
@@ -63,33 +57,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
         html[data-navdash-theme="day"] main [class*="text-cyan-400"] {
           color: #075f68 !important;
         }
-
-        /* OpsStatusStrip is injected after first paint and rebuilt every second with inline night colors.
-           Override those inline colors at the host so the cards stay light after injection/re-render. */
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background:#050a0f"],
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background: #050a0f"] {
-          background: var(--nd-panel) !important;
-          background-color: var(--nd-panel) !important;
-          color: var(--nd-text) !important;
-          border-color: var(--nd-border) !important;
-        }
-
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background:#17130a"],
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="background: #17130a"] {
-          background: var(--nd-panel-alt) !important;
-          background-color: var(--nd-panel-alt) !important;
-          border-color: rgba(122,91,0,.38) !important;
-        }
-
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:#67e8f9"],
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: #67e8f9"],
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color:rgb(103, 232, 249)"],
-        html[data-navdash-theme="day"] [data-route-weather-ops-strip="1"] [style*="color: rgb(103, 232, 249)"] {
-          color: #075f68 !important;
-        }
       `}</style>
-      <WeatherChartLayer />
-      <WeatherPlanStateSync />
       {children}
     </>
   );
