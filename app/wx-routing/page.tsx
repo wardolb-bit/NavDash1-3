@@ -1,178 +1,13 @@
 "use client";
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import WxRoutingHeader from "./WxRoutingHeader";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
-type GribTimelineRow = {
-  label: string;
-  valid: string;
-  forecast: string;
-  windKt: number | null;
-  windDir: number | null;
-  gustKt: number | null;
-  seasFt: number | null;
-  swellFt: number | null;
-  swellPeriod: number | null;
-  pressureHpa: number | null;
-  tempC: number | null;
-};
-
-type GribOverlayPoint = {
-  lat: number;
-  lon: number;
-  label: string;
-  valid: string;
-  windKt: number | null;
-  windDir: number | null;
-  gustKt: number | null;
-  seasFt: number | null;
-  swellFt: number | null;
-  swellPeriod: number | null;
-  routePoint?: string;
-  timeline?: GribTimelineRow[];
-};
-
-type RouteForecastPoint = {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-  worstWindKt: number | null;
-  worstGustKt: number | null;
-  worstSeasFt: number | null;
-  worstSwellFt: number | null;
-  worstSwellPeriod: number | null;
-  worstValid: string;
-  timeline: GribTimelineRow[];
-};
-
-type RouteForecast = {
-  routeName: string;
-  sampledPoints: number;
-  routePoints: RouteForecastPoint[];
-  worstWindPoint: RouteForecastPoint | null;
-  worstSeasPoint: RouteForecastPoint | null;
-};
-
-type IsobarGridPoint = {
-  lat: number;
-  lon: number;
-  timeline: GribTimelineRow[];
-};
-
-type GribSummary = {
-  fileName: string;
-  fileSize: number;
-  loadedAt: string;
-  status: string;
-  summary: string;
-  sourceNotes: string;
-  inventoryPreview: string;
-  timeline: GribTimelineRow[];
-  overlayPoints: GribOverlayPoint[];
-  routeForecast: RouteForecast | null;
-  isobarGrid: IsobarGridPoint[];
-};
-
-type PointForecast = {
-  lat: number;
-  lon: number;
-  label: string;
-  row: GribTimelineRow;
-};
-
-type RouteLegForecast = {
-  legLabel: string;
-  fromName: string;
-  toName: string;
-  distanceNm: number;
-  cumulativeEndNm: number;
-  bearingDeg: number;
-  etaLabel: string;
-  etaZoneLabel?: string;
-  weatherTimeLabel: string;
-  etaMatched: boolean;
-  level: "HIGH" | "CAUTION" | "NORMAL" | "NO DATA";
-  color: string;
-  row: GribTimelineRow | null;
-  sourcePoint: string;
-  seasSourcePoint?: string | null;
-  risks: RiskFlag[];
-};
-
-type Waypoint = {
-  id: string;
-  name: string;
-  lat: number;
-  lon: number;
-};
-
-type RouteState = {
-  routeName: string;
-  waypoints: Waypoint[];
-  activeWaypointIndex: number;
-};
-
-type OwnShip = {
-  lat: number;
-  lon: number;
-  sog: number | null;
-  cog: number | null;
-  heading: number | null;
-  receivedAt: string;
-};
-
-type Projection = {
-  lat: number;
-  lon: number;
-  legIndex: number;
-  nextWaypoint: Waypoint;
-  distanceToNextNm: number;
-  distanceAlongNm: number;
-  etaHours: number | null;
-  forecastLeadHours: number;
-  positionSource: string;
-};
-
-type RiskFlag = {
-  label: string;
-  level: "HIGH" | "CAUTION" | "NORMAL";
-};
-
-type WxRoutingPanel = "GRIB" | "ROUTE" | "STORM" | "WHAT IF" | "COMPARE" | "LAYERS";
-type ProjectionMode = "off" | "current" | "departure";
-
-type ScenarioSummary = {
-  maxWind: number | null;
-  maxSeas: number | null;
-  highCount: number;
-  cautionCount: number;
-  topLevel: RouteLegForecast["level"];
-  legCount: number;
-};
-
-const MAPLIBRE_CSS_ID = "maplibre-css";
-const WX_SOURCE_ID = "navdash-wx-routing-source";
-const WX_POINT_LAYER_ID = "navdash-wx-routing-points";
-const WX_LABEL_LAYER_ID = "navdash-wx-routing-labels";
-const ROUTE_SOURCE_ID = "navdash-wx-routing-route-source";
-const ROUTE_LINE_LAYER_ID = "navdash-wx-routing-route-line";
-const ROUTE_WAYPOINT_LAYER_ID = "navdash-wx-routing-route-waypoints";
-const ROUTE_WAYPOINT_LABEL_LAYER_ID = "navdash-wx-routing-route-labels";
-const ROUTE_EXPOSURE_SOURCE_ID = "navdash-wx-routing-exposure-source";
-const ROUTE_EXPOSURE_LAYER_ID = "navdash-wx-routing-exposure-line";
-const ISOBAR_SOURCE_ID = "navdash-wx-routing-isobar-source";
-const ISOBAR_GLOW_LAYER_ID = "navdash-wx-routing-isobar-glow";
-const ISOBAR_LINE_LAYER_ID = "navdash-wx-routing-isobar-lines";
-const ISOBAR_LABEL_LAYER_ID = "navdash-wx-routing-isobar-labels";
-const PROJECTED_SOURCE_ID = "navdash-wx-routing-projected-source";
-const PROJECTED_LAYER_ID = "navdash-wx-routing-projected";
-const PROJECTED_LABEL_LAYER_ID = "navdash-wx-routing-projected-label";
-const OWNSHIP_SOURCE_ID = "navdash-wx-routing-ownship-source";
-const OWNSHIP_LAYER_ID = "navdash-wx-routing-ownship";
-const OWNSHIP_LABEL_LAYER_ID = "navdash-wx-routing-ownship-label";
-const AIS_ORIGIN_MAX_OFF_TRACK_NM = 25;
+import { formatNumber, propertyNumber, formatDirection, formatFileSize, formatLatLon } from "./wxRoutingFormat";
+import type { GribTimelineRow, GribOverlayPoint, RouteForecastPoint, RouteForecast, IsobarGridPoint, GribSummary, PointForecast, RouteLegForecast, Waypoint, RouteState, OwnShip, Projection, RiskFlag, WxRoutingPanel, ProjectionMode, ScenarioSummary } from "./wxRoutingTypes";
+import { MAPLIBRE_CSS_ID, WX_SOURCE_ID, WX_POINT_LAYER_ID, WX_LABEL_LAYER_ID, ROUTE_SOURCE_ID, ROUTE_LINE_LAYER_ID, ROUTE_WAYPOINT_LAYER_ID, ROUTE_WAYPOINT_LABEL_LAYER_ID, ROUTE_EXPOSURE_SOURCE_ID, ROUTE_EXPOSURE_LAYER_ID, ISOBAR_SOURCE_ID, ISOBAR_GLOW_LAYER_ID, ISOBAR_LINE_LAYER_ID, ISOBAR_LABEL_LAYER_ID, PROJECTED_SOURCE_ID, PROJECTED_LAYER_ID, PROJECTED_LABEL_LAYER_ID, OWNSHIP_SOURCE_ID, OWNSHIP_LAYER_ID, OWNSHIP_LABEL_LAYER_ID, AIS_ORIGIN_MAX_OFF_TRACK_NM } from "./wxRoutingMapConfig";
 
 function addMapLibreCss() {
   if (typeof document === "undefined") return;
@@ -185,37 +20,10 @@ function addMapLibreCss() {
   document.head.appendChild(link);
 }
 
-function formatNumber(value: number | null | undefined, decimals = 1, suffix = "") {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "--";
-  return `${value.toFixed(decimals)}${suffix}`;
-}
 
-function propertyNumber(value: unknown) {
-  if (value === null || value === undefined || value === "") return null;
-  const next = Number(value);
-  return Number.isFinite(next) ? next : null;
-}
 
-function formatDirection(value: number | null | undefined) {
-  if (value === null || value === undefined || !Number.isFinite(value)) return "---";
-  return `${String(Math.round(value)).padStart(3, "0")} deg`;
-}
 
-function formatFileSize(bytes: number) {
-  if (!Number.isFinite(bytes)) return "--";
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
-function formatLatLon(value: number, isLat: boolean) {
-  if (!Number.isFinite(value)) return "--";
-
-  const abs = Math.abs(value);
-  const degrees = Math.floor(abs);
-  const minutes = (abs - degrees) * 60;
-  const hemi = isLat ? (value >= 0 ? "N" : "S") : value >= 0 ? "E" : "W";
-  return `${degrees} ${minutes.toFixed(1)}' ${hemi}`;
-}
 
 function rowForPoint(point: GribOverlayPoint, selectedIndex: number, selectedValid?: string): GribTimelineRow | null {
   const timeline = Array.isArray(point.timeline) ? point.timeline : [];
@@ -2883,34 +2691,19 @@ export default function WxRoutingPage() {
   return (
     <main className={pageClass}>
       <div className="mx-auto flex max-w-none flex-col gap-4 p-4 xl:min-h-[calc(100vh-73px)]">
-        <header className={`flex flex-col gap-3 border p-3 lg:flex-row lg:items-center lg:justify-between ${dayMode ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#071019] text-[#dbe5ee]"}`}>
-          <div>
-            <div className={labelClass}>NavDash 1.3 Weather</div>
-            <h1 className="text-3xl font-black uppercase tracking-wide">WX Routing</h1>
-            <p className={`mt-1 text-sm ${mutedClass}`}>
-              Planning Aid - Verify against official forecasts, approved charts, vessel limitations, and Master/bridge-team judgment.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {(["GRIB", "ROUTE", "STORM", "WHAT IF", "COMPARE", "LAYERS"] as WxRoutingPanel[]).map((item) => (
-              <button
-                key={item}
-                type="button"
-                className={activePanel === item ? activeButtonClass : buttonClass}
-                onClick={() => setActivePanel(item)}
-              >
-                {item}
-              </button>
-            ))}
-            <button type="button" className={buttonClass} onClick={toggleTheme}>
-              {nightMode ? "Day Mode" : "Night Mode"}
-            </button>
-            <button type="button" className={buttonClass} onClick={toggleFullscreen}>
-              {isFullscreen ? "Exit Full Screen" : "Full Screen"}
-            </button>
-          </div>
-        </header>
+        <WxRoutingHeader
+          dayMode={dayMode}
+          nightMode={nightMode}
+          activePanel={activePanel}
+          onPanelChange={setActivePanel}
+          onToggleTheme={toggleTheme}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+          buttonClass={buttonClass}
+          activeButtonClass={activeButtonClass}
+          labelClass={labelClass}
+          mutedClass={mutedClass}
+        />
 
         <section className="grid gap-4 xl:grid-cols-[21rem_minmax(0,1fr)_22rem]">
           <aside className={`${panelClass} min-h-0 space-y-4 xl:overflow-auto`}>
