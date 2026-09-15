@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { getAisWebSocketUrl } from "../../../lib/aisWebSocket";
 import { NAV_STARS, formatLatitude, formatLongitude, solveNavStars, type StarSolution } from "../../../lib/celestial";
 
@@ -181,7 +182,7 @@ export default function BridgeCelestial(){
           <div className="flex flex-wrap justify-center gap-1">
             {bannerModes.map(([id,text])=><button key={id} onClick={()=>setMode(id)} className={`${btn} ${mode===id?active:""}`}>{text}</button>)}
           </div>
-          <div className="flex items-center justify-end gap-2 text-[9px] font-black tracking-[.12em]"><span className={status==="AIS LIVE"?"text-[#42d3c8]":"text-amber-400"}>{status}</span><span className="text-[#e7c95c]">{now.toISOString().slice(11,19)} UTC</span><a href="/" className={`${btn} inline-flex items-center`}>MAIN</a></div>
+          <div className="flex items-center justify-end gap-2 text-[9px] font-black tracking-[.12em]"><span className={status==="AIS LIVE"?"text-[#42d3c8]":"text-amber-400"}>{status}</span><span className="text-[#e7c95c]">{now.toISOString().slice(11,19)} UTC</span><Link href="/" className={`${btn} inline-flex items-center`}>MAIN</Link></div>
         </div>
       </header>
 
