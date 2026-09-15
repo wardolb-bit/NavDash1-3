@@ -17,6 +17,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Apply Next 15 compatibility fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('app/celestial/bridge/page.tsx')
+          s = p.read_text()
+          old_import = 'import { useEffect, useMemo, useState } from "react";\n'
+          new_import = old_import + 'import Link from "next/link";\n'
+          if s.count(old_import) != 1:
+              raise SystemExit('Unexpected React import count')
+          s = s.replace(old_import, new_import, 1)
+          old_link = '<a href="/" className={`${btn} inline-flex items-center`}>MAIN</a>'
+          new_link = '<Link href="/" className={`${btn} inline-flex items-center`}>MAIN</Link>'
+          if s.count(old_link) != 1:
+              raise SystemExit('Unexpected MAIN anchor count')
+          s = s.replace(old_link, new_link, 1)
+          p.write_text(s)
+          PY
       - name: Upgrade supported framework stack
         run: npm install next@15 react@19 react-dom@19 eslint-config-next@15 @types/react@19 @types/react-dom@19 --save-exact --no-audit --no-fund
       - name: TypeScript
@@ -32,6 +50,6 @@ jobs:
           rm .github/workflows/upgrade-next15-preview.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json .github/workflows/upgrade-next15-preview.yml
+          git add app/celestial/bridge/page.tsx package.json package-lock.json .github/workflows/upgrade-next15-preview.yml
           git commit -m "Upgrade preview to Next.js 15 LTS"
           git push origin HEAD:audit-cleanup-preview-2026-09-15
