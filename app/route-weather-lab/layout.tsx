@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import SpeedSourceSelector from "./SpeedSourceSelector";
 
 export default function RouteWeatherLabLayout({ children }: { children: ReactNode }) {
   return (
@@ -59,6 +60,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
         }
       `}</style>
       {children}
+      <SpeedSourceSelector />
     </>
   );
 }
