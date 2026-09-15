@@ -1,0 +1,39 @@
+name: NavDash audit cleanup preview
+
+on:
+  push:
+    branches:
+      - audit-cleanup-preview-2026-09-15
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Candidate reference inventory
+        shell: bash
+        run: |
+          echo '=== RouteProfileDistanceUnitFix ==='
+          grep -R --line-number --exclude-dir=.git --exclude='RouteProfileDistanceUnitFix.tsx' 'RouteProfileDistanceUnitFix' . || true
+          echo '=== RouteProfileTableIndexCompat ==='
+          grep -R --line-number --exclude-dir=.git --exclude='RouteProfileTableIndexCompat.tsx' 'RouteProfileTableIndexCompat' . || true
+          echo '=== NoaaRouteWeatherOverlayFixed ==='
+          grep -R --line-number --exclude-dir=.git --exclude='NoaaRouteWeatherOverlayFixed.tsx' 'NoaaRouteWeatherOverlayFixed' . || true
+          echo '=== NoaaRouteWeatherOverlay ==='
+          grep -R --line-number --exclude-dir=.git --exclude='NoaaRouteWeatherOverlay.tsx' 'NoaaRouteWeatherOverlay' app components lib || true
+          echo '=== day-fixes selectors/imports ==='
+          grep -R --line-number --exclude-dir=.git 'day-fixes.css' app components lib || true
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: Production build
+        run: npm run build
