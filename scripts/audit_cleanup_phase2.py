@@ -1,0 +1,93 @@
+from pathlib import Path
+import re
+
+
+def exact(path: str, old: str, new: str, count: int = 1) -> None:
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    found = text.count(old)
+    if found != count:
+        raise SystemExit(f"{path}: expected {count} matches, found {found}")
+    p.write_text(text.replace(old, new, count), encoding="utf-8")
+
+
+# Root layout should not own bridge map or Nav Brief DOM surgery.
+p = Path("app/layout.tsx")
+text = p.read_text(encoding="utf-8")
+for script_id in ["navdash-map-tools-behavior", "navdash-ami-clear-controls"]:
+    pattern = re.compile(r'\n\s*<Script id="' + re.escape(script_id) + r'" strategy="afterInteractive">.*?</Script>\n', re.S)
+    text, count = pattern.subn("\n", text, count=1)
+    if count != 1:
+        raise SystemExit(f"app/layout.tsx: expected one {script_id} script, found {count}")
+p.write_text(text, encoding="utf-8")
+
+# Nav Brief owns its navigation and AMI-clear controls directly.
+exact(
+    "app/nav-brief/page.tsx",
+    '  function refreshInputs() { const current = readCurrentRoute(); if (current) { setRoute(current); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); setSelectedWaypoint(value => value || current.waypoints[0]?.id || ""); } setUserMarks(readUserMarks()); setAmi(readAmi()); }',
+    '  function refreshInputs() { const current = readCurrentRoute(); if (current) { setRoute(current); setRouteSource("CURRENT NAVDASH ROUTE · LOCAL"); setSelectedWaypoint(value => value || current.waypoints[0]?.id || ""); } setUserMarks(readUserMarks()); setAmi(readAmi()); }\n  function clearAmiRoute() { try { window.localStorage.removeItem(AMI_OVERLAY_STORAGE_KEY); } catch {} setAmi(null); setAmiFile(""); setAmiError(""); window.dispatchEvent(new CustomEvent("navdash-ami-overlay-updated", { detail: null })); }',
+)
+
+p = Path("app/nav-brief/page.tsx")
+text = p.read_text(encoding="utf-8")
+old = '<div className="flex flex-wrap items-center gap-2"><button onClick={refreshInputs} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Refresh Inputs</button><button onClick={toggleTheme} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>{nightMode ? "Day Mode" : "Night Mode"}</button><button onClick={() => window.print()} className="border border-[#c9a227] bg-[#c9a227] px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] text-black hover:bg-[#d6b63b]">Print / PDF</button></div>'
+new = '<div className="flex flex-wrap items-center gap-2"><button onClick={() => { window.location.href = "/bridge"; }} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Main</button><button onClick={refreshInputs} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>Refresh Inputs</button><button onClick={clearAmiRoute} disabled={!ami} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control} disabled:opacity-40`}>Clear AMI Route</button><button onClick={toggleTheme} className={`border px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] ${control}`}>{nightMode ? "Day Mode" : "Night Mode"}</button><button onClick={() => window.print()} className="border border-[#c9a227] bg-[#c9a227] px-3 py-2 text-[11px] font-black uppercase tracking-[.08em] text-black hover:bg-[#d6b63b]">Print / PDF</button></div>'
+if text.count(old) != 1:
+    raise SystemExit(f"app/nav-brief/page.tsx: header control row matches={text.count(old)}")
+text = text.replace(old, new, 1)
+text = text.replace("WEATHER ROUTING STRATEGY", "WEATHER INFORMATION")
+text = text.replace("ROUTING DECISION POINTS", "ROUTE REFERENCE POINTS")
+p.write_text(text, encoding="utf-8")
+
+# WX header styling belongs to the actual header.
+exact(
+    "app/wx-routing/page.tsx",
+    '<header className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">',
+    '<header className={`flex flex-col gap-3 border p-3 lg:flex-row lg:items-center lg:justify-between ${dayMode ? "border-slate-300 bg-white text-slate-900" : "border-white/10 bg-[#071019] text-[#dbe5ee]"}`}>',
+)
+exact("app/wx-routing/layout.tsx", 'import WxRoutingHeaderThemeFix from "./WxRoutingHeaderThemeFix";\n', "")
+exact("app/wx-routing/layout.tsx", "      <WxRoutingHeaderThemeFix />\n", "")
+Path("app/wx-routing/WxRoutingHeaderThemeFix.tsx").unlink()
+
+# ENC popup close behavior belongs with the popup creator.
+p = Path("components/EncObjectInfo.tsx")
+text = p.read_text(encoding="utf-8")
+anchor = "    const identify = async (event: any) => {"
+guard = '''    const guardPopup = (popup: any) => {
+      const element = popup?.getElement?.() as HTMLElement | null;
+      if (!element) return;
+      element.style.pointerEvents = "auto";
+      const stop = (event: Event) => event.stopPropagation();
+      element.addEventListener("click", stop);
+      element.addEventListener("pointerdown", stop);
+      element.addEventListener("touchstart", stop, { passive: true });
+      const close = element.querySelector(".leaflet-popup-close-button") as HTMLElement | null;
+      if (close && !close.dataset.navdashEncCloseBound) {
+        close.dataset.navdashEncCloseBound = "true";
+        const closePopup = (event: Event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          try { map.closePopup(popup); } catch {}
+        };
+        close.addEventListener("click", closePopup);
+        close.addEventListener("pointerup", closePopup);
+      }
+    };
+
+'''
+if text.count(anchor) != 1:
+    raise SystemExit(f"EncObjectInfo identify anchor matches={text.count(anchor)}")
+text = text.replace(anchor, guard + anchor, 1)
+popup_old = '''      const popup = L.popup({ className: "navdash-enc-popup", maxWidth: 420, closeButton: true, pane: "navdashEncPopupPane" })
+        .setLatLng(event.latlng)
+        .setContent('<div class="navdash-enc-loading">Querying NOAA ENC…</div>')
+        .openOn(map);
+'''
+if text.count(popup_old) != 1:
+    raise SystemExit(f"EncObjectInfo popup block matches={text.count(popup_old)}")
+text = text.replace(popup_old, popup_old + "      guardPopup(popup);\n", 1)
+p.write_text(text, encoding="utf-8")
+
+exact("app/bridge/page.tsx", 'import { EncPopupCloseFix } from "../../components/EncPopupCloseFix";\n', "")
+exact("app/bridge/page.tsx", "      <EncPopupCloseFix />\n", "")
+Path("components/EncPopupCloseFix.tsx").unlink()
