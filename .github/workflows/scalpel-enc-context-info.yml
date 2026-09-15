@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/scalpel-enc-context-info.yml'
+      - 'scripts/scalpel-enc-context-info.py'
 
 permissions:
   contents: write
