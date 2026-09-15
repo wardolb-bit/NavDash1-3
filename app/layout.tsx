@@ -8,6 +8,7 @@ import { WxRoutingBridgeSkin } from '../components/WxRoutingBridgeSkin';
 import { CelestialConsoleSkin } from '../components/CelestialConsoleSkin';
 import { CelestialSunMoon } from '../components/CelestialSunMoon';
 import { SharedAmiForecastSync } from '../components/SharedAmiForecastSync';
+import { EncInfoContextMenuBridge } from '../components/EncInfoContextMenuBridge';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -84,6 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CelestialConsoleSkin />
         <CelestialSunMoon />
         <SharedAmiForecastSync />
+        <EncInfoContextMenuBridge />
       </body>
     </html>
   );
