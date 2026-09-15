@@ -8,10 +8,10 @@ Uploaded GRIB files are processed from the operating system temporary directory 
 
 `data/grib/current-grib*` is ignored so future uploaded/current weather state does not grow Git history.
 
-## Coastline reference data
+## Position and route state
 
-`public/data/gshhg-pacific-full.json` is an immutable runtime reference asset and remains versioned intentionally.
+Operational route state and position-history snapshots are runtime data and are not versioned. `data/loaded-route.json` and `data/position-history.json` are ignored so vessel state does not accumulate in Git history.
 
 ## wgrib2 runtime
 
-The Windows wgrib2 executable and required Cygwin DLLs remain versioned because NavDash supports local Windows processing. Hosted Linux deployments can use a system `wgrib2` or `WGRIB2_PATH` when available. Do not remove the Windows runtime until local vessel workflows no longer depend on it.
+The Windows wgrib2 executable and required Cygwin DLLs remain versioned because NavDash still supports local Windows GRIB processing. Hosted deployments can use a system `wgrib2` or `WGRIB2_PATH` when available. Do not remove the Windows runtime until local Windows GRIB processing is intentionally retired or replaced.
