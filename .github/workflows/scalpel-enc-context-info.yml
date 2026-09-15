@@ -1,0 +1,44 @@
+name: Scalpel ENC context info
+
+on:
+  push:
+    paths:
+      - '.github/workflows/scalpel-enc-context-info.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit-cleanup-preview-2026-09-15
+          path: runner
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          path: target
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply ENC context INFO scalpel
+        run: python runner/scripts/scalpel-enc-context-info.py
+      - name: Install dependencies
+        working-directory: target
+        run: npm ci --no-audit --no-fund
+      - name: TypeScript check
+        working-directory: target
+        run: npx tsc --noEmit
+      - name: Production build
+        working-directory: target
+        run: npm run build
+      - name: Commit validated main change
+        working-directory: target
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/layout.tsx components/EncObjectInfo.tsx
+          git commit -m "Move ENC object info to map context menu"
+          git push origin HEAD:main
