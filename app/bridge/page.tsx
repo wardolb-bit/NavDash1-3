@@ -7,7 +7,7 @@ import { EncObjectInfo } from "../../components/EncObjectInfo";
 import { ArrivalPlannerBridgeButton } from "../../components/ArrivalPlannerBridgeButton";
 import { MapCursorReadout } from "../../components/MapCursorReadout";
 import { MapFloatingControlsContext } from "../../components/MapFloatingControlsContext";
-import { RouteLegLabels } from "../../components/RouteLegLabels";
+import { RouteLegInspector } from "../../components/RouteLegInspector";
 
 export default function BridgePage() {
   return (
@@ -21,7 +21,7 @@ export default function BridgePage() {
       <EncObjectInfo />
       <MapCursorReadout />
       <MapFloatingControlsContext />
-      <RouteLegLabels />
+      <RouteLegInspector />
     </>
   );
 }
