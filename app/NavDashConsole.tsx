@@ -280,7 +280,7 @@ export default function NavDashConsole() {
   useEffect(() => {
     const ws = new WebSocket(getAisWebSocketUrl());
     routeSocketRef.current = ws;
-    ws.onopen = () => setAisStatus("GPS LIVE");
+    ws.onopen = () => setAisStatus("GPS CHECK");
     ws.onerror = () => setAisStatus("GPS CHECK");
     ws.onclose = () => setAisStatus("GPS CHECK");
     ws.onmessage = (event) => {
@@ -292,7 +292,9 @@ export default function NavDashConsole() {
         return;
       }
       const line = extractNmea(msg);
-      const decoded = line ? decodeOwnShip(line) : null;
+      const decoded = line
+        ? decodeOwnShip(line)
+        : ownShipFromParsedMessage(msg) ?? ownShipFromParsedMessage(msg?.data) ?? ownShipFromParsedMessage(msg?.payload);
       if (decoded) { setOwnShip(decoded); setAisStatus("GPS LIVE"); }
     };
     return () => { if (routeSocketRef.current === ws) routeSocketRef.current = null; ws.close(); };
