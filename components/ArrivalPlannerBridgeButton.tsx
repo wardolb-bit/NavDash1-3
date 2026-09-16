@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export function ArrivalPlannerBridgeButton() {
+  const router = useRouter();
+
   useEffect(() => {
     let timer = 0;
     let observer: MutationObserver | null = null;
@@ -23,7 +26,7 @@ export function ArrivalPlannerBridgeButton() {
         button.id = "navdash-arrival-plan-button";
         button.type = "button";
         button.textContent = "ARRIVAL PLAN";
-        button.addEventListener("click", () => { window.location.href = "/voyage-planner"; });
+        button.addEventListener("click", () => { router.push("/voyage-planner"); });
         fullscreen.parentElement.insertBefore(button, fullscreen);
       }
 
@@ -48,7 +51,7 @@ export function ArrivalPlannerBridgeButton() {
       observer?.disconnect();
       document.getElementById("navdash-arrival-plan-button")?.remove();
     };
-  }, []);
+  }, [router]);
 
   return null;
 }
