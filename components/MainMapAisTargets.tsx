@@ -315,6 +315,11 @@ export function MainMapAisTargets() {
         const pane = map.createPane("navmap-main-ais-targets-v1");
         pane.style.zIndex = "715";
       }
+      if (!map.getPane("navmap-main-ais-info-v1")) {
+        const pane = map.createPane("navmap-main-ais-info-v1");
+        pane.style.zIndex = "760";
+        pane.style.pointerEvents = "none";
+      }
       layerRef.current = L.layerGroup([], { pane: "navmap-main-ais-targets-v1" } as any).addTo(map);
 
       for (const vessel of targetsRef.current.values()) drawTarget(vessel, L);
@@ -345,7 +350,7 @@ export function MainMapAisTargets() {
           marker.bindTooltip(tooltip, {
             direction: "top",
             opacity: 0.96,
-            pane: "navmap-main-ais-targets-v1",
+            pane: "navmap-main-ais-info-v1",
           });
           markersRef.current.set(vessel.mmsi, marker);
         } else {
