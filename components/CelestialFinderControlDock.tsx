@@ -42,14 +42,14 @@ export function CelestialFinderControlDock() {
 
       const reference = portButton.getBoundingClientRect();
       for (const button of [constellationsButton, starFieldButton]) {
-        button.style.width = `${reference.width}px`;
-        button.style.minWidth = `${reference.width}px`;
-        button.style.maxWidth = `${reference.width}px`;
+        button.style.width = "auto";
+        button.style.minWidth = "0";
+        button.style.maxWidth = "none";
         button.style.height = `${reference.height}px`;
         button.style.minHeight = `${reference.height}px`;
-        button.style.padding = "0 4px";
-        button.style.fontSize = "7px";
-        button.style.letterSpacing = ".03em";
+        button.style.padding = "0 9px";
+        button.style.fontSize = "9px";
+        button.style.letterSpacing = ".08em";
         button.style.whiteSpace = "nowrap";
       }
 
