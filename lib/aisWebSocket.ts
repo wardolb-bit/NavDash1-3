@@ -1,7 +1,7 @@
 const AIS_WS_HOST_KEY = "navdash-ais-ws-host";
 const CLOUD_AIS_WS_URL = "wss://uujlsvgromzapubtinfg.supabase.co/functions/v1/navdash-ais-relay?role=client";
 const DIRECT_AIS_WS_URL = "navdash-realtime://navdash-ais-live";
-const SUPABASE_REALTIME_URL = "wss://uujlsvgromzapubtinfg.supabase.co/realtime/v1/websocket?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amxzdmdyb216YXB1YnRpbmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNzczMTksImV4cCI6MjEwNDY1MzMxOX0.bl2O1EKgTiz1CWG1Y2tCFh9NYHW2ixQyowJGjdlOrBY&vsn=1.0.0";
+const SUPABASE_REALTIME_URL = "wss://uujlsvgromzapubtinfg.supabase.co/realtime/v1/websocket?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6InV1amxzdmdyb216YXB1YnRpbmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNzczMTksImV4cCI6MjEwNDY1MzMxOX0.bl2O1EKgTiz1CWG1Y2tCFh9NYHW2ixQyowJGjdlOrBY&vsn=1.0.0";
 const REALTIME_TOPIC = "realtime:navdash-ais-live";
 const LEGACY_WHEELHOUSE_AIS_WS_URL = "ws://10.129.4.102:8081";
 const LEGACY_SECURE_AIS_WS_URL = "wss://ais.wardlab.dev:8443";
@@ -80,7 +80,7 @@ function normalizeTunnelMessage(data: unknown) {
   const logMatch = raw.match(/\[POSITION\]\s+AIVDO\s+(-?\d+(?:\.\d+)?)\s*,?\s+(-?\d+(?:\.\d+)?)/i);
   if (logMatch) {
     const aivdo = positionToAivdo(Number(logMatch[1]), Number(logMatch[2]));
-    if (aivdo) return `${raw}\n${aivdo}`;
+    if (aivdo) return aivdo;
   }
 
   try {
@@ -104,14 +104,14 @@ function normalizeTunnelMessage(data: unknown) {
       ];
       for (const candidate of nestedCandidates) {
         const aivdo = decodedPositionFromObject(candidate, true);
-        if (aivdo) return `${raw}\n${aivdo}`;
+        if (aivdo) return aivdo;
       }
     }
 
     const candidates = [parsed, parsed?.data, parsed?.payload, parsed?.position, parsed?.ownShip, parsed?.ownship];
     for (const candidate of candidates) {
       const aivdo = decodedPositionFromObject(candidate);
-      if (aivdo) return `${raw}\n${aivdo}`;
+      if (aivdo) return aivdo;
     }
   } catch {}
 
