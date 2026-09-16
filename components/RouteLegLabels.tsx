@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
+const LABEL_PANE = "navmap-main-route-leg-labels-v1";
 
 type Waypoint = { lat: number; lon: number };
 type StoredRoute = { waypoints?: Waypoint[] };
@@ -27,11 +28,8 @@ function bearing(a: Waypoint, b: Waypoint) {
 }
 
 function mapInstance() {
-  const host = document.getElementById("v12-map");
-  if (!host) return null;
-  const nodes = [host, ...Array.from(host.querySelectorAll<HTMLElement>("*"))];
-  for (const node of nodes) if ((node as any).__navdashLeafletMap) return (node as any).__navdashLeafletMap;
-  return null;
+  const element = document.getElementById("navmap-main-isolated-v2") as any;
+  return element?.__navdashLeafletMap || null;
 }
 
 function readRoute(): Waypoint[] {
@@ -62,6 +60,7 @@ export function RouteLegLabels() {
       const routeKey = JSON.stringify(route);
       const map = mapInstance();
       if (!map) return;
+
       if (mapRef.current !== map) {
         if (layerRef.current && mapRef.current) {
           try { mapRef.current.removeLayer(layerRef.current); } catch {}
@@ -70,14 +69,23 @@ export function RouteLegLabels() {
         layerRef.current = null;
         routeKeyRef.current = "";
       }
+
       if (routeKeyRef.current === routeKey && layerRef.current) return;
 
       const L = await import("leaflet");
       if (disposed || mapRef.current !== map) return;
+
       if (layerRef.current) {
         try { map.removeLayer(layerRef.current); } catch {}
       }
-      const layer = L.layerGroup().addTo(map);
+
+      if (!map.getPane(LABEL_PANE)) {
+        const pane = map.createPane(LABEL_PANE);
+        pane.style.zIndex = "710";
+        pane.style.pointerEvents = "none";
+      }
+
+      const layer = L.layerGroup([], { pane: LABEL_PANE } as any).addTo(map);
       layerRef.current = layer;
       routeKeyRef.current = routeKey;
 
@@ -88,11 +96,13 @@ export function RouteLegLabels() {
         const midpoint: [number, number] = [(a.lat + b.lat) / 2, ((midLon + 540) % 360) - 180];
         const brg = String(Math.round(bearing(a, b)) % 360).padStart(3, "0");
         const dist = distanceNm(a, b).toFixed(1);
+
         L.marker(midpoint, {
+          pane: LABEL_PANE,
           interactive: false,
           keyboard: false,
           icon: L.divIcon({
-            className: "",
+            className: "navmap-main-route-leg-label",
             iconSize: [108, 22],
             iconAnchor: [54, 11],
             html: `<div style="display:inline-block;white-space:nowrap;padding:2px 5px;border:1px solid rgba(34,211,238,.45);border-radius:3px;background:rgba(5,10,15,.86);color:#c9f7ff;font:700 10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em;box-shadow:0 1px 3px rgba(0,0,0,.45);pointer-events:none">${brg}°  ${dist} NM</div>`,
