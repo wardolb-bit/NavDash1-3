@@ -49,36 +49,40 @@ function decodeOwnShip(sentence: string): OwnShip | null {
   try {
     if (!sentence.startsWith("!AIVDO")) return null;
     const bits = getAisBits(sentence);
-    if (!bits || ![1, 2, 3].includes(unsigned(bits, 0, 6))) return null;
-    const sog = unsigned(bits, 50, 10) / 10;
-    const lon = signed(bits, 61, 28) / 600000;
-    const lat = signed(bits, 89, 27) / 600000;
-    const cogRaw = unsigned(bits, 116, 12);
-    const headingRaw = unsigned(bits, 128, 9);
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    if (!bits) return null;
+    const type = unsigned(bits, 0, 6);
+    let sogRaw: number;
+    let lonRaw: number;
+    let latRaw: number;
+    let cogRaw: number;
+    let headingRaw: number;
+    if ([1, 2, 3].includes(type)) {
+      sogRaw = unsigned(bits, 50, 10);
+      lonRaw = signed(bits, 61, 28);
+      latRaw = signed(bits, 89, 27);
+      cogRaw = unsigned(bits, 116, 12);
+      headingRaw = unsigned(bits, 128, 9);
+    } else if ([18, 19].includes(type)) {
+      sogRaw = unsigned(bits, 46, 10);
+      lonRaw = signed(bits, 57, 28);
+      latRaw = signed(bits, 85, 27);
+      cogRaw = unsigned(bits, 112, 12);
+      headingRaw = unsigned(bits, 124, 9);
+    } else {
+      return null;
+    }
+    const lon = lonRaw / 600000;
+    const lat = latRaw / 600000;
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
     return {
       lat,
       lon,
-      sog: sog < 102.3 ? sog : 0,
-      cog: cogRaw < 3600 ? cogRaw / 10 : 0,
+      sog: sogRaw === 1023 ? 0 : sogRaw / 10,
+      cog: cogRaw === 3600 ? 0 : cogRaw / 10,
       heading: headingRaw === 511 ? null : headingRaw,
       lastSeen: Date.now(),
     };
   } catch { return null; }
-}
-
-function ownShipFromParsedMessage(msg: any): OwnShip | null {
-  const lat = Number(msg?.lat ?? msg?.latitude ?? msg?.position?.lat ?? msg?.position?.latitude);
-  const lon = Number(msg?.lon ?? msg?.lng ?? msg?.longitude ?? msg?.position?.lon ?? msg?.position?.lng ?? msg?.position?.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-  return {
-    lat,
-    lon,
-    sog: Number.isFinite(Number(msg?.sog ?? msg?.speed)) ? Number(msg?.sog ?? msg?.speed) : 0,
-    cog: Number.isFinite(Number(msg?.cog ?? msg?.course)) ? Number(msg?.cog ?? msg?.course) : 0,
-    heading: Number.isFinite(Number(msg?.heading ?? msg?.hdg)) ? Number(msg?.heading ?? msg?.hdg) : null,
-    lastSeen: Date.now(),
-  };
 }
 
 function extractNmea(msg: any) {
@@ -303,9 +307,8 @@ export default function NavDashConsole() {
           return;
         }
         const line = extractNmea(msg);
-        const decoded = line
-          ? decodeOwnShip(line)
-          : ownShipFromParsedMessage(msg) ?? ownShipFromParsedMessage(msg?.data) ?? ownShipFromParsedMessage(msg?.payload);
+        if (!line) return;
+        const decoded = decodeOwnShip(line);
         if (decoded) { setOwnShip(decoded); setAisStatus("GPS LIVE"); }
       };
     };
