@@ -10,6 +10,7 @@ const OSM_FRAGMENT = "tile.openstreetmap.org";
 const OPENSEAMAP_FRAGMENT = "tiles.openseamap.org";
 const BRIGHTNESS_STORAGE_KEY = "navdash-enc-brightness";
 const BRIGHTNESS_EVENT = "navdash-enc-brightness-change";
+const NIGHT_BRIGHTNESS = 140;
 
 function s52NightDisplayParams() {
   return JSON.stringify({
@@ -53,6 +54,10 @@ export function EncScaleAwareLayer() {
     let mapRef: any = null;
     let previousBackground = "";
     const baseLayers: Array<{ layer: any; opacity: number }> = [];
+
+    if (nightMode) {
+      try { window.localStorage.setItem(BRIGHTNESS_STORAGE_KEY, String(NIGHT_BRIGHTNESS)); } catch {}
+    }
 
     const restoreBaseLayers = () => {
       for (const item of baseLayers) {
@@ -116,7 +121,7 @@ export function EncScaleAwareLayer() {
           attribution: "NOAA Office of Coast Survey ENC Online",
         } as any).addTo(map);
 
-        applyBrightness(chartLayer);
+        applyBrightness(chartLayer, NIGHT_BRIGHTNESS);
         chartLayer.on?.("load", () => applyBrightness(chartLayer));
       } else {
         restoreBaseLayers();
