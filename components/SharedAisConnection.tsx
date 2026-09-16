@@ -26,10 +26,27 @@ function isSharedAisUrl(url: string) {
   }
 }
 
+function isParsedOwnshipMessage(data: unknown) {
+  const raw = typeof data === "string" ? data : String(data ?? "");
+  if (!raw || raw.includes("!AIVDO")) return false;
+  try {
+    const parsed = JSON.parse(raw);
+    const marker = String(parsed?.type ?? parsed?.kind ?? parsed?.event ?? parsed?.messageType ?? "").toLowerCase();
+    if (marker.includes("ownship") || marker.includes("own_ship") || marker.includes("own-ship") || marker === "gps") return true;
+    if (marker.includes("position")) {
+      const lat = Number(parsed?.lat ?? parsed?.latitude ?? parsed?.position?.lat ?? parsed?.position?.latitude);
+      const lon = Number(parsed?.lon ?? parsed?.lng ?? parsed?.longitude ?? parsed?.position?.lon ?? parsed?.position?.lng ?? parsed?.position?.longitude);
+      return Number.isFinite(lat) && Number.isFinite(lon);
+    }
+  } catch {}
+  return false;
+}
+
 export function SharedAisConnection() {
   useEffect(() => {
     let disposed = false;
     let reconnectTimer = 0;
+    let lastRawOwnshipAt = 0;
     const BaseWebSocket = window.WebSocket;
     const subscribers = window.__navdashSharedAisSubscribers ?? new Set<Subscriber>();
     window.__navdashSharedAisSubscribers = subscribers;
@@ -48,6 +65,9 @@ export function SharedAisConnection() {
       };
 
       socket.onmessage = (event) => {
+        const raw = typeof event.data === "string" ? event.data : String(event.data ?? "");
+        if (raw.includes("!AIVDO")) lastRawOwnshipAt = Date.now();
+        else if (isParsedOwnshipMessage(event.data) && Date.now() - lastRawOwnshipAt < 1500) return;
         subscribers.forEach((subscriber) => subscriber.emitMessage(event.data));
       };
 
