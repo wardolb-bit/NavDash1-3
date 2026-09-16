@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const LABEL_PANE = "navmap-main-route-leg-labels-v2";
+const LABEL_PANE = "navmap-main-route-leg-labels-v3";
 const ROUTE_COLOR = "#c9a227";
 
 type Point = { lat: number; lng: number };
@@ -26,6 +26,21 @@ function isRoutePolyline(layer: any) {
     && String(layer?.options?.color || "").toLowerCase() === ROUTE_COLOR;
 }
 
+function visitLayers(layer: any, visitor: (candidate: any) => void) {
+  visitor(layer);
+  if (typeof layer?.eachLayer === "function") {
+    layer.eachLayer((child: any) => visitLayers(child, visitor));
+  }
+}
+
+function containsRoutePolyline(layer: any) {
+  let found = false;
+  visitLayers(layer, (candidate) => {
+    if (!found && isRoutePolyline(candidate)) found = true;
+  });
+  return found;
+}
+
 function mainMap() {
   const element = document.getElementById("navmap-main-isolated-v2") as any;
   return element?.__navdashLeafletMap || null;
@@ -39,48 +54,47 @@ export function RouteLegLabels() {
     let labelLayer: any = null;
     let retryTimer = 0;
 
-    const clearLabels = () => {
-      try { labelLayer?.clearLayers(); } catch {}
-    };
-
     const rebuild = () => {
       if (disposed || !map || !L || !labelLayer) return;
-      clearLabels();
+      labelLayer.clearLayers();
 
-      map.eachLayer((layer: any) => {
-        if (!isRoutePolyline(layer)) return;
-        const latLngs = layer.getLatLngs();
-        if (!Array.isArray(latLngs) || latLngs.length < 2 || Array.isArray(latLngs[0])) return;
+      map.eachLayer((topLayer: any) => {
+        if (topLayer === labelLayer) return;
+        visitLayers(topLayer, (layer) => {
+          if (!isRoutePolyline(layer)) return;
+          const latLngs = layer.getLatLngs();
+          if (!Array.isArray(latLngs) || latLngs.length < 2 || Array.isArray(latLngs[0])) return;
 
-        for (let i = 1; i < latLngs.length; i += 1) {
-          const from = latLngs[i - 1] as Point;
-          const to = latLngs[i] as Point;
-          const result = distanceAndBearing(from, to);
-          const midpoint: [number, number] = [(from.lat + to.lat) / 2, (from.lng + to.lng) / 2];
-          const brg = String(Math.round(result.bearing) % 360).padStart(3, "0");
+          for (let i = 1; i < latLngs.length; i += 1) {
+            const from = latLngs[i - 1] as Point;
+            const to = latLngs[i] as Point;
+            const result = distanceAndBearing(from, to);
+            const midpoint: [number, number] = [(from.lat + to.lat) / 2, (from.lng + to.lng) / 2];
+            const brg = String(Math.round(result.bearing) % 360).padStart(3, "0");
 
-          L.tooltip({
-            permanent: true,
-            direction: "center",
-            className: "navmap-route-leg-label",
-            pane: LABEL_PANE,
-            interactive: false,
-          })
-            .setLatLng(midpoint)
-            .setContent(`${brg}°T · ${result.distanceNm.toFixed(1)} NM`)
-            .addTo(labelLayer);
-        }
+            L.tooltip({
+              permanent: true,
+              direction: "center",
+              className: "navmap-route-leg-label",
+              pane: LABEL_PANE,
+              interactive: false,
+            })
+              .setLatLng(midpoint)
+              .setContent(`${brg}°T · ${result.distanceNm.toFixed(1)} NM`)
+              .addTo(labelLayer);
+          }
+        });
       });
     };
 
-    const onRouteLayerChange = (event: any) => {
-      if (isRoutePolyline(event?.layer)) window.requestAnimationFrame(rebuild);
+    const onLayerChange = (event: any) => {
+      if (containsRoutePolyline(event?.layer)) window.requestAnimationFrame(rebuild);
     };
 
     const detach = () => {
       if (map) {
-        map.off("layeradd", onRouteLayerChange);
-        map.off("layerremove", onRouteLayerChange);
+        map.off("layeradd", onLayerChange);
+        map.off("layerremove", onLayerChange);
         if (labelLayer) {
           try { map.removeLayer(labelLayer); } catch {}
         }
@@ -110,8 +124,8 @@ export function RouteLegLabels() {
       }
 
       labelLayer = L.layerGroup([], { pane: LABEL_PANE } as any).addTo(map);
-      map.on("layeradd", onRouteLayerChange);
-      map.on("layerremove", onRouteLayerChange);
+      map.on("layeradd", onLayerChange);
+      map.on("layerremove", onLayerChange);
       rebuild();
     };
 
