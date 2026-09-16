@@ -9,6 +9,150 @@ const REALTIME_HEARTBEAT_MS = 15000;
 const REALTIME_STALE_CHECK_MS = 3000;
 const REALTIME_STALE_MS = 12000;
 
+function isTunnelAisUrl(url: string) {
+  try {
+    return new URL(url).hostname.toLowerCase() === "ais.wardlab.dev";
+  } catch {
+    return /^wss?:\/\/ais\.wardlab\.dev(?::\d+)?(?:\/.*)?$/i.test(url.trim());
+  }
+}
+
+function setUnsigned(bits: string[], start: number, length: number, value: number) {
+  const max = 2 ** length - 1;
+  const safe = Math.max(0, Math.min(max, Math.round(value)));
+  const binary = safe.toString(2).padStart(length, "0");
+  for (let index = 0; index < length; index += 1) bits[start + index] = binary[index];
+}
+
+function setSigned(bits: string[], start: number, length: number, value: number) {
+  const min = -(2 ** (length - 1));
+  const max = 2 ** (length - 1) - 1;
+  const safe = Math.max(min, Math.min(max, Math.round(value)));
+  setUnsigned(bits, start, length, safe < 0 ? 2 ** length + safe : safe);
+}
+
+function positionToAivdo(lat: number, lon: number, sog = 0, cog = 0, heading: number | null = null) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+
+  const bits = Array(168).fill("0") as string[];
+  setUnsigned(bits, 0, 6, 1);
+  setUnsigned(bits, 6, 2, 0);
+  setUnsigned(bits, 8, 30, 0);
+  setUnsigned(bits, 38, 4, 15);
+  setUnsigned(bits, 42, 8, 128);
+  setUnsigned(bits, 50, 10, Math.max(0, Math.min(1022, sog * 10)));
+  setUnsigned(bits, 60, 1, 1);
+  setSigned(bits, 61, 28, lon * 600000);
+  setSigned(bits, 89, 27, lat * 600000);
+  setUnsigned(bits, 116, 12, Math.max(0, Math.min(3599, cog * 10)));
+  setUnsigned(bits, 128, 9, heading == null || !Number.isFinite(heading) ? 511 : Math.max(0, Math.min(359, heading)));
+  setUnsigned(bits, 137, 6, 60);
+
+  let payload = "";
+  for (let index = 0; index < bits.length; index += 6) {
+    const value = parseInt(bits.slice(index, index + 6).join(""), 2);
+    payload += String.fromCharCode(value < 40 ? value + 48 : value + 56);
+  }
+  return `!AIVDO,1,1,,A,${payload},0`;
+}
+
+function decodedPositionFromObject(value: any) {
+  if (!value || typeof value !== "object") return null;
+  const marker = String(value.type ?? value.kind ?? value.event ?? value.messageType ?? "").toLowerCase();
+  const isPosition = marker.includes("position") || marker.includes("ownship") || marker.includes("own_ship") || marker === "gps";
+  if (!isPosition) return null;
+
+  const lat = Number(value.lat ?? value.latitude ?? value.position?.lat ?? value.position?.latitude);
+  const lon = Number(value.lon ?? value.lng ?? value.longitude ?? value.position?.lon ?? value.position?.lng ?? value.position?.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const sog = Number(value.sog ?? value.speed ?? value.position?.sog ?? 0);
+  const cog = Number(value.cog ?? value.course ?? value.position?.cog ?? 0);
+  const rawHeading = value.heading ?? value.hdg ?? value.position?.heading;
+  const heading = rawHeading == null ? null : Number(rawHeading);
+  return positionToAivdo(lat, lon, Number.isFinite(sog) ? sog : 0, Number.isFinite(cog) ? cog : 0, heading != null && Number.isFinite(heading) ? heading : null);
+}
+
+function normalizeTunnelMessage(data: unknown) {
+  const raw = typeof data === "string" ? data : String(data ?? "");
+  if (!raw || raw.includes("!AIVDO")) return raw;
+
+  const logMatch = raw.match(/\[POSITION\]\s+AIVDO\s+(-?\d+(?:\.\d+)?)\s*,?\s+(-?\d+(?:\.\d+)?)/i);
+  if (logMatch) {
+    const aivdo = positionToAivdo(Number(logMatch[1]), Number(logMatch[2]));
+    if (aivdo) return `${raw}\n${aivdo}`;
+  }
+
+  try {
+    const parsed = JSON.parse(raw);
+    const candidates = [parsed, parsed?.data, parsed?.payload, parsed?.position, parsed?.ownShip, parsed?.ownship];
+    for (const candidate of candidates) {
+      const aivdo = decodedPositionFromObject(candidate);
+      if (aivdo) return `${raw}\n${aivdo}`;
+    }
+  } catch {}
+
+  return raw;
+}
+
+class TunnelAisSocket extends EventTarget {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSING = 2;
+  static readonly CLOSED = 3;
+
+  readonly extensions = "";
+  readonly protocol = "";
+  binaryType: BinaryType = "blob";
+  bufferedAmount = 0;
+  readyState = TunnelAisSocket.CONNECTING;
+  onopen: ((this: WebSocket, ev: Event) => any) | null = null;
+  onmessage: ((this: WebSocket, ev: MessageEvent) => any) | null = null;
+  onerror: ((this: WebSocket, ev: Event) => any) | null = null;
+  onclose: ((this: WebSocket, ev: CloseEvent) => any) | null = null;
+
+  private socket: WebSocket;
+  readonly url: string;
+
+  constructor(NativeWebSocket: typeof WebSocket, url: string | URL, protocols?: string | string[]) {
+    super();
+    this.url = String(url);
+    this.socket = protocols === undefined ? new NativeWebSocket(url) : new NativeWebSocket(url, protocols);
+
+    this.socket.onopen = () => {
+      this.readyState = TunnelAisSocket.OPEN;
+      const openEvent = new Event("open");
+      this.onopen?.call(this as any, openEvent);
+      this.dispatchEvent(openEvent);
+    };
+    this.socket.onmessage = (event) => {
+      const messageEvent = new MessageEvent("message", { data: normalizeTunnelMessage(event.data) });
+      this.onmessage?.call(this as any, messageEvent);
+      this.dispatchEvent(messageEvent);
+    };
+    this.socket.onerror = () => {
+      const errorEvent = new Event("error");
+      this.onerror?.call(this as any, errorEvent);
+      this.dispatchEvent(errorEvent);
+    };
+    this.socket.onclose = (event) => {
+      this.readyState = TunnelAisSocket.CLOSED;
+      const closeEvent = new CloseEvent("close", { code: event.code, reason: event.reason, wasClean: event.wasClean });
+      this.onclose?.call(this as any, closeEvent);
+      this.dispatchEvent(closeEvent);
+    };
+  }
+
+  send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
+    this.socket.send(data as any);
+  }
+
+  close(code?: number, reason?: string) {
+    this.readyState = TunnelAisSocket.CLOSING;
+    this.socket.close(code, reason);
+  }
+}
+
 class DirectAisRealtimeSocket extends EventTarget {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -180,6 +324,9 @@ function installDirectAisWebSocketShim() {
     if (requestedUrl === DIRECT_AIS_WS_URL) {
       return new DirectAisRealtimeSocket(NativeWebSocket) as any;
     }
+    if (isTunnelAisUrl(requestedUrl)) {
+      return new TunnelAisSocket(NativeWebSocket, url, protocols) as any;
+    }
     return protocols === undefined
       ? new NativeWebSocket(url)
       : new NativeWebSocket(url, protocols);
@@ -203,14 +350,7 @@ function isLocalAisUrl(url: string) {
 
 function isLegacyAisUrl(url: string) {
   const normalized = url.trim().replace(/\/$/, "");
-  if (normalized === LEGACY_WHEELHOUSE_AIS_WS_URL || normalized === LEGACY_SECURE_AIS_WS_URL) return true;
-
-  try {
-    const parsed = new URL(normalized);
-    return parsed.hostname.toLowerCase() === "ais.wardlab.dev";
-  } catch {
-    return /^wss?:\/\/ais\.wardlab\.dev(?::\d+)?(?:\/.*)?$/i.test(normalized);
-  }
+  return normalized === LEGACY_WHEELHOUSE_AIS_WS_URL || normalized === LEGACY_SECURE_AIS_WS_URL;
 }
 
 function isOldCloudRelayUrl(url: string) {
