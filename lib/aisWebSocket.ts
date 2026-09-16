@@ -2,7 +2,7 @@ const AIS_WS_HOST_KEY = "navdash-ais-ws-host";
 const CLOUD_AIS_WS_URL = "wss://uujlsvgromzapubtinfg.supabase.co/functions/v1/navdash-ais-relay?role=client";
 const DIRECT_AIS_WS_URL = "navdash-realtime://navdash-ais-live";
 const TUNNEL_AIS_WS_URL = "wss://ais.wardlab.dev";
-const SUPABASE_REALTIME_URL = "wss://uujlsvgromzapubtinfg.supabase.co/realtime/v1/websocket?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6InV1amxzdmdyb216YXB1YnRpbmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNzczMTksImV4cCI6MjEwNDY1MzMxOX0.bl2O1EKgTiz1CWG1Y2tCFh9NYHW2ixQyowJGjdlOrBY&vsn=1.0.0";
+const SUPABASE_REALTIME_URL = "wss://uujlsvgromzapubtinfg.supabase.co/realtime/v1/websocket?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV1amxzdmdyb216YXB1YnRpbmZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwNzczMTksImV4cCI6MjEwNDY1MzMxOX0.bl2O1EKgTiz1CWG1Y2tCFh9NYHW2ixQyowJGjdlOrBY&vsn=1.0.0";
 const REALTIME_TOPIC = "realtime:navdash-ais-live";
 const LEGACY_WHEELHOUSE_AIS_WS_URL = "ws://10.129.4.102:8081";
 const LEGACY_SECURE_AIS_WS_URL = "wss://ais.wardlab.dev:8443";
