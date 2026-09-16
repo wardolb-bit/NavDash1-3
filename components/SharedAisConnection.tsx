@@ -26,27 +26,33 @@ function isSharedAisUrl(url: string) {
   }
 }
 
-function isParsedOwnshipMessage(data: unknown) {
+function sixBit(char: string) {
+  let value = char.charCodeAt(0) - 48;
+  if (value > 40) value -= 8;
+  return value;
+}
+
+function aivdoMmsi(data: unknown) {
   const raw = typeof data === "string" ? data : String(data ?? "");
-  if (!raw || raw.includes("!AIVDO")) return false;
+  const line = raw.split(/\r?\n/).find((value) => value.trim().startsWith("!AIVDO"));
+  if (!line) return null;
+  const parts = line.trim().split(",");
+  const payload = parts[5] || "";
+  if (!payload) return null;
   try {
-    const parsed = JSON.parse(raw);
-    const marker = String(parsed?.type ?? parsed?.kind ?? parsed?.event ?? parsed?.messageType ?? "").toLowerCase();
-    if (marker.includes("ownship") || marker.includes("own_ship") || marker.includes("own-ship") || marker === "gps") return true;
-    if (marker.includes("position")) {
-      const lat = Number(parsed?.lat ?? parsed?.latitude ?? parsed?.position?.lat ?? parsed?.position?.latitude);
-      const lon = Number(parsed?.lon ?? parsed?.lng ?? parsed?.longitude ?? parsed?.position?.lon ?? parsed?.position?.lng ?? parsed?.position?.longitude);
-      return Number.isFinite(lat) && Number.isFinite(lon);
-    }
-  } catch {}
-  return false;
+    const bits = payload.split("").map((char) => sixBit(char).toString(2).padStart(6, "0")).join("");
+    if (bits.length < 38) return null;
+    return parseInt(bits.slice(8, 38), 2);
+  } catch {
+    return null;
+  }
 }
 
 export function SharedAisConnection() {
   useEffect(() => {
     let disposed = false;
     let reconnectTimer = 0;
-    let lastRawOwnshipAt = 0;
+    let lastRealOwnshipAt = 0;
     const BaseWebSocket = window.WebSocket;
     const subscribers = window.__navdashSharedAisSubscribers ?? new Set<Subscriber>();
     window.__navdashSharedAisSubscribers = subscribers;
@@ -65,9 +71,11 @@ export function SharedAisConnection() {
       };
 
       socket.onmessage = (event) => {
-        const raw = typeof event.data === "string" ? event.data : String(event.data ?? "");
-        if (raw.includes("!AIVDO")) lastRawOwnshipAt = Date.now();
-        else if (isParsedOwnshipMessage(event.data) && Date.now() - lastRawOwnshipAt < 1500) return;
+        const mmsi = aivdoMmsi(event.data);
+        if (mmsi !== null) {
+          if (mmsi > 0) lastRealOwnshipAt = Date.now();
+          else if (Date.now() - lastRealOwnshipAt < 5000) return;
+        }
         subscribers.forEach((subscriber) => subscriber.emitMessage(event.data));
       };
 
