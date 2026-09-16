@@ -56,11 +56,11 @@ function positionToAivdo(lat: number, lon: number, sog = 0, cog = 0, heading: nu
   return `!AIVDO,1,1,,A,${payload},0`;
 }
 
-function decodedPositionFromObject(value: any) {
+function decodedPositionFromObject(value: any, allowUnmarked = false) {
   if (!value || typeof value !== "object") return null;
   const marker = String(value.type ?? value.kind ?? value.event ?? value.messageType ?? "").toLowerCase();
-  const isPosition = marker.includes("position") || marker.includes("ownship") || marker.includes("own_ship") || marker === "gps";
-  if (!isPosition) return null;
+  const isPosition = marker.includes("position") || marker.includes("ownship") || marker.includes("own_ship") || marker.includes("own-ship") || marker === "gps";
+  if (!allowUnmarked && !isPosition) return null;
 
   const lat = Number(value.lat ?? value.latitude ?? value.position?.lat ?? value.position?.latitude);
   const lon = Number(value.lon ?? value.lng ?? value.longitude ?? value.position?.lon ?? value.position?.lng ?? value.position?.longitude);
@@ -85,6 +85,29 @@ function normalizeTunnelMessage(data: unknown) {
 
   try {
     const parsed = JSON.parse(raw);
+    const marker = String(parsed?.type ?? parsed?.kind ?? parsed?.event ?? parsed?.messageType ?? "").toLowerCase();
+    const parentOwnShip = marker.includes("ownship") || marker.includes("own_ship") || marker.includes("own-ship") || marker.includes("position") || marker === "gps";
+
+    if (parentOwnShip) {
+      const nestedCandidates = [
+        parsed?.ownShip,
+        parsed?.ownship,
+        parsed?.position,
+        parsed?.data?.ownShip,
+        parsed?.data?.ownship,
+        parsed?.data?.position,
+        parsed?.payload?.ownShip,
+        parsed?.payload?.ownship,
+        parsed?.payload?.position,
+        parsed?.data,
+        parsed?.payload,
+      ];
+      for (const candidate of nestedCandidates) {
+        const aivdo = decodedPositionFromObject(candidate, true);
+        if (aivdo) return `${raw}\n${aivdo}`;
+      }
+    }
+
     const candidates = [parsed, parsed?.data, parsed?.payload, parsed?.position, parsed?.ownShip, parsed?.ownship];
     for (const candidate of candidates) {
       const aivdo = decodedPositionFromObject(candidate);
