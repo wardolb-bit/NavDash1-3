@@ -77,8 +77,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
 
-        {children}
         <SharedAisConnection />
+        {children}
         <SharedRouteSync />
         <SharedAmiForecastSync />
         <NavDashMainLinkGuard />
