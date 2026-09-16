@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import AiWeatherBrief from "../../components/AiWeatherBrief";
 import SpeedSourceSelector from "./SpeedSourceSelector";
 
 export default function RouteWeatherLabLayout({ children }: { children: ReactNode }) {
@@ -77,7 +76,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
       `}</style>
       {children}
       <SpeedSourceSelector />
-      <AiWeatherBrief />
     </>
   );
 }
