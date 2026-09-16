@@ -4,9 +4,11 @@ import { useEffect, useRef } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 
 const AIS_NAME_CACHE_KEY = "navdash-ais-name-cache-v1";
+const AIS_DESTINATION_CACHE_KEY = "navdash-ais-destination-cache-v1";
 const LIVE_TARGET_MAX_AGE_MS = 30 * 60 * 1000;
 const OWN_SHIP_MAX_AGE_MS = 2 * 60 * 1000;
 const NAME_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+const DESTINATION_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 type Vessel = {
   mmsi: number;
@@ -34,10 +36,13 @@ type FragmentAssembly = {
 };
 
 type CachedName = { name: string; updatedAt: number };
+type CachedDestination = { destination: string; updatedAt: number };
+type StaticData = { mmsi: number; name?: string; destination?: string };
 
 type AisSnapshotTarget = Partial<Vessel> & {
   mmsi?: number | string;
   name?: string | null;
+  destination?: string | null;
   lastSeen?: number | string;
 };
 
@@ -76,7 +81,11 @@ function decodeSixBitText(bits: string, start: number, length: number) {
   return text.replace(/@+$/g, "").trim();
 }
 
-function decodeStaticNameFromPayload(payload: string): { mmsi: number; name: string } | null {
+function cleanAisText(value: string) {
+  return value.replace(/@+$/g, "").replace(/\s+/g, " ").trim();
+}
+
+function decodeStaticDataFromPayload(payload: string): StaticData | null {
   try {
     const bits = payloadToBits(payload);
     if (bits.length < 40) return null;
@@ -85,14 +94,16 @@ function decodeStaticNameFromPayload(payload: string): { mmsi: number; name: str
 
     if (type === 5) {
       if (bits.length < 232) return null;
-      const name = decodeSixBitText(bits, 112, 120);
-      return name ? { mmsi, name } : null;
+      const name = cleanAisText(decodeSixBitText(bits, 112, 120));
+      const destination = bits.length >= 422 ? cleanAisText(decodeSixBitText(bits, 302, 120)) : "";
+      if (!name && !destination) return null;
+      return { mmsi, ...(name ? { name } : {}), ...(destination ? { destination } : {}) };
     }
 
     if (type === 24) {
       const partNumber = unsigned(bits, 38, 2);
       if (partNumber !== 0 || bits.length < 160) return null;
-      const name = decodeSixBitText(bits, 40, 120);
+      const name = cleanAisText(decodeSixBitText(bits, 40, 120));
       return name ? { mmsi, name } : null;
     }
 
@@ -229,15 +240,16 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function targetTooltip(vessel: Vessel, name: string | undefined, ownShip: OwnShip | null) {
+function targetTooltip(vessel: Vessel, name: string | undefined, destination: string | undefined, ownShip: OwnShip | null) {
   const sog = vessel.sog === null ? "--" : `${vessel.sog.toFixed(1)} kt`;
   const cog = vessel.cog === null ? "--" : `${vessel.cog.toFixed(1)}°`;
   const title = name ? escapeHtml(name) : `AIS ${vessel.mmsi}`;
   const mmsiLine = name ? `<br>MMSI ${vessel.mmsi}` : "";
+  const destinationLine = destination ? `<br>DEST ${escapeHtml(destination)}` : "";
   const approach = cpaTcpa(ownShip, vessel);
   const cpaLine = approach ? `<br>CPA ${approach.cpaNm.toFixed(2)} NM` : `<br>CPA --`;
   const tcpaLine = approach ? `<br>TCPA ${approach.tcpaMinutes < 60 ? `${Math.round(approach.tcpaMinutes)} min` : `${(approach.tcpaMinutes / 60).toFixed(1)} hr`}` : `<br>TCPA --`;
-  return `<strong>${title}</strong>${mmsiLine}<br>SOG ${sog}<br>COG ${cog}${cpaLine}${tcpaLine}`;
+  return `<strong>${title}</strong>${mmsiLine}${destinationLine}<br>SOG ${sog}<br>COG ${cog}${cpaLine}${tcpaLine}`;
 }
 
 function readNameCache() {
@@ -266,10 +278,38 @@ function writeNameCache(cache: Map<number, CachedName>) {
   } catch {}
 }
 
+function readDestinationCache() {
+  const result = new Map<number, CachedDestination>();
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(AIS_DESTINATION_CACHE_KEY) || "{}");
+    const cutoff = Date.now() - DESTINATION_CACHE_MAX_AGE_MS;
+    for (const [key, value] of Object.entries(parsed || {})) {
+      const mmsi = Number(key);
+      const entry = value as CachedDestination;
+      if (!Number.isFinite(mmsi) || !entry?.destination || normalizeTime(entry.updatedAt) < cutoff) continue;
+      result.set(mmsi, { destination: String(entry.destination), updatedAt: normalizeTime(entry.updatedAt) });
+    }
+  } catch {}
+  return result;
+}
+
+function writeDestinationCache(cache: Map<number, CachedDestination>) {
+  try {
+    const object: Record<string, CachedDestination> = {};
+    const cutoff = Date.now() - DESTINATION_CACHE_MAX_AGE_MS;
+    for (const [mmsi, entry] of cache) {
+      if (entry.updatedAt >= cutoff) object[String(mmsi)] = entry;
+    }
+    window.localStorage.setItem(AIS_DESTINATION_CACHE_KEY, JSON.stringify(object));
+  } catch {}
+}
+
 export function MainMapAisTargets() {
   const targetsRef = useRef<Map<number, Vessel>>(new Map());
   const namesRef = useRef<Map<number, string>>(new Map());
+  const destinationsRef = useRef<Map<number, string>>(new Map());
   const nameCacheRef = useRef<Map<number, CachedName>>(new Map());
+  const destinationCacheRef = useRef<Map<number, CachedDestination>>(new Map());
   const ownShipRef = useRef<OwnShip | null>(null);
   const fragmentsRef = useRef<Map<string, FragmentAssembly>>(new Map());
   const markersRef = useRef<Map<number, any>>(new Map());
@@ -285,6 +325,8 @@ export function MainMapAisTargets() {
 
     nameCacheRef.current = readNameCache();
     for (const [mmsi, entry] of nameCacheRef.current) namesRef.current.set(mmsi, entry.name);
+    destinationCacheRef.current = readDestinationCache();
+    for (const [mmsi, entry] of destinationCacheRef.current) destinationsRef.current.set(mmsi, entry.destination);
 
     const ensureLayer = async () => {
       if (disposed) return;
@@ -324,7 +366,7 @@ export function MainMapAisTargets() {
           iconAnchor: [11, 11],
         });
         const position: [number, number] = [vessel.lat, vessel.lon];
-        const tooltip = targetTooltip(vessel, namesRef.current.get(vessel.mmsi), ownShipRef.current);
+        const tooltip = targetTooltip(vessel, namesRef.current.get(vessel.mmsi), destinationsRef.current.get(vessel.mmsi), ownShipRef.current);
         let marker = markersRef.current.get(vessel.mmsi);
         if (!marker) {
           marker = L.marker(position, {
@@ -357,13 +399,29 @@ export function MainMapAisTargets() {
     };
 
     const updateName = (mmsi: number, name: string, updatedAt = Date.now()) => {
-      const cleanName = name.replace(/\s+/g, " ").trim();
+      const cleanName = cleanAisText(name);
       if (!cleanName) return;
       namesRef.current.set(mmsi, cleanName);
       nameCacheRef.current.set(mmsi, { name: cleanName, updatedAt });
       writeNameCache(nameCacheRef.current);
       const vessel = targetsRef.current.get(mmsi);
       if (vessel) drawTarget(vessel);
+    };
+
+    const updateDestination = (mmsi: number, destination: string, updatedAt = Date.now()) => {
+      const cleanDestination = cleanAisText(destination);
+      if (!cleanDestination) return;
+      destinationsRef.current.set(mmsi, cleanDestination);
+      destinationCacheRef.current.set(mmsi, { destination: cleanDestination, updatedAt });
+      writeDestinationCache(destinationCacheRef.current);
+      const vessel = targetsRef.current.get(mmsi);
+      if (vessel) drawTarget(vessel);
+    };
+
+    const applyStaticData = (decoded: StaticData | null, updatedAt = Date.now()) => {
+      if (!decoded) return;
+      if (decoded.name) updateName(decoded.mmsi, decoded.name, updatedAt);
+      if (decoded.destination) updateDestination(decoded.mmsi, decoded.destination, updatedAt);
     };
 
     const processStaticData = (line: string) => {
@@ -379,8 +437,7 @@ export function MainMapAisTargets() {
       if (!Number.isFinite(total) || !Number.isFinite(number) || total < 1 || number < 1 || number > total) return;
 
       if (total === 1) {
-        const decoded = decodeStaticNameFromPayload(payload);
-        if (decoded) updateName(decoded.mmsi, decoded.name);
+        applyStaticData(decodeStaticDataFromPayload(payload));
         return;
       }
 
@@ -396,8 +453,7 @@ export function MainMapAisTargets() {
 
       if (current.parts.every(Boolean)) {
         fragmentsRef.current.delete(key);
-        const decoded = decodeStaticNameFromPayload(current.parts.join(""));
-        if (decoded) updateName(decoded.mmsi, decoded.name);
+        applyStaticData(decodeStaticDataFromPayload(current.parts.join("")));
       }
     };
 
@@ -406,6 +462,7 @@ export function MainMapAisTargets() {
       if (!vessel || Date.now() - vessel.updatedAt > LIVE_TARGET_MAX_AGE_MS) return;
       targetsRef.current.set(vessel.mmsi, vessel);
       if (typeof item.name === "string" && item.name.trim()) updateName(vessel.mmsi, item.name, vessel.updatedAt);
+      if (typeof item.destination === "string" && item.destination.trim()) updateDestination(vessel.mmsi, item.destination, vessel.updatedAt);
       drawTarget(vessel);
     };
 
@@ -416,7 +473,10 @@ export function MainMapAisTargets() {
       const identities = Array.isArray(message?.identities) ? message.identities : [];
       for (const identity of identities) {
         const mmsi = Number(identity?.mmsi);
-        if (Number.isFinite(mmsi) && typeof identity?.name === "string") updateName(mmsi, identity.name, normalizeTime(identity.updatedAt ?? identity.lastSeen));
+        if (!Number.isFinite(mmsi)) continue;
+        const updatedAt = normalizeTime(identity.updatedAt ?? identity.lastSeen);
+        if (typeof identity?.name === "string") updateName(mmsi, identity.name, updatedAt);
+        if (typeof identity?.destination === "string") updateDestination(mmsi, identity.destination, updatedAt);
       }
 
       const own = message?.ownShip || message?.ownship;
@@ -477,7 +537,11 @@ export function MainMapAisTargets() {
           }
           if (json?.type === "ais-identity-update") {
             const mmsi = Number(json.mmsi);
-            if (Number.isFinite(mmsi) && typeof json.name === "string") updateName(mmsi, json.name, normalizeTime(json.updatedAt ?? json.lastSeen));
+            if (Number.isFinite(mmsi)) {
+              const updatedAt = normalizeTime(json.updatedAt ?? json.lastSeen);
+              if (typeof json.name === "string") updateName(mmsi, json.name, updatedAt);
+              if (typeof json.destination === "string") updateDestination(mmsi, json.destination, updatedAt);
+            }
             return;
           }
           if (json?.type === "ownship-state" || json?.type === "own-ship-state") {
@@ -544,7 +608,9 @@ export function MainMapAisTargets() {
       markersRef.current.clear();
       targetsRef.current.clear();
       namesRef.current.clear();
+      destinationsRef.current.clear();
       nameCacheRef.current.clear();
+      destinationCacheRef.current.clear();
       ownShipRef.current = null;
       fragmentsRef.current.clear();
     };
