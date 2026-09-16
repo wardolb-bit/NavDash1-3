@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { requestDesktopBridgeView } from "./MobileBridgeRedirect";
 
 export function CelestialMainLink() {
   const pathname = usePathname();
@@ -14,7 +15,7 @@ export function CelestialMainLink() {
     const goBridge = (event: MouseEvent) => {
       event.preventDefault();
       event.stopPropagation();
-      window.location.assign("/bridge");
+      requestDesktopBridgeView();
     };
 
     const sync = () => {
