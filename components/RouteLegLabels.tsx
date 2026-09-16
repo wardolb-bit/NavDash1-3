@@ -1,83 +1,107 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 
-const ROUTE_STORAGE_KEY = "navconsole-saved-route";
-const LABEL_PANE = "navmap-main-route-leg-labels-v1";
+const LABEL_PANE = "navmap-main-route-leg-labels-v2";
+const ROUTE_COLOR = "#c9a227";
 
-type Waypoint = { lat: number; lon: number };
-type StoredRoute = { waypoints?: Waypoint[] };
+type Point = { lat: number; lng: number };
 
-function rad(value: number) { return value * Math.PI / 180; }
-function deg(value: number) { return value * 180 / Math.PI; }
-function normalize360(value: number) { return ((value % 360) + 360) % 360; }
-function lonDelta(value: number) { let v = value; while (v > 180) v -= 360; while (v < -180) v += 360; return v; }
-
-function distanceNm(a: Waypoint, b: Waypoint) {
-  const p1 = rad(a.lat), p2 = rad(b.lat), dp = rad(b.lat - a.lat), dl = rad(lonDelta(b.lon - a.lon));
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+function distanceAndBearing(from: Point, to: Point) {
+  const radiusNm = 3440.065;
+  const lat1 = from.lat * Math.PI / 180;
+  const lat2 = to.lat * Math.PI / 180;
+  const dLat = (to.lat - from.lat) * Math.PI / 180;
+  const dLon = (to.lng - from.lng) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  const distanceNm = 2 * radiusNm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  const bearing = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  return { distanceNm, bearing };
 }
 
-function bearing(a: Waypoint, b: Waypoint) {
-  const p1 = rad(a.lat), p2 = rad(b.lat), dl = rad(lonDelta(b.lon - a.lon));
-  return normalize360(deg(Math.atan2(
-    Math.sin(dl) * Math.cos(p2),
-    Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl),
-  )));
+function isRoutePolyline(layer: any) {
+  return typeof layer?.getLatLngs === "function"
+    && String(layer?.options?.color || "").toLowerCase() === ROUTE_COLOR;
 }
 
-function mapInstance() {
+function mainMap() {
   const element = document.getElementById("navmap-main-isolated-v2") as any;
   return element?.__navdashLeafletMap || null;
 }
 
-function readRoute(): Waypoint[] {
-  try {
-    const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY) || window.sessionStorage.getItem(ROUTE_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as StoredRoute;
-    return (Array.isArray(parsed?.waypoints) ? parsed.waypoints : [])
-      .map((wp) => ({ lat: Number(wp?.lat), lon: Number(wp?.lon) }))
-      .filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
-  } catch {
-    return [];
-  }
-}
-
 export function RouteLegLabels() {
-  const layerRef = useRef<any>(null);
-  const mapRef = useRef<any>(null);
-  const routeKeyRef = useRef("");
-
   useEffect(() => {
     let disposed = false;
-    let timer = 0;
+    let map: any = null;
+    let L: any = null;
+    let labelLayer: any = null;
+    let retryTimer = 0;
 
-    const sync = async () => {
-      if (disposed) return;
-      const route = readRoute();
-      const routeKey = JSON.stringify(route);
-      const map = mapInstance();
-      if (!map) return;
+    const clearLabels = () => {
+      try { labelLayer?.clearLayers(); } catch {}
+    };
 
-      if (mapRef.current !== map) {
-        if (layerRef.current && mapRef.current) {
-          try { mapRef.current.removeLayer(layerRef.current); } catch {}
+    const rebuild = () => {
+      if (disposed || !map || !L || !labelLayer) return;
+      clearLabels();
+
+      map.eachLayer((layer: any) => {
+        if (!isRoutePolyline(layer)) return;
+        const latLngs = layer.getLatLngs();
+        if (!Array.isArray(latLngs) || latLngs.length < 2 || Array.isArray(latLngs[0])) return;
+
+        for (let i = 1; i < latLngs.length; i += 1) {
+          const from = latLngs[i - 1] as Point;
+          const to = latLngs[i] as Point;
+          const result = distanceAndBearing(from, to);
+          const midpoint: [number, number] = [(from.lat + to.lat) / 2, (from.lng + to.lng) / 2];
+          const brg = String(Math.round(result.bearing) % 360).padStart(3, "0");
+
+          L.tooltip({
+            permanent: true,
+            direction: "center",
+            className: "navmap-route-leg-label",
+            pane: LABEL_PANE,
+            interactive: false,
+          })
+            .setLatLng(midpoint)
+            .setContent(`${brg}°T · ${result.distanceNm.toFixed(1)} NM`)
+            .addTo(labelLayer);
         }
-        mapRef.current = map;
-        layerRef.current = null;
-        routeKeyRef.current = "";
+      });
+    };
+
+    const onRouteLayerChange = (event: any) => {
+      if (isRoutePolyline(event?.layer)) window.requestAnimationFrame(rebuild);
+    };
+
+    const detach = () => {
+      if (map) {
+        map.off("layeradd", onRouteLayerChange);
+        map.off("layerremove", onRouteLayerChange);
+        if (labelLayer) {
+          try { map.removeLayer(labelLayer); } catch {}
+        }
       }
+      map = null;
+      labelLayer = null;
+    };
 
-      if (routeKeyRef.current === routeKey && layerRef.current) return;
-
-      const L = await import("leaflet");
-      if (disposed || mapRef.current !== map) return;
-
-      if (layerRef.current) {
-        try { map.removeLayer(layerRef.current); } catch {}
+    const attach = async () => {
+      if (disposed) return;
+      const nextMap = mainMap();
+      if (!nextMap) {
+        retryTimer = window.setTimeout(attach, 250);
+        return;
       }
+      if (map === nextMap) return;
+
+      detach();
+      L = await import("leaflet");
+      if (disposed) return;
+      map = nextMap;
 
       if (!map.getPane(LABEL_PANE)) {
         const pane = map.createPane(LABEL_PANE);
@@ -85,45 +109,25 @@ export function RouteLegLabels() {
         pane.style.pointerEvents = "none";
       }
 
-      const layer = L.layerGroup([], { pane: LABEL_PANE } as any).addTo(map);
-      layerRef.current = layer;
-      routeKeyRef.current = routeKey;
-
-      for (let i = 1; i < route.length; i += 1) {
-        const a = route[i - 1];
-        const b = route[i];
-        const midLon = a.lon + lonDelta(b.lon - a.lon) / 2;
-        const midpoint: [number, number] = [(a.lat + b.lat) / 2, ((midLon + 540) % 360) - 180];
-        const brg = String(Math.round(bearing(a, b)) % 360).padStart(3, "0");
-        const dist = distanceNm(a, b).toFixed(1);
-
-        L.marker(midpoint, {
-          pane: LABEL_PANE,
-          interactive: false,
-          keyboard: false,
-          icon: L.divIcon({
-            className: "navmap-main-route-leg-label",
-            iconSize: [108, 22],
-            iconAnchor: [54, 11],
-            html: `<div style="display:inline-block;white-space:nowrap;padding:2px 5px;border:1px solid rgba(34,211,238,.45);border-radius:3px;background:rgba(5,10,15,.86);color:#c9f7ff;font:700 10px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.02em;box-shadow:0 1px 3px rgba(0,0,0,.45);pointer-events:none">${brg}°  ${dist} NM</div>`,
-          }),
-        }).addTo(layer);
-      }
+      labelLayer = L.layerGroup([], { pane: LABEL_PANE } as any).addTo(map);
+      map.on("layeradd", onRouteLayerChange);
+      map.on("layerremove", onRouteLayerChange);
+      rebuild();
     };
 
-    void sync();
-    timer = window.setInterval(() => { void sync(); }, 1000);
+    const onMapReady = () => { void attach(); };
+    window.addEventListener("navdash-leaflet-map-ready", onMapReady);
+    void attach();
 
     return () => {
       disposed = true;
-      window.clearInterval(timer);
-      if (layerRef.current && mapRef.current) {
-        try { mapRef.current.removeLayer(layerRef.current); } catch {}
-      }
-      layerRef.current = null;
-      mapRef.current = null;
+      window.clearTimeout(retryTimer);
+      window.removeEventListener("navdash-leaflet-map-ready", onMapReady);
+      detach();
     };
   }, []);
 
-  return null;
+  return (
+    <style>{`.navmap-route-leg-label{background:rgba(5,10,15,.88)!important;border:1px solid rgba(201,162,39,.72)!important;color:#f1d56b!important;box-shadow:0 1px 3px rgba(0,0,0,.45)!important;font:700 10px/1.25 ui-monospace,SFMono-Regular,Menlo,monospace!important;padding:3px 5px!important;white-space:nowrap!important}.navmap-route-leg-label:before{display:none!important}`}</style>
+  );
 }
