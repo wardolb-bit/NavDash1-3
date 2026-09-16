@@ -5,6 +5,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { SharedAmiForecastSync } from '../components/SharedAmiForecastSync';
 import { SharedRouteSync } from '../components/SharedRouteSync';
+import { SharedAisConnection } from '../components/SharedAisConnection';
 import { NavDashMainLinkGuard } from '../components/NavDashMainLinkGuard';
 
 export const metadata: Metadata = {
@@ -77,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </Script>
 
         {children}
+        <SharedAisConnection />
         <SharedRouteSync />
         <SharedAmiForecastSync />
         <NavDashMainLinkGuard />
