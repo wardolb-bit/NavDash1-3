@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { usePathname } from "next/navigation";
 
 const SYNODIC_MONTH_DAYS = 29.530588853;
 const NEW_MOON_EPOCH_MS = Date.UTC(2000, 0, 6, 18, 14, 0);
@@ -44,9 +46,9 @@ function illuminatedPath(phase:number, radius=54, center=60){
   return `M ${points.map(([x,y])=>`${x.toFixed(2)} ${y.toFixed(2)}`).join(" L ")} Z`;
 }
 
-function MoonDisk({phase}:{phase:number}){
+function MoonDisk({phase,embedded=false}:{phase:number;embedded?:boolean}){
   const path = illuminatedPath(phase);
-  return <svg viewBox="0 0 120 120" className="h-[112px] w-[112px]" aria-label="Illustrated current moon phase">
+  return <svg viewBox="0 0 120 120" className={embedded?"h-full max-h-[230px] min-h-[150px] w-full max-w-[230px]":"h-[112px] w-[112px]"} aria-label="Illustrated current moon phase">
     <defs>
       <radialGradient id="moon-lit" cx="38%" cy="32%" r="72%">
         <stop offset="0%" stopColor="#f3f0de"/>
@@ -70,24 +72,92 @@ function MoonDisk({phase}:{phase:number}){
   </svg>
 }
 
-export default function MoonPhaseDock(){
-  const [now,setNow] = useState(()=>new Date());
-  useEffect(()=>{const id=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(id)},[]);
-  const moon = useMemo(()=>lunarPhase(now),[now]);
+function LunarPhasePanel({phase,illumination,name,ageDays,embedded=false}:{phase:number;illumination:number;name:string;ageDays:number;embedded?:boolean}){
+  if(embedded){
+    return <section className="flex min-h-[220px] flex-1 flex-col border-t border-[#263442] bg-[#071019] text-[#dbe5ee]" aria-label="Current lunar phase">
+      <div className="border-b border-[#263442] px-3 py-2">
+        <div className="text-[9px] font-black uppercase tracking-[.18em] text-[#708496]">LUNAR PHASE</div>
+      </div>
+      <div className="flex min-h-0 flex-1 items-center justify-center gap-4 p-3">
+        <MoonDisk phase={phase} embedded/>
+        <div className="min-w-[105px]">
+          <div className="text-base font-black leading-tight text-[#e7c95c]">{name}</div>
+          <div className="mt-3 text-[9px] font-black uppercase tracking-[.12em] text-[#708496]">Illumination</div>
+          <div className="text-3xl font-black">{Math.round(illumination * 100)}%</div>
+          <div className="mt-2 text-[11px] text-[#9eafbd]">Age {ageDays.toFixed(1)} days</div>
+        </div>
+      </div>
+      <div className="border-t border-[#263442] px-3 py-2 text-[8px] leading-3 text-[#708496]">Illustrated phase is computed from UTC and intended for bridge awareness, not almanac replacement.</div>
+    </section>;
+  }
 
   return <aside className="fixed bottom-3 right-3 z-[60] w-[250px] border border-[#33485a] bg-[#071019]/95 text-[#dbe5ee] shadow-2xl backdrop-blur-sm max-sm:w-[205px]" aria-label="Current lunar phase">
     <div className="border-b border-[#263442] px-3 py-2">
       <div className="text-[9px] font-black uppercase tracking-[.18em] text-[#708496]">LUNAR PHASE</div>
     </div>
     <div className="flex items-center gap-3 p-3 max-sm:flex-col">
-      <MoonDisk phase={moon.phase}/>
+      <MoonDisk phase={phase}/>
       <div className="min-w-0 flex-1 max-sm:text-center">
-        <div className="text-sm font-black leading-tight text-[#e7c95c]">{moon.name}</div>
+        <div className="text-sm font-black leading-tight text-[#e7c95c]">{name}</div>
         <div className="mt-2 text-[9px] font-black uppercase tracking-[.12em] text-[#708496]">Illumination</div>
-        <div className="text-xl font-black">{Math.round(moon.illumination * 100)}%</div>
-        <div className="mt-1 text-[10px] text-[#9eafbd]">Age {moon.ageDays.toFixed(1)} days</div>
+        <div className="text-xl font-black">{Math.round(illumination * 100)}%</div>
+        <div className="mt-1 text-[10px] text-[#9eafbd]">Age {ageDays.toFixed(1)} days</div>
       </div>
     </div>
     <div className="border-t border-[#263442] px-3 py-2 text-[8px] leading-3 text-[#708496]">Illustrated phase is computed from UTC and intended for bridge awareness, not almanac replacement.</div>
-  </aside>
+  </aside>;
+}
+
+export default function MoonPhaseDock(){
+  const pathname = usePathname();
+  const [now,setNow] = useState(()=>new Date());
+  const [finderTarget,setFinderTarget] = useState<HTMLElement|null>(null);
+
+  useEffect(()=>{const id=window.setInterval(()=>setNow(new Date()),60000);return()=>window.clearInterval(id)},[]);
+
+  useEffect(()=>{
+    if(!pathname.startsWith("/celestial")){
+      setFinderTarget(null);
+      return;
+    }
+
+    let stopped=false;
+    let timer=0;
+    let activeTarget:HTMLElement|null=null;
+
+    const scan=()=>{
+      if(stopped)return;
+      const main=document.querySelector("main");
+      const finderButton=Array.from(main?.querySelectorAll("button")||[]).find(button=>button.textContent?.trim()==="STAR FINDER") as HTMLButtonElement|undefined;
+      const finderActive=!!finderButton&&String(finderButton.className).includes("bg-[#c9a227]");
+      const target=finderActive?(main?.querySelector("aside") as HTMLElement|null):null;
+
+      if(activeTarget&&activeTarget!==target){
+        activeTarget.style.removeProperty("display");
+        activeTarget.style.removeProperty("flex-direction");
+      }
+      activeTarget=target;
+      if(target){
+        target.style.setProperty("display","flex");
+        target.style.setProperty("flex-direction","column");
+      }
+      setFinderTarget(prev=>prev===target?prev:target);
+      timer=window.setTimeout(scan,500);
+    };
+
+    scan();
+    return()=>{
+      stopped=true;
+      window.clearTimeout(timer);
+      if(activeTarget){
+        activeTarget.style.removeProperty("display");
+        activeTarget.style.removeProperty("flex-direction");
+      }
+    };
+  },[pathname]);
+
+  const moon = useMemo(()=>lunarPhase(now),[now]);
+  const panel=<LunarPhasePanel phase={moon.phase} illumination={moon.illumination} name={moon.name} ageDays={moon.ageDays} embedded={!!finderTarget}/>;
+
+  return finderTarget?createPortal(panel,finderTarget):panel;
 }
