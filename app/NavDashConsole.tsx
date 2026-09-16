@@ -278,26 +278,48 @@ export default function NavDashConsole() {
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(getAisWebSocketUrl());
-    routeSocketRef.current = ws;
-    ws.onopen = () => setAisStatus("GPS CHECK");
-    ws.onerror = () => setAisStatus("GPS CHECK");
-    ws.onclose = () => setAisStatus("GPS CHECK");
-    ws.onmessage = (event) => {
-      let msg: any = event.data;
-      try { msg = JSON.parse(event.data); } catch {}
-      if (msg?.type === "route-state") {
-        const next = normalizeRoute(msg);
-        if (next) { setRouteName(next.routeName); setRoute(next.waypoints); setActiveIndex(next.activeWaypointIndex); }
-        return;
-      }
-      const line = extractNmea(msg);
-      const decoded = line
-        ? decodeOwnShip(line)
-        : ownShipFromParsedMessage(msg) ?? ownShipFromParsedMessage(msg?.data) ?? ownShipFromParsedMessage(msg?.payload);
-      if (decoded) { setOwnShip(decoded); setAisStatus("GPS LIVE"); }
+    let disposed = false;
+    let reconnectTimer = 0;
+    let ws: WebSocket | null = null;
+
+    const connect = () => {
+      if (disposed) return;
+      const next = new WebSocket(getAisWebSocketUrl());
+      ws = next;
+      routeSocketRef.current = next;
+      next.onopen = () => setAisStatus("GPS CHECK");
+      next.onerror = () => setAisStatus("GPS CHECK");
+      next.onclose = () => {
+        setAisStatus("GPS CHECK");
+        if (routeSocketRef.current === next) routeSocketRef.current = null;
+        if (!disposed) reconnectTimer = window.setTimeout(connect, 2000);
+      };
+      next.onmessage = (event) => {
+        let msg: any = event.data;
+        try { msg = JSON.parse(event.data); } catch {}
+        if (msg?.type === "route-state") {
+          const nextRoute = normalizeRoute(msg);
+          if (nextRoute) { setRouteName(nextRoute.routeName); setRoute(nextRoute.waypoints); setActiveIndex(nextRoute.activeWaypointIndex); }
+          return;
+        }
+        const line = extractNmea(msg);
+        const decoded = line
+          ? decodeOwnShip(line)
+          : ownShipFromParsedMessage(msg) ?? ownShipFromParsedMessage(msg?.data) ?? ownShipFromParsedMessage(msg?.payload);
+        if (decoded) { setOwnShip(decoded); setAisStatus("GPS LIVE"); }
+      };
     };
-    return () => { if (routeSocketRef.current === ws) routeSocketRef.current = null; ws.close(); };
+
+    connect();
+    return () => {
+      disposed = true;
+      window.clearTimeout(reconnectTimer);
+      if (routeSocketRef.current === ws) routeSocketRef.current = null;
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, []);
 
   useEffect(() => {
