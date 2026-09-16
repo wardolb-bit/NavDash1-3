@@ -9,14 +9,34 @@ export function CelestialMainLink() {
   useEffect(() => {
     if (!pathname.startsWith("/celestial")) return;
 
+    let currentLink: HTMLAnchorElement | null = null;
+
+    const goBridge = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      window.location.assign("/bridge");
+    };
+
     const sync = () => {
-      const mainLink = document.querySelector<HTMLAnchorElement>('main header a[href="/"]');
-      if (mainLink) mainLink.href = "/bridge";
+      const mainLink = document.querySelector<HTMLAnchorElement>('main header a');
+      if (!mainLink || mainLink.textContent?.trim() !== "MAIN") return;
+
+      if (currentLink !== mainLink) {
+        currentLink?.removeEventListener("click", goBridge, true);
+        currentLink = mainLink;
+        currentLink.addEventListener("click", goBridge, true);
+      }
+
+      currentLink.setAttribute("href", "/bridge");
     };
 
     sync();
     const timer = window.setInterval(sync, 500);
-    return () => window.clearInterval(timer);
+
+    return () => {
+      window.clearInterval(timer);
+      currentLink?.removeEventListener("click", goBridge, true);
+    };
   }, [pathname]);
 
   return null;
