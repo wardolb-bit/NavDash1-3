@@ -9,6 +9,17 @@ function finiteNumber(value: string | null, fallback?: number) {
   return fallback;
 }
 
+function normalizeLongitude(value: number) {
+  return ((((value + 180) % 360) + 360) % 360) - 180;
+}
+
+function longitudeNearReference(value: number, reference: number) {
+  let adjusted = value;
+  while (adjusted - reference > 180) adjusted -= 360;
+  while (adjusted - reference < -180) adjusted += 360;
+  return adjusted;
+}
+
 function webMercator(lon: number, lat: number) {
   const x = (lon * 20037508.342789244) / 180;
   const clippedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
@@ -21,21 +32,24 @@ function webMercator(lon: number, lat: number) {
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   const lat = finiteNumber(search.get("lat"));
-  const lon = finiteNumber(search.get("lon"));
+  const rawLon = finiteNumber(search.get("lon"));
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat!) > 90 || Math.abs(lon!) > 180) {
+  if (!Number.isFinite(lat) || !Number.isFinite(rawLon) || Math.abs(lat!) > 90) {
     return NextResponse.json({ error: "Valid lat/lon are required." }, { status: 400 });
   }
 
-  const west = finiteNumber(search.get("west"), lon! - 0.2)!;
+  const lon = normalizeLongitude(rawLon!);
+  const rawWest = finiteNumber(search.get("west"), rawLon! - 0.2)!;
+  const rawEast = finiteNumber(search.get("east"), rawLon! + 0.2)!;
+  const west = longitudeNearReference(rawWest, lon);
+  const east = longitudeNearReference(rawEast, lon);
   const south = finiteNumber(search.get("south"), lat! - 0.2)!;
-  const east = finiteNumber(search.get("east"), lon! + 0.2)!;
   const north = finiteNumber(search.get("north"), lat! + 0.2)!;
   const width = Math.max(256, Math.min(4096, Math.round(finiteNumber(search.get("width"), 1200)!)));
   const height = Math.max(256, Math.min(4096, Math.round(finiteNumber(search.get("height"), 800)!)));
   const tolerance = Math.max(2, Math.min(24, Math.round(finiteNumber(search.get("tolerance"), 8)!)));
 
-  const point = webMercator(lon!, lat!);
+  const point = webMercator(lon, lat!);
   const sw = webMercator(west, south);
   const ne = webMercator(east, north);
 
