@@ -46,6 +46,8 @@ type WaveResponse = {
 type EncounterPoint = ForecastPoint & { eta: Date; validAt: Date; deltaHours: number };
 
 const ENC_BRIGHTNESS_KEY = "navdash-enc-brightness";
+const ROUTE_WEATHER_DEPARTURE_KEY = "navdash-route-weather-departure";
+const ROUTE_WEATHER_SPEED_KEY = "navdash-route-weather-speed-kt";
 const ENC_BRIGHTNESS_MIN = 40;
 const ENC_BRIGHTNESS_MAX = 140;
 const ENC_BRIGHTNESS_STEP = 10;
@@ -245,6 +247,15 @@ export default function RouteWeatherLabPage() {
 
   const totalNm = useMemo(() => routeLengthNm(route), [route]);
   const waypointDistances = useMemo(() => routeWaypointDistances(route), [route]);
+
+  useEffect(() => {
+    try {
+      const savedDeparture = window.localStorage.getItem(ROUTE_WEATHER_DEPARTURE_KEY);
+      if (savedDeparture) setDeparture(savedDeparture);
+      const savedSpeed = Number(window.localStorage.getItem(ROUTE_WEATHER_SPEED_KEY));
+      if (Number.isFinite(savedSpeed) && savedSpeed >= 1 && savedSpeed <= 30) setSpeedKt(savedSpeed);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     if (autoLoadStartedRef.current) return;
@@ -838,8 +849,8 @@ export default function RouteWeatherLabPage() {
             <div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">VOYAGE</div>
             <div className="mt-1 truncate text-sm font-black text-cyan-200">{routeName}</div>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <label className="text-[9px] font-black text-slate-500">DEPARTURE<input type="datetime-local" value={departure} onChange={(e) => setDeparture(e.target.value)} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label>
-              <label className="text-[9px] font-black text-slate-500">SPEED KT<input type="number" min="1" max="30" step="0.1" value={speedKt} onChange={(e) => setSpeedKt(Math.max(1, Number(e.target.value) || 1))} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label>
+              <label className="text-[9px] font-black text-slate-500">DEPARTURE<input type="datetime-local" value={departure} onChange={(e) => { const next = e.target.value; setDeparture(next); try { window.localStorage.setItem(ROUTE_WEATHER_DEPARTURE_KEY, next); } catch {} }} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label>
+              <label className="text-[9px] font-black text-slate-500">SPEED KT<input type="number" min="1" max="30" step="0.1" value={speedKt} onChange={(e) => { const next = Math.max(1, Number(e.target.value) || 1); setSpeedKt(next); try { window.localStorage.setItem(ROUTE_WEATHER_SPEED_KEY, String(next)); } catch {} }} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label>
             </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-center">
               <div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">WPTS</div><div className="font-black">{route.length || "--"}</div></div>
