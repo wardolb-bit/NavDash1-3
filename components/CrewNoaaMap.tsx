@@ -147,8 +147,8 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       chartLayerRef.current = chartLayer;
 
       if (!inNoaaCoverage) {
-        const seamarks = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
-          minZoom: 6,
+        const seamarks = L.tileLayer("https://t1.openseamap.org/seamark/{z}/{x}/{y}.png", {
+          minZoom: 4,
           maxZoom: 18,
           opacity: 1,
           pane: "overlayPane",
