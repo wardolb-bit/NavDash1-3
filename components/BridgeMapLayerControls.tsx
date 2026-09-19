@@ -76,8 +76,18 @@ export function BridgeMapLayerControls() {
 
       isolated.querySelectorAll<HTMLImageElement>("img.leaflet-tile").forEach((tile) => {
         const src = tile.src || "";
+
+        if (src.includes("tile.openstreetmap.org")) {
+          // ENC mode is ENC-only. Do not let the OSM basemap show through
+          // transparent or missing ENC pixels/tiles.
+          tile.style.setProperty("display", encOn ? "none" : "", "important");
+          return;
+        }
+
         if (src.includes("tiles.openseamap.org/seamark")) {
-          tile.style.setProperty("display", seamarksOn ? "" : "none", "important");
+          // ENC is authoritative. Seamarks may be a saved user preference,
+          // but they are never allowed to render at the same time as ENC.
+          tile.style.setProperty("display", seamarksOn && !encOn ? "" : "none", "important");
           return;
         }
 
