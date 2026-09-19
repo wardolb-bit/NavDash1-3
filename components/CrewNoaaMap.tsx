@@ -63,7 +63,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         maxZoom: 15,
       }).setView(center, 10);
 
-      const planningBadge = L.control({ position: "bottomleft" });
+      const planningBadge = new L.Control({ position: "bottomleft" });
       planningBadge.onAdd = () => {
         const el = L.DomUtil.create("div");
         el.innerHTML = "PLANNING MAP · NOT FOR NAVIGATION";
