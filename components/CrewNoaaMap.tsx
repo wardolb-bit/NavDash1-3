@@ -25,6 +25,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const chartLayerRef = useRef<any>(null);
+  const jcgLayerRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
   const fittedRef = useRef(false);
@@ -136,6 +137,58 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
 
       chartLayer.addTo(map);
       chartLayerRef.current = chartLayer;
+
+      const loadJapanOverlays = async () => {
+        if (jcgLayerRef.current) {
+          try { map.removeLayer(jcgLayerRef.current); } catch {}
+          jcgLayerRef.current = null;
+        }
+
+        const bounds = map.getBounds();
+        const japanView = bounds.getNorth() >= 20 && bounds.getSouth() <= 48 &&
+          bounds.getEast() >= 122 && bounds.getWest() <= 154;
+        if (!japanView || map.getZoom() < 7) return;
+
+        const west = Math.max(122, bounds.getWest());
+        const south = Math.max(20, bounds.getSouth());
+        const east = Math.min(154, bounds.getEast());
+        const north = Math.min(48, bounds.getNorth());
+        const bbox = [west, south, east, north].join(",");
+        const group = L.layerGroup().addTo(map);
+        jcgLayerRef.current = group;
+
+        const specs = [
+          { key: "wrecks", radius: 5, color: "#ef4444" },
+          { key: "obstructions", radius: 4, color: "#f97316" },
+          { key: "anchorages", radius: 4, color: "#38bdf8" },
+          { key: "warnings", radius: 5, color: "#facc15" },
+        ];
+
+        await Promise.all(specs.map(async (spec) => {
+          try {
+            const response = await fetch(`/api/jcg-msil?layer=${spec.key}&bbox=${encodeURIComponent(bbox)}`);
+            if (!response.ok || jcgLayerRef.current !== group) return;
+            const geojson = await response.json();
+            L.geoJSON(geojson, {
+              style: { color: spec.color, weight: 2, opacity: 0.9, fillOpacity: 0.12 },
+              pointToLayer: (_feature: any, latlng: any) => L.circleMarker(latlng, {
+                radius: spec.radius,
+                color: spec.color,
+                weight: 2,
+                fillColor: nightMode ? "#071019" : "#ffffff",
+                fillOpacity: 0.9,
+              }),
+              onEachFeature: (feature: any, layer: any) => {
+                const props = feature?.properties || {};
+                const title = props.name || props.NAME || props.title || props.名称 || spec.key;
+                layer.bindTooltip(`JCG · ${title}`, { sticky: true, opacity: 0.95 });
+              },
+            }).addTo(group);
+          } catch {}
+        }));
+      };
+
+      await loadJapanOverlays();
     }
 
     void updateChart();
@@ -232,6 +285,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       mapRef.current?.remove();
       mapRef.current = null;
       chartLayerRef.current = null;
+      jcgLayerRef.current = null;
     };
   }, []);
 
