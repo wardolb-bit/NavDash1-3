@@ -91,7 +91,13 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         chartLayerRef.current = null;
       }
 
-      const chartLayer = nightMode
+      const center = map.getCenter();
+      const inNoaaCoverage = (
+        (center.lat >= 15 && center.lat <= 75 && center.lng >= -180 && center.lng <= -50) ||
+        (center.lat >= -20 && center.lat <= 30 && (center.lng >= 130 || center.lng <= -130))
+      );
+
+      const chartLayer = inNoaaCoverage && nightMode
         ? L.tileLayer.wms("/api/noaa-charts/wms", {
             layers: "1,2,3,4,5,6,7",
             format: "image/png",
@@ -104,7 +110,8 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
             updateWhenZooming: false,
             attribution: "NOAA Office of Coast Survey ENC Online",
           } as any)
-        : L.tileLayer.wms("/api/noaa-charts/wms", {
+        : inNoaaCoverage
+          ? L.tileLayer.wms("/api/noaa-charts/wms", {
             layers: "1,2,3,4,5,6,7,12",
             format: "image/png",
             transparent: false,
@@ -114,7 +121,18 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
             updateWhenIdle: false,
             updateWhenZooming: false,
             attribution: "NOAA Office of Coast Survey ENC Online",
-          } as any);
+          } as any)
+          : L.layerGroup([
+              L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 19,
+                attribution: "OpenStreetMap contributors",
+              }),
+              L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
+                maxZoom: 18,
+                opacity: nightMode ? 0.72 : 1,
+                attribution: "OpenSeaMap contributors",
+              }),
+            ]);
 
       chartLayer.addTo(map);
       chartLayerRef.current = chartLayer;
