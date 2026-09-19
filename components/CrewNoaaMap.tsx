@@ -179,6 +179,9 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         jcgLayerRef.current = group;
 
         const specs = [
+          { key: "lighthouses", radius: 6, color: "#f8fafc" },
+          { key: "buoys", radius: 5, color: "#22d3ee" },
+          { key: "beacons", radius: 5, color: "#a3e635" },
           { key: "wrecks", radius: 5, color: "#ef4444" },
           { key: "obstructions", radius: 4, color: "#f97316" },
           { key: "anchorages", radius: 4, color: "#38bdf8" },
@@ -201,7 +204,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
               }),
               onEachFeature: (feature: any, layer: any) => {
                 const props = feature?.properties || {};
-                const title = props.name || props.NAME || props.title || props.名称 || spec.key;
+                const title = props.名称 || props.name || props.NAME || props.title || spec.key;
                 layer.bindTooltip(`JCG · ${title}`, { sticky: true, opacity: 0.95 });
               },
             }).addTo(group);
