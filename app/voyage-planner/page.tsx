@@ -7,6 +7,7 @@ import { useBridgeTheme } from "../../lib/useBridgeTheme";
 type Waypoint = { id: string; name: string; lat: number; lon: number };
 type PlanningRoute = { routeName: string; waypoints: Waypoint[] };
 type LegPlan = { speed: number; holdHours: number };
+type TimedTarget = { id: string; waypointIndex: number; arrival: string };
 
 type SolveResult = {
   holdLegIndex: number;
@@ -120,6 +121,7 @@ export default function VoyagePlannerPage() {
   const [targetWaypointIndex, setTargetWaypointIndex] = useState<number | null>(null);
   const [plans, setPlans] = useState<LegPlan[]>([]);
   const [planningLimit, setPlanningLimit] = useState("14");
+  const [additionalTargets, setAdditionalTargets] = useState<TimedTarget[]>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -138,6 +140,7 @@ export default function VoyagePlannerPage() {
         setRoute(parsed);
         setPlans(parsed.waypoints.slice(1).map(() => ({ speed, holdHours: 0 })));
         setTargetWaypointIndex(parsed.waypoints.length - 1);
+        setAdditionalTargets([]);
         setError("");
       } catch {}
     }
@@ -156,51 +159,59 @@ export default function VoyagePlannerPage() {
     });
   }, [route, plans, defaultSpeed]);
 
-  const baseTimeline = useMemo(() => {
+  const timedTargets = useMemo(() => {
+    if (!route || resolvedTargetWaypointIndex === null) return [];
+    const items: TimedTarget[] = [
+      { id: "primary", waypointIndex: resolvedTargetWaypointIndex, arrival: targetArrival },
+      ...additionalTargets,
+    ];
+    return items
+      .filter((item) => item.waypointIndex > 0 && item.waypointIndex < route.waypoints.length && item.arrival)
+      .sort((a, b) => a.waypointIndex - b.waypointIndex);
+  }, [route, resolvedTargetWaypointIndex, targetArrival, additionalTargets]);
+
+  const timingPlan = useMemo(() => {
     const start = departure ? new Date(departure) : null;
-    if (!start || !Number.isFinite(start.getTime())) return [];
+    if (!route || !start || !Number.isFinite(start.getTime())) return { timeline: [] as any[], blocks: [] as any[], error: "" };
+
+    const targetsByIndex = new Map<number, TimedTarget>();
+    for (const item of timedTargets) {
+      if (targetsByIndex.has(item.waypointIndex)) return { timeline: [] as any[], blocks: [] as any[], error: "Each timed waypoint must be unique." };
+      targetsByIndex.set(item.waypointIndex, item);
+    }
+
+    let previousIndex = 0;
+    let previousTime = new Date(start);
+    const blocks: any[] = [];
+    for (const item of timedTargets) {
+      const targetTime = new Date(item.arrival);
+      if (!Number.isFinite(targetTime.getTime()) || item.waypointIndex <= previousIndex) continue;
+      const legs = rawLegs.slice(previousIndex, item.waypointIndex);
+      const distance = legs.reduce((sum, leg) => sum + leg.distance, 0);
+      const holdHours = legs.reduce((sum, leg) => sum + leg.holdHours, 0);
+      const availableHours = (targetTime.getTime() - previousTime.getTime()) / 3600000 - holdHours;
+      const requiredSpeed = distance > 0 && availableHours > 0 ? distance / availableHours : null;
+      blocks.push({ fromIndex: previousIndex, toIndex: item.waypointIndex, targetTime, distance, holdHours, availableHours, requiredSpeed });
+      previousIndex = item.waypointIndex;
+      previousTime = targetTime;
+    }
+
     let cursor = new Date(start);
-    return rawLegs.map((leg) => {
-      const underwayHours = leg.distance / leg.speed;
-      const depart = new Date(cursor), arrive = new Date(depart.getTime() + underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
-      cursor = resume;
-      return { ...leg, underwayHours, depart, arrive, resume, solvedSpeed: null as number | null };
-    });
-  }, [rawLegs, departure]);
-
-  const solveResult = useMemo<SolveResult>(() => {
-    if (!route || resolvedTargetWaypointIndex === null || resolvedTargetWaypointIndex <= 0 || !targetArrival) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
-    const target = new Date(targetArrival);
-    if (!Number.isFinite(target.getTime())) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
-
-    const candidateIndexes = rawLegs.map((leg, index) => ({ index, hold: leg.holdHours })).filter((x) => x.index < resolvedTargetWaypointIndex && x.hold > 0);
-    if (!candidateIndexes.length) return { holdLegIndex: -1, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
-
-    const holdLegIndex = candidateIndexes[candidateIndexes.length - 1].index;
-    const resumeTime = baseTimeline[holdLegIndex]?.resume;
-    if (!resumeTime) return { holdLegIndex, resumeTime: new Date(0), remainingDistance: 0, availableHours: 0, requiredSpeed: null, status: "none" };
-
-    const remainingDistance = rawLegs.slice(holdLegIndex + 1, resolvedTargetWaypointIndex).reduce((sum, leg) => sum + leg.distance, 0);
-    const downstreamHoldHours = rawLegs.slice(holdLegIndex + 1, resolvedTargetWaypointIndex).reduce((sum, leg) => sum + leg.holdHours, 0);
-    const availableHours = (target.getTime() - resumeTime.getTime()) / 3600000 - downstreamHoldHours;
-    if (remainingDistance <= 0 || availableHours <= 0) return { holdLegIndex, resumeTime, remainingDistance, availableHours, requiredSpeed: null, status: "impossible" };
-    return { holdLegIndex, resumeTime, remainingDistance, availableHours, requiredSpeed: remainingDistance / availableHours, status: "ready" };
-  }, [route, resolvedTargetWaypointIndex, targetArrival, rawLegs, baseTimeline]);
-
-  const timeline = useMemo(() => {
-    const start = departure ? new Date(departure) : null;
-    if (!start || !Number.isFinite(start.getTime())) return [];
-    let cursor = new Date(start);
-    return rawLegs.map((leg) => {
-      const useSolved = solveResult.status === "ready" && solveResult.requiredSpeed !== null && leg.index > solveResult.holdLegIndex && resolvedTargetWaypointIndex !== null && leg.index < resolvedTargetWaypointIndex;
-      const effectiveSpeed = useSolved ? solveResult.requiredSpeed! : leg.speed;
+    const timeline = rawLegs.map((leg) => {
+      const block = blocks.find((b) => leg.index >= b.fromIndex && leg.index < b.toIndex);
+      const effectiveSpeed = block?.requiredSpeed ?? leg.speed;
       const underwayHours = leg.distance / effectiveSpeed;
-      const depart = new Date(cursor), arrive = new Date(depart.getTime() + underwayHours * 3600000), resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
+      const depart = new Date(cursor);
+      const arrive = new Date(depart.getTime() + underwayHours * 3600000);
+      const resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
       cursor = resume;
-      return { ...leg, speed: effectiveSpeed, underwayHours, depart, arrive, resume, solvedSpeed: useSolved ? effectiveSpeed : null };
+      return { ...leg, speed: effectiveSpeed, underwayHours, depart, arrive, resume, solvedSpeed: block?.requiredSpeed ?? null };
     });
-  }, [rawLegs, departure, solveResult, resolvedTargetWaypointIndex]);
+    const impossible = blocks.find((b) => b.requiredSpeed === null);
+    return { timeline, blocks, error: impossible ? "A timed waypoint cannot be reached in the available time." : "" };
+  }, [route, departure, rawLegs, timedTargets]);
 
+  const timeline = timingPlan.timeline;
   const totalDistance = rawLegs.reduce((sum, leg) => sum + leg.distance, 0);
   const totalUnderway = timeline.reduce((sum, leg) => sum + leg.underwayHours, 0);
   const totalHold = rawLegs.reduce((sum, leg) => sum + leg.holdHours, 0);
@@ -210,7 +221,7 @@ export default function VoyagePlannerPage() {
   const target = targetArrival ? new Date(targetArrival) : null;
   const targetDeltaHours = targetWaypointArrival && target && Number.isFinite(target.getTime()) ? (targetWaypointArrival.getTime() - target.getTime()) / 3600000 : null;
   const limit = safeSpeed(planningLimit, 14);
-  const exceedsLimit = solveResult.requiredSpeed !== null && solveResult.requiredSpeed > limit;
+  const exceedsLimit = timingPlan.blocks.some((block) => block.requiredSpeed !== null && block.requiredSpeed > limit);
 
   async function loadRoute(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -221,6 +232,7 @@ export default function VoyagePlannerPage() {
       setRoute(parsed);
       setPlans(parsed.waypoints.slice(1).map(() => ({ speed, holdHours: 0 })));
       setTargetWaypointIndex(parsed.waypoints.length - 1);
+      setAdditionalTargets([]);
       setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not load route."); }
   }
@@ -231,7 +243,18 @@ export default function VoyagePlannerPage() {
     setPlans((current) => current.map((plan) => ({ ...plan, speed })));
   }
   function updatePlan(index: number, patch: Partial<LegPlan>) { setPlans((current) => current.map((plan, i) => i === index ? { ...plan, ...patch } : plan)); }
-  function clearPlanner() { setRoute(null); setPlans([]); setTargetArrival(""); setTargetWaypointIndex(null); setError(""); }
+  function clearPlanner() { setRoute(null); setPlans([]); setTargetArrival(""); setTargetWaypointIndex(null); setAdditionalTargets([]); setError(""); }
+  function addTimedWaypoint() {
+    if (!route) return;
+    const used = new Set([resolvedTargetWaypointIndex, ...additionalTargets.map((item) => item.waypointIndex)]);
+    const waypointIndex = route.waypoints.findIndex((_wp, index) => index > 0 && !used.has(index));
+    if (waypointIndex < 1) return;
+    setAdditionalTargets((current) => [...current, { id: `timed-${Date.now()}`, waypointIndex, arrival: "" }]);
+  }
+  function updateTimedWaypoint(id: string, patch: Partial<TimedTarget>) {
+    setAdditionalTargets((current) => current.map((item) => item.id === id ? { ...item, ...patch } : item));
+  }
+  function removeTimedWaypoint(id: string) { setAdditionalTargets((current) => current.filter((item) => item.id !== id)); }
 
   const panel = day ? "border-slate-300 bg-white" : "border-white/15 bg-[#071019]";
   const inset = day ? "border-slate-200 bg-[#f5f7f9]" : "border-white/10 bg-[#04080c]";
@@ -268,17 +291,19 @@ export default function VoyagePlannerPage() {
               <button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply Default Speed To All Legs</button>
             </div>
 
-            {solveResult.status === "ready" && solveResult.requiredSpeed !== null && (
-              <div className={`mt-4 border-2 p-4 ${exceedsLimit ? "border-red-500 bg-red-500/10" : "border-emerald-500 bg-emerald-500/10"}`}>
-                <div className={`text-[10px] font-black uppercase tracking-[.14em] ${exceedsLimit ? "text-red-400" : "text-emerald-500"}`}>Smart Arrival Solver</div>
-                <div className="mt-2 text-3xl font-black font-mono">{solveResult.requiredSpeed.toFixed(1)} KT</div>
-                <div className={`mt-1 text-[10px] font-black uppercase ${muted}`}>Required average speed after the last hold to reach {targetWaypoint?.name || "target waypoint"} on time</div>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs"><Metric label="Resume" value={dateTimeText(solveResult.resumeTime)} inset={inset} muted={muted} /><Metric label="Distance Left" value={`${solveResult.remainingDistance.toFixed(1)} nm`} inset={inset} muted={muted} /><Metric label="Time Available" value={durationText(solveResult.availableHours)} inset={inset} muted={muted} /><Metric label="Target" value={dateTimeText(target)} inset={inset} muted={muted} /></div>
-                {exceedsLimit && <div className="mt-3 border border-red-500/60 p-2 text-xs font-black uppercase text-red-400">Required speed exceeds your {limit.toFixed(1)} kt planning limit</div>}
+            <div className="mt-3 border-t border-current/10 pt-3">
+              <div className="flex items-center justify-between gap-2"><div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Additional Timed Waypoints</div><button type="button" onClick={addTimedWaypoint} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">+ Add Timed WP</button></div>
+              <div className="mt-2 grid gap-2">{additionalTargets.map((item) => <div key={item.id} className={`grid gap-2 border p-2 sm:grid-cols-[1fr_1fr_auto] ${inset}`}><select value={item.waypointIndex} onChange={(e) => updateTimedWaypoint(item.id, { waypointIndex: Number(e.target.value) })} className={`border px-2 py-2 font-mono text-sm ${control}`}>{route?.waypoints.map((wp, index) => index > 0 ? <option key={`${wp.id}-timed`} value={index}>{index + 1} · {wp.name}</option> : null)}</select><input aria-label="Timed waypoint arrival" type="datetime-local" value={item.arrival} onChange={(e) => updateTimedWaypoint(item.id, { arrival: e.target.value })} className={`border px-2 py-2 font-mono text-sm ${control}`} /><button type="button" onClick={() => removeTimedWaypoint(item.id)} className="border border-red-400/50 px-3 py-2 text-[10px] font-black uppercase text-red-400">Remove</button></div>)}</div>
+            </div>
+
+            {timingPlan.blocks.length > 0 && (
+              <div className={`mt-4 border-2 p-4 ${timingPlan.error || exceedsLimit ? "border-red-500 bg-red-500/10" : "border-emerald-500 bg-emerald-500/10"}`}>
+                <div className={`text-[10px] font-black uppercase tracking-[.14em] ${timingPlan.error || exceedsLimit ? "text-red-400" : "text-emerald-500"}`}>Timed Waypoint Speed Plan</div>
+                <div className="mt-3 grid gap-2">{timingPlan.blocks.map((block, index) => <div key={index} className={`border p-3 ${inset}`}><div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-xs font-black uppercase">WP {block.fromIndex + 1} → WP {block.toIndex + 1}</div><div className={`font-mono text-xl font-black ${block.requiredSpeed !== null && block.requiredSpeed > limit ? "text-red-400" : "text-emerald-500"}`}>{block.requiredSpeed === null ? "IMPOSSIBLE" : `${block.requiredSpeed.toFixed(1)} KT`}</div></div><div className={`mt-1 text-[10px] font-bold uppercase ${muted}`}>{block.distance.toFixed(1)} nm · target {dateTimeText(block.targetTime)}{block.holdHours > 0 ? ` · includes ${durationText(block.holdHours)} holding` : ""}</div></div>)}</div>
+                {timingPlan.error && <div className="mt-3 text-xs font-black uppercase text-red-400">{timingPlan.error}</div>}
+                {exceedsLimit && <div className="mt-3 border border-red-500/60 p-2 text-xs font-black uppercase text-red-400">One or more required speeds exceed your {limit.toFixed(1)} kt planning limit</div>}
               </div>
             )}
-
-            {solveResult.status === "impossible" && <div className="mt-4 border-2 border-red-500 bg-red-500/10 p-4 text-sm font-black uppercase text-red-400">Target ETA cannot be made after this hold. There is not enough remaining time.</div>}
 
             <div className="mt-4 grid grid-cols-2 gap-2"><Metric label="Distance" value={route ? `${totalDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="Underway" value={route ? durationText(totalUnderway) : "--"} inset={inset} muted={muted} /><Metric label="Holding" value={route ? durationText(totalHold) : "--"} inset={inset} muted={muted} /><Metric label="Final Arrival" value={dateTimeText(finalArrival)} inset={inset} muted={muted} /><Metric label="Target WP" value={targetWaypoint ? `${resolvedTargetWaypointIndex! + 1} · ${targetWaypoint.name}` : "--"} inset={inset} muted={muted} /><Metric label="Target WP ETA" value={dateTimeText(targetWaypointArrival)} inset={inset} muted={muted} /></div>
             {targetDeltaHours !== null && <div className={`mt-2 border p-3 ${inset}`}><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Target Waypoint Arrival Difference</div><div className={`mt-1 font-mono text-lg font-black ${Math.abs(targetDeltaHours) < 0.05 ? "text-emerald-500" : targetDeltaHours > 0 ? "text-red-400" : "text-cyan-400"}`}>{Math.abs(targetDeltaHours) < 0.05 ? "ON TIME" : `${durationText(Math.abs(targetDeltaHours))} ${targetDeltaHours > 0 ? "LATE" : "EARLY"}`}</div></div>}
@@ -287,7 +312,7 @@ export default function VoyagePlannerPage() {
 
         <section className={`mt-2 border ${panel}`}>
           <div className="flex items-center justify-between border-b border-current/10 px-3 py-2"><div className={`text-[10px] font-black uppercase tracking-[.16em] ${muted}`}>Leg Speed & Holding Plan</div><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Hold is applied after arrival at the waypoint</div></div>
-          {!route ? <div className={`p-8 text-center text-sm ${muted}`}>Load an RTZ route to start planning.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1120px] border-collapse text-left"><thead><tr className={`text-[9px] font-black uppercase tracking-[.1em] ${muted}`}><th className="border-b border-current/10 px-3 py-2">Leg</th><th className="border-b border-current/10 px-3 py-2">From → To</th><th className="border-b border-current/10 px-3 py-2">Dist</th><th className="border-b border-current/10 px-3 py-2">Course</th><th className="border-b border-current/10 px-3 py-2">Speed</th><th className="border-b border-current/10 px-3 py-2">Run Time</th><th className="border-b border-current/10 px-3 py-2">Arrive</th><th className="border-b border-current/10 px-3 py-2">Hold</th><th className="border-b border-current/10 px-3 py-2">Resume</th></tr></thead><tbody>{timeline.map((row) => { const isTarget = resolvedTargetWaypointIndex === row.index + 1; const isSolved = row.solvedSpeed !== null; return <tr key={`${row.from.id}-${row.to.id}`} className={`border-b border-current/10 last:border-b-0 ${isTarget ? (day ? "bg-amber-50" : "bg-[#c9a227]/10") : isSolved ? (day ? "bg-emerald-50" : "bg-emerald-500/10") : ""}`}><td className="px-3 py-2 font-mono text-xs font-black">{row.index + 1}</td><td className="px-3 py-2"><div className="text-sm font-black">{row.from.name} → {row.to.name}{isTarget && <span className="ml-2 text-[9px] font-black uppercase text-[#c9a227]">Target</span>}{isSolved && <span className="ml-2 text-[9px] font-black uppercase text-emerald-500">Auto speed</span>}</div><div className={`mt-0.5 font-mono text-[10px] ${muted}`}>{row.from.id} → {row.to.id}</div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.distance.toFixed(1)} nm</td><td className="px-3 py-2 font-mono text-sm font-black">{row.bearing.toFixed(0)}°T</td><td className="px-3 py-2">{isSolved ? <div className="w-24 border border-emerald-500/60 px-2 py-2 font-mono text-base font-black text-emerald-500">{row.speed.toFixed(1)}</div> : <input aria-label={`Speed for leg ${row.index + 1}`} type="number" min="0.1" step="0.1" value={plans[row.index]?.speed ?? row.speed} onChange={(e) => updatePlan(row.index, { speed: safeSpeed(e.target.value, row.speed) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} />}</td><td className="px-3 py-2 font-mono text-sm font-black">{durationText(row.underwayHours)}</td><td className={`px-3 py-2 font-mono text-sm font-black ${isTarget ? "text-[#c9a227]" : ""}`}>{dateTimeText(row.arrive)}</td><td className="px-3 py-2"><div className="flex items-center gap-1"><input aria-label={`Hold after ${row.to.name}`} type="number" min="0" step="0.25" value={plans[row.index]?.holdHours ?? 0} onChange={(e) => updatePlan(row.index, { holdHours: decimalHours(e.target.value) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /><span className={`text-xs ${muted}`}>hr</span></div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.holdHours > 0 ? dateTimeText(row.resume) : "—"}</td></tr>; })}</tbody></table></div>}
+          {!route ? <div className={`p-8 text-center text-sm ${muted}`}>Load an RTZ route to start planning.</div> : <div className="overflow-x-auto"><table className="w-full min-w-[1120px] border-collapse text-left"><thead><tr className={`text-[9px] font-black uppercase tracking-[.1em] ${muted}`}><th className="border-b border-current/10 px-3 py-2">Leg</th><th className="border-b border-current/10 px-3 py-2">From → To</th><th className="border-b border-current/10 px-3 py-2">Dist</th><th className="border-b border-current/10 px-3 py-2">Course</th><th className="border-b border-current/10 px-3 py-2">Speed</th><th className="border-b border-current/10 px-3 py-2">Run Time</th><th className="border-b border-current/10 px-3 py-2">Arrive</th><th className="border-b border-current/10 px-3 py-2">Hold</th><th className="border-b border-current/10 px-3 py-2">Resume</th></tr></thead><tbody>{timeline.map((row) => { const isTarget = timedTargets.some((item) => item.waypointIndex === row.index + 1); const isSolved = row.solvedSpeed !== null; return <tr key={`${row.from.id}-${row.to.id}`} className={`border-b border-current/10 last:border-b-0 ${isTarget ? (day ? "bg-amber-50" : "bg-[#c9a227]/10") : isSolved ? (day ? "bg-emerald-50" : "bg-emerald-500/10") : ""}`}><td className="px-3 py-2 font-mono text-xs font-black">{row.index + 1}</td><td className="px-3 py-2"><div className="text-sm font-black">{row.from.name} → {row.to.name}{isTarget && <span className="ml-2 text-[9px] font-black uppercase text-[#c9a227]">Target</span>}{isSolved && <span className="ml-2 text-[9px] font-black uppercase text-emerald-500">Auto speed</span>}</div><div className={`mt-0.5 font-mono text-[10px] ${muted}`}>{row.from.id} → {row.to.id}</div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.distance.toFixed(1)} nm</td><td className="px-3 py-2 font-mono text-sm font-black">{row.bearing.toFixed(0)}°T</td><td className="px-3 py-2">{isSolved ? <div className="w-24 border border-emerald-500/60 px-2 py-2 font-mono text-base font-black text-emerald-500">{row.speed.toFixed(1)}</div> : <input aria-label={`Speed for leg ${row.index + 1}`} type="number" min="0.1" step="0.1" value={plans[row.index]?.speed ?? row.speed} onChange={(e) => updatePlan(row.index, { speed: safeSpeed(e.target.value, row.speed) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} />}</td><td className="px-3 py-2 font-mono text-sm font-black">{durationText(row.underwayHours)}</td><td className={`px-3 py-2 font-mono text-sm font-black ${isTarget ? "text-[#c9a227]" : ""}`}>{dateTimeText(row.arrive)}</td><td className="px-3 py-2"><div className="flex items-center gap-1"><input aria-label={`Hold after ${row.to.name}`} type="number" min="0" step="0.25" value={plans[row.index]?.holdHours ?? 0} onChange={(e) => updatePlan(row.index, { holdHours: decimalHours(e.target.value) })} className={`w-24 border px-2 py-2 font-mono text-base font-black ${control}`} /><span className={`text-xs ${muted}`}>hr</span></div></td><td className="px-3 py-2 font-mono text-sm font-black">{row.holdHours > 0 ? dateTimeText(row.resume) : "—"}</td></tr>; })}</tbody></table></div>}
         </section>
       </div>
     </main>
