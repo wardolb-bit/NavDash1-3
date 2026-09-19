@@ -25,6 +25,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const chartLayerRef = useRef<any>(null);
+  const baseLayerRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
   const fittedRef = useRef(false);
@@ -90,12 +91,23 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         try { map.removeLayer(chartLayerRef.current); } catch {}
         chartLayerRef.current = null;
       }
+      if (baseLayerRef.current) {
+        try { map.removeLayer(baseLayerRef.current); } catch {}
+        baseLayerRef.current = null;
+      }
+
+      const baseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors",
+      });
+      baseLayer.addTo(map);
+      baseLayerRef.current = baseLayer;
 
       const chartLayer = nightMode
         ? L.tileLayer.wms("/api/noaa-charts/wms", {
             layers: "1,2,3,4,5,6,7",
             format: "image/png",
-            transparent: false,
+            transparent: true,
             version: "1.1.1",
             display_params: s52NightDisplayParams(),
             maxZoom: 15,
@@ -107,7 +119,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         : L.tileLayer.wms("/api/noaa-charts/wms", {
             layers: "1,2,3,4,5,6,7,12",
             format: "image/png",
-            transparent: false,
+            transparent: true,
             version: "1.3.0",
             maxZoom: 15,
             keepBuffer: 6,
@@ -214,6 +226,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       mapRef.current?.remove();
       mapRef.current = null;
       chartLayerRef.current = null;
+      baseLayerRef.current = null;
     };
   }, []);
 
