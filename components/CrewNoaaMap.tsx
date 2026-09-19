@@ -25,6 +25,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const chartLayerRef = useRef<any>(null);
+  const seamarkLayerRef = useRef<any>(null);
   const jcgLayerRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
@@ -107,6 +108,11 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         (center.lat >= -20 && center.lat <= 30 && (center.lng >= 130 || center.lng <= -130))
       );
 
+      if (seamarkLayerRef.current) {
+        try { map.removeLayer(seamarkLayerRef.current); } catch {}
+        seamarkLayerRef.current = null;
+      }
+
       const chartLayer = inNoaaCoverage && nightMode
         ? L.tileLayer.wms("/api/noaa-charts/wms", {
             layers: "1,2,3,4,5,6,7",
@@ -132,20 +138,26 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
             updateWhenZooming: false,
             attribution: "NOAA Office of Coast Survey ENC Online",
           } as any)
-          : L.layerGroup([
-              L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                maxZoom: 19,
-                attribution: "OpenStreetMap contributors",
-              }),
-              L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
-                maxZoom: 18,
-                opacity: nightMode ? 0.72 : 1,
-                attribution: "OpenSeaMap contributors",
-              }),
-            ]);
+          : L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+              maxZoom: 19,
+              attribution: "OpenStreetMap contributors",
+            });
 
       chartLayer.addTo(map);
       chartLayerRef.current = chartLayer;
+
+      if (!inNoaaCoverage) {
+        const seamarks = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", {
+          minZoom: 6,
+          maxZoom: 18,
+          opacity: 1,
+          pane: "overlayPane",
+          attribution: "OpenSeaMap contributors",
+        });
+        seamarks.addTo(map);
+        seamarks.bringToFront();
+        seamarkLayerRef.current = seamarks;
+      }
 
       const loadJapanOverlays = async () => {
         if (jcgLayerRef.current) {
@@ -200,10 +212,25 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       await loadJapanOverlays();
     }
 
+    let moveTimer = 0;
+    const bindMapEvents = () => {
+      const map = mapRef.current;
+      if (!map) {
+        moveTimer = window.setTimeout(bindMapEvents, 100);
+        return;
+      }
+      const refresh = () => void updateChart();
+      map.on("moveend zoomend", refresh);
+      return () => map.off("moveend zoomend", refresh);
+    };
+    const unbind = bindMapEvents();
+
     void updateChart();
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
+      window.clearTimeout(moveTimer);
+      if (typeof unbind === "function") unbind();
     };
   }, [nightMode]);
 
@@ -294,6 +321,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       mapRef.current?.remove();
       mapRef.current = null;
       chartLayerRef.current = null;
+      seamarkLayerRef.current = null;
       jcgLayerRef.current = null;
     };
   }, []);
