@@ -63,6 +63,15 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         maxZoom: 15,
       }).setView(center, 10);
 
+      const planningBadge = L.control({ position: "bottomleft" });
+      planningBadge.onAdd = () => {
+        const el = L.DomUtil.create("div");
+        el.innerHTML = "PLANNING MAP · NOT FOR NAVIGATION";
+        el.style.cssText = "background:rgba(3,7,10,.86);color:#f1d56b;border:1px solid rgba(241,213,107,.45);padding:5px 8px;border-radius:4px;font:700 10px/1.2 system-ui;letter-spacing:.08em;";
+        return el;
+      };
+      planningBadge.addTo(map);
+
       mapRef.current = map;
       window.setTimeout(() => map.invalidateSize(), 50);
     }
