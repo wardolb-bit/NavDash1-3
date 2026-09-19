@@ -4,6 +4,9 @@ const MSIL_BASE = "https://api.msil.go.jp";
 const TRIAL_KEY = "0e83ad5d93214e04abf37c970c32b641";
 
 const LAYERS: Record<string, string> = {
+  lighthouses: "lights/lighthouse/v2",
+  buoys: "lights/buoy/v2",
+  beacons: "lights/beacon/v2",
   wrecks: "wrecks/v2",
   obstructions: "seabed-obstruction/v2",
   anchorages: "designated-anchor-berths/v2",
@@ -34,7 +37,7 @@ export async function GET(request: NextRequest) {
   });
 
   try {
-    const response = await fetch(`${MSIL_BASE}/${service}/MapServer/0/query?${params.toString()}`, {
+    const response = await fetch(`${MSIL_BASE}/${service}/MapServer/1/query?${params.toString()}`, {
       headers: { "Ocp-Apim-Subscription-Key": key },
       next: { revalidate: 900 },
     });
