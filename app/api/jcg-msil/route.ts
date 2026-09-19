@@ -32,7 +32,6 @@ export async function GET(request: NextRequest) {
     geometry: bbox,
     geometryType: "esriGeometryEnvelope",
     inSR: "4326",
-    outSR: "4326",
     spatialRel: "esriSpatialRelIntersects",
   });
 
@@ -47,6 +46,23 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
+
+    // MSIL v2 GeoJSON is returned in Web Mercator (EPSG:3857).
+    // Leaflet GeoJSON expects longitude/latitude, so normalize point coordinates here.
+    if (data?.type === "FeatureCollection" && Array.isArray(data.features)) {
+      for (const feature of data.features) {
+        const coords = feature?.geometry?.coordinates;
+        if (feature?.geometry?.type === "Point" && Array.isArray(coords) && Math.abs(coords[0]) > 180) {
+          const x = Number(coords[0]);
+          const y = Number(coords[1]);
+          const lon = (x / 20037508.34) * 180;
+          const lat = (Math.atan(Math.exp((y / 20037508.34) * Math.PI)) * 360 / Math.PI) - 90;
+          feature.geometry.coordinates = [lon, lat];
+        }
+      }
+      if (data.crs) data.crs = { type: "name", properties: { name: "EPSG:4326" } };
+    }
+
     return NextResponse.json(data, {
       headers: {
         "Cache-Control": "public, s-maxage=900, stale-while-revalidate=3600",
