@@ -63,6 +63,40 @@ function parseRtz(xmlText: string): PlanningRoute {
   if (waypoints.length < 2) throw new Error("Route needs at least two valid waypoints.");
   return { routeName, waypoints };
 }
+function unwrapRouteForMap(route: PlanningRoute): PlanningRoute {
+  if (route.waypoints.length < 2) return route;
+  const waypoints = route.waypoints.map((wp, index) => {
+    if (index === 0) return { ...wp };
+    const previousLon = index === 1 ? route.waypoints[0].lon : 0;
+    return { ...wp, lon: previousLon };
+  });
+  for (let index = 1; index < waypoints.length; index += 1) {
+    let lon = route.waypoints[index].lon;
+    const previousLon = waypoints[index - 1].lon;
+    while (lon - previousLon > 180) lon -= 360;
+    while (lon - previousLon < -180) lon += 360;
+    waypoints[index].lon = lon;
+  }
+  return { ...route, waypoints };
+}
+
+function normalizeSharedRoute(data: any): PlanningRoute | null {
+  if (!data || data?.hasRoute === false || !Array.isArray(data?.waypoints)) return null;
+  const waypoints = data.waypoints
+    .map((wp: any, index: number) => ({
+      id: typeof wp?.id === "string" && wp.id.trim() ? wp.id : `WP${String(index + 1).padStart(2, "0")}`,
+      name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `Waypoint ${index + 1}`,
+      lat: Number(wp?.lat ?? wp?.latitude),
+      lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+    }))
+    .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  if (waypoints.length < 2) return null;
+  return {
+    routeName: typeof data?.routeName === "string" && data.routeName.trim() ? data.routeName.trim() : "Loaded RTZ Route",
+    waypoints,
+  };
+}
+
 function decimalHours(value: string) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : 0; }
 function safeSpeed(value: string, fallback = 10) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
 function durationText(hours: number) {
@@ -92,6 +126,23 @@ export default function VoyagePlannerPage() {
     const now = new Date();
     now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
     setDeparture(localInputValue(now));
+
+    let cancelled = false;
+    async function loadSharedRoute() {
+      try {
+        const response = await fetch("/api/route-state", { cache: "no-store" });
+        if (!response.ok || cancelled) return;
+        const parsed = normalizeSharedRoute(await response.json());
+        if (!parsed || cancelled) return;
+        const speed = safeSpeed(defaultSpeed);
+        setRoute(parsed);
+        setPlans(parsed.waypoints.slice(1).map(() => ({ speed, holdHours: 0 })));
+        setTargetWaypointIndex(parsed.waypoints.length - 1);
+        setError("");
+      } catch {}
+    }
+    void loadSharedRoute();
+    return () => { cancelled = true; };
   }, []);
 
   const resolvedTargetWaypointIndex = route ? (targetWaypointIndex ?? route.waypoints.length - 1) : null;
@@ -186,14 +237,15 @@ export default function VoyagePlannerPage() {
   const inset = day ? "border-slate-200 bg-[#f5f7f9]" : "border-white/10 bg-[#04080c]";
   const control = day ? "border-slate-300 bg-white text-slate-900" : "border-white/15 bg-[#0b141d] text-slate-100";
   const muted = day ? "text-slate-500" : "text-slate-400";
-  const mapRoute = route ? { routeName: route.routeName, waypoints: route.waypoints, activeWaypointIndex: Math.max(1, resolvedTargetWaypointIndex ?? 1) } : null;
+  const mapDisplayRoute = route ? unwrapRouteForMap(route) : null;
+  const mapRoute = mapDisplayRoute ? { routeName: mapDisplayRoute.routeName, waypoints: mapDisplayRoute.waypoints, activeWaypointIndex: Math.max(1, resolvedTargetWaypointIndex ?? 1) } : null;
 
   return (
     <main className={day ? "min-h-screen bg-[#eef2f5] text-slate-900" : "min-h-screen bg-[#04080c] text-slate-100"}>
       <div className="mx-auto max-w-[1900px] p-2 sm:p-3">
         <header className={`border p-3 ${panel}`}>
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div><h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Voyage Timing Planner</h1><div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>Planning route only · not shared · not cached</div></div>
+            <div><div className="text-[10px] font-black uppercase tracking-[.18em] text-[#c9a227]">M/V MB480 · NAVDASH 1.3</div><h1 className="mt-1 text-xl font-black uppercase tracking-[.08em] sm:text-2xl">Voyage Timing Planner</h1><div className={`mt-1 text-[10px] font-bold uppercase tracking-[.12em] ${muted}`}>Active shared route · RTZ override available</div></div>
             <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { window.location.href = "/bridge"; }} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>Main</button><label className="cursor-pointer border border-[#c9a227]/70 bg-[#c9a227] px-3 py-2 text-[10px] font-black uppercase text-black">Load RTZ<input type="file" accept=".rtz,.xml" onChange={loadRoute} className="hidden" /></label><button type="button" onClick={clearPlanner} disabled={!route} className={`border px-3 py-2 text-[10px] font-black uppercase ${route ? "border-red-400/50 text-red-400" : "border-slate-500/20 text-slate-500"}`}>Clear</button><button type="button" onClick={toggleTheme} className={`border px-3 py-2 text-[10px] font-black uppercase ${control}`}>{nightMode ? "Day" : "Night"}</button></div>
           </div>
         </header>
