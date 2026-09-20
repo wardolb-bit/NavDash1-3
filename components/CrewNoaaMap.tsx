@@ -103,20 +103,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       baseLayer.addTo(map);
       baseLayerRef.current = baseLayer;
 
-      const chartLayer = nightMode
-        ? L.tileLayer.wms("/api/noaa-charts/wms", {
-            layers: "1,2,3,4,5,6,7",
-            format: "image/png",
-            transparent: true,
-            version: "1.1.1",
-            display_params: s52NightDisplayParams(),
-            maxZoom: 15,
-            keepBuffer: 6,
-            updateWhenIdle: false,
-            updateWhenZooming: false,
-            attribution: "NOAA Office of Coast Survey ENC Online",
-          } as any)
-        : L.tileLayer.wms("/api/noaa-charts/wms", {
+      const chartLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
             layers: "1,2,3,4,5,6,7,12",
             format: "image/png",
             transparent: true,
