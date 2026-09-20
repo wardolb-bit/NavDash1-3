@@ -29,8 +29,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
   const fittedRef = useRef(false);
-  const nightModeRef = useRef(nightMode);
-  nightModeRef.current = nightMode;
+
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +73,15 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    window.requestAnimationFrame(() => {
+      map.invalidateSize({ pan: false });
+      window.setTimeout(() => map.invalidateSize({ pan: false }), 150);
+    });
+  }, [nightMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -169,7 +177,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
             radius: isActive ? 6 : 4,
             weight: 2,
             color: isActive ? "#38bdf8" : "#c9a227",
-            fillColor: nightModeRef.current ? "#08111a" : "#ffffff",
+            fillColor: "#ffffff",
             fillOpacity: 1,
           });
           marker.bindTooltip(`${index + 1} · ${wp.name}`, { direction: "top", opacity: 0.95 });
