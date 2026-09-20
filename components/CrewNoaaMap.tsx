@@ -160,14 +160,23 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         shipLayerRef.current = null;
       }
 
-      const routePoints = route?.waypoints?.map((wp) => [wp.lat, wp.lon] as [number, number]) || [];
+      const routePoints = route?.waypoints?.reduce((points, wp, index) => {
+        let lon = wp.lon;
+        if (index > 0) {
+          const previousLon = points[index - 1][1];
+          while (lon - previousLon > 180) lon -= 360;
+          while (lon - previousLon < -180) lon += 360;
+        }
+        points.push([wp.lat, lon] as [number, number]);
+        return points;
+      }, [] as [number, number][]) || [];
       const routeGroup = L.layerGroup();
 
       if (route && routePoints.length > 1) {
         L.polyline(routePoints, { color: "#c9a227", weight: 3, opacity: 0.95 }).addTo(routeGroup);
         route.waypoints.forEach((wp, index) => {
           const isActive = index === route.activeWaypointIndex;
-          const marker = L.circleMarker([wp.lat, wp.lon], {
+          const marker = L.circleMarker(routePoints[index], {
             radius: isActive ? 6 : 4,
             weight: 2,
             color: isActive ? "#38bdf8" : "#c9a227",
