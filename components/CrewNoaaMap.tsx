@@ -75,27 +75,6 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const center = map.getCenter();
-    const zoom = map.getZoom();
-    window.requestAnimationFrame(() => {
-      map.invalidateSize({ pan: false });
-      map.setView(center, zoom, { animate: false });
-      map.eachLayer((layer: any) => {
-        if (typeof layer?.redraw === "function") layer.redraw();
-      });
-      window.setTimeout(() => {
-        map.invalidateSize({ pan: false });
-        map.setView(center, zoom, { animate: false });
-        map.eachLayer((layer: any) => {
-          if (typeof layer?.redraw === "function") layer.redraw();
-        });
-      }, 200);
-    });
-  }, [nightMode]);
-
-  useEffect(() => {
     let cancelled = false;
     let timer = 0;
 
@@ -253,6 +232,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       ref={containerRef}
       className={`h-full min-h-[430px] w-full ${nightMode ? "bg-[#03070a]" : "bg-[#d9e4ea]"} lg:min-h-[720px]`}
       aria-label="NOAA ENC crew chart"
+      suppressHydrationWarning
     />
   );
 }
