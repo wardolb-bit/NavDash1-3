@@ -77,9 +77,21 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    const center = map.getCenter();
+    const zoom = map.getZoom();
     window.requestAnimationFrame(() => {
       map.invalidateSize({ pan: false });
-      window.setTimeout(() => map.invalidateSize({ pan: false }), 150);
+      map.setView(center, zoom, { animate: false });
+      map.eachLayer((layer: any) => {
+        if (typeof layer?.redraw === "function") layer.redraw();
+      });
+      window.setTimeout(() => {
+        map.invalidateSize({ pan: false });
+        map.setView(center, zoom, { animate: false });
+        map.eachLayer((layer: any) => {
+          if (typeof layer?.redraw === "function") layer.redraw();
+        });
+      }, 200);
     });
   }, [nightMode]);
 
