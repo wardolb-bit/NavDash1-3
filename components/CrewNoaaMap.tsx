@@ -21,7 +21,7 @@ function s52NightDisplayParams() {
   });
 }
 
-export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | null; ship: OwnShip; nightMode: boolean }) {
+export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: RouteState | null; ship: OwnShip; nightMode: boolean }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
   const chartLayerRef = useRef<any>(null);
@@ -230,7 +230,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   return (
     <div
       ref={containerRef}
-      className={`h-full min-h-[430px] w-full ${nightMode ? "bg-[#03070a]" : "bg-[#d9e4ea]"} lg:min-h-[720px]`}
+      className="h-full min-h-[430px] w-full bg-[#d9e4ea] lg:min-h-[720px]"
       aria-label="NOAA ENC crew chart"
       suppressHydrationWarning
     />
