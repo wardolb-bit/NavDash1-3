@@ -27,6 +27,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
   const chartLayerRef = useRef<any>(null);
   const seamarkLayerRef = useRef<any>(null);
   const jcgLayerRef = useRef<any>(null);
+  const sourceLabelRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
   const fittedRef = useRef(false);
@@ -103,50 +104,81 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       }
 
       const center = map.getCenter();
+      const lat = center.lat;
+      const lon = ((center.lng + 540) % 360) - 180;
       const inNoaaCoverage = (
-        (center.lat >= 15 && center.lat <= 75 && center.lng >= -180 && center.lng <= -50) ||
-        (center.lat >= -20 && center.lat <= 30 && (center.lng >= 130 || center.lng <= -130))
+        (lat >= 15 && lat <= 75 && lon >= -180 && lon <= -50) ||
+        (lat >= -20 && lat <= 30 && (lon >= 130 || lon <= -130))
       );
+      const inAhoCoverage = lat >= -50 && lat <= 0 && lon >= 90 && lon <= 180;
+      const inLinzCoverage = lat >= -55 && lat <= -25 && lon >= 160 && lon <= 180;
 
       if (seamarkLayerRef.current) {
         try { map.removeLayer(seamarkLayerRef.current); } catch {}
         seamarkLayerRef.current = null;
       }
+      if (sourceLabelRef.current) {
+        try { map.removeControl(sourceLabelRef.current); } catch {}
+        sourceLabelRef.current = null;
+      }
 
-      const chartLayer = inNoaaCoverage && nightMode
-        ? L.tileLayer.wms("/api/noaa-charts/wms", {
-            layers: "1,2,3,4,5,6,7",
-            format: "image/png",
-            transparent: false,
-            version: "1.1.1",
-            display_params: s52NightDisplayParams(),
-            maxZoom: 15,
-            keepBuffer: 6,
-            updateWhenIdle: false,
-            updateWhenZooming: false,
-            attribution: "NOAA Office of Coast Survey ENC Online",
-          } as any)
-        : inNoaaCoverage
+      let sourceName = "OpenStreetMap + OpenSeaMap";
+      let chartLayer: any;
+
+      if (inNoaaCoverage) {
+        sourceName = "NOAA ENC Online";
+        chartLayer = nightMode
           ? L.tileLayer.wms("/api/noaa-charts/wms", {
-            layers: "1,2,3,4,5,6,7,12",
-            format: "image/png",
-            transparent: false,
-            version: "1.3.0",
-            maxZoom: 15,
-            keepBuffer: 6,
-            updateWhenIdle: false,
-            updateWhenZooming: false,
-            attribution: "NOAA Office of Coast Survey ENC Online",
-          } as any)
-          : L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-              maxZoom: 19,
-              attribution: "OpenStreetMap contributors",
-            });
+              layers: "1,2,3,4,5,6,7",
+              format: "image/png",
+              transparent: false,
+              version: "1.1.1",
+              display_params: s52NightDisplayParams(),
+              maxZoom: 15,
+              keepBuffer: 6,
+              updateWhenIdle: false,
+              updateWhenZooming: false,
+              attribution: "NOAA Office of Coast Survey ENC Online",
+            } as any)
+          : L.tileLayer.wms("/api/noaa-charts/wms", {
+              layers: "1,2,3,4,5,6,7,12",
+              format: "image/png",
+              transparent: false,
+              version: "1.3.0",
+              maxZoom: 15,
+              keepBuffer: 6,
+              updateWhenIdle: false,
+              updateWhenZooming: false,
+              attribution: "NOAA Office of Coast Survey ENC Online",
+            } as any);
+      } else if (inLinzCoverage) {
+        sourceName = "LINZ hydrographic charts";
+        chartLayer = L.tileLayer("/api/planning-map/linz/{z}/{x}/{y}", {
+          maxZoom: 18,
+          attribution: "Toitū Te Whenua LINZ · CC BY 4.0",
+          errorTileUrl: "/api/planning-map/seamark/{z}/{x}/{y}",
+        } as any);
+      } else if (inAhoCoverage) {
+        sourceName = "Australian Hydrographic Office ENC";
+        chartLayer = L.tileLayer.wms("https://services.hydro.gov.au/site1/rest/services/MCS/AHOENCOnline/MapServer/exts/MaritimeChartService/WMSServer", {
+          layers: "0,1,2,3,4,5,6,7",
+          format: "image/png",
+          transparent: false,
+          version: "1.3.0",
+          maxZoom: 15,
+          attribution: "Australian Hydrographic Office · NOT FOR NAVIGATION",
+        } as any);
+      } else {
+        chartLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          attribution: "OpenStreetMap contributors",
+        });
+      }
 
       chartLayer.addTo(map);
       chartLayerRef.current = chartLayer;
 
-      if (!inNoaaCoverage) {
+      if (!inNoaaCoverage && !inAhoCoverage && !inLinzCoverage) {
         const seamarks = L.tileLayer("/api/planning-map/seamark/{z}/{x}/{y}", {
           minZoom: 4,
           maxZoom: 18,
@@ -158,6 +190,16 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
         seamarks.bringToFront();
         seamarkLayerRef.current = seamarks;
       }
+
+      const sourceLabel = new L.Control({ position: "topright" });
+      sourceLabel.onAdd = () => {
+        const el = L.DomUtil.create("div");
+        el.textContent = sourceName;
+        el.style.cssText = "background:rgba(3,7,10,.82);color:#dbeafe;border:1px solid rgba(148,163,184,.35);padding:4px 7px;border-radius:4px;font:600 10px/1.2 system-ui;";
+        return el;
+      };
+      sourceLabel.addTo(map);
+      sourceLabelRef.current = sourceLabel;
 
       const loadJapanOverlays = async () => {
         if (jcgLayerRef.current) {
@@ -326,6 +368,7 @@ export function CrewNoaaMap({ route, ship, nightMode }: { route: RouteState | nu
       chartLayerRef.current = null;
       seamarkLayerRef.current = null;
       jcgLayerRef.current = null;
+      sourceLabelRef.current = null;
     };
   }, []);
 
