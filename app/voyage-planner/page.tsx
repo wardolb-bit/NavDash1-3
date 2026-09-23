@@ -136,6 +136,10 @@ function localInputValue(date: Date) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+function waypointLocalInputValue(date: Date, wp: Pick<Waypoint, "lat" | "lon"> | null | undefined) {
+  const tz = waypointTimeZone(wp);
+  return localInputValue(new Date(date.getTime() + tz.offset * 3600000));
+}
 
 export default function VoyagePlannerPage() {
   const { nightMode, toggleTheme } = useBridgeTheme();
@@ -151,10 +155,6 @@ export default function VoyagePlannerPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const now = new Date();
-    now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
-    setDeparture(localInputValue(now));
-
     let cancelled = false;
     async function loadSharedRoute() {
       try {
@@ -164,6 +164,12 @@ export default function VoyagePlannerPage() {
         if (!parsed || cancelled) return;
         const speed = safeSpeed(defaultSpeed);
         setRoute(parsed);
+        setDeparture((current) => {
+          if (current) return current;
+          const now = new Date();
+          now.setMinutes(Math.ceil(now.getMinutes() / 15) * 15, 0, 0);
+          return waypointLocalInputValue(now, parsed.waypoints[0]);
+        });
         setPlans(parsed.waypoints.slice(1).map(() => ({ speed, holdHours: 0 })));
         setTargetWaypointIndex(parsed.waypoints.length - 1);
         setAdditionalTargets([]);
@@ -214,7 +220,9 @@ export default function VoyagePlannerPage() {
       if (!targetTime || !Number.isFinite(targetTime.getTime()) || item.waypointIndex <= previousIndex) continue;
       const legs = rawLegs.slice(previousIndex, item.waypointIndex);
       const distance = legs.reduce((sum, leg) => sum + leg.distance, 0);
-      const holdHours = legs.reduce((sum, leg) => sum + leg.holdHours, 0);
+      const holdHours = rawLegs
+        .slice(previousIndex === 0 ? 0 : previousIndex - 1, Math.max(previousIndex === 0 ? 0 : previousIndex - 1, item.waypointIndex - 1))
+        .reduce((sum, leg) => sum + leg.holdHours, 0);
       const availableHours = (targetTime.getTime() - previousTime.getTime()) / 3600000 - holdHours;
       const requiredSpeed = distance > 0 && availableHours > 0 ? distance / availableHours : null;
       blocks.push({ fromIndex: previousIndex, toIndex: item.waypointIndex, targetTime, distance, holdHours, availableHours, requiredSpeed });
