@@ -3,11 +3,13 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { CrewNoaaMap } from "../../components/CrewNoaaMap";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
+import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
 
 type Waypoint = { id: string; name: string; lat: number; lon: number };
 type PlanningRoute = { routeName: string; waypoints: Waypoint[] };
 type LegPlan = { speed: number; holdHours: number };
 type TimedTarget = { id: string; waypointIndex: number; arrival: string };
+type LiveShip = { sog: number; lastSeen: number };
 
 type SolveResult = {
   holdLegIndex: number;
@@ -102,6 +104,26 @@ function normalizeSharedRoute(data: any): PlanningRoute | null {
   };
 }
 
+function sixBit(char: string) { let value = char.charCodeAt(0) - 48; if (value > 40) value -= 8; return value; }
+function bitsFromPayload(payload: string) { return payload.split("").map((ch) => sixBit(ch).toString(2).padStart(6, "0")).join(""); }
+function unsigned(bits: string, start: number, length: number) { return parseInt(bits.slice(start, start + length), 2); }
+function extractAivdo(msg: any) {
+  const values = [msg?.line, msg?.sentence, msg?.nmea, msg?.raw, msg?.data, msg?.payload, msg];
+  return values.find((value) => typeof value === "string" && value.trim().startsWith("!AIVDO"))?.trim() || "";
+}
+function decodeSog(sentence: string) {
+  try {
+    const parts = sentence.split(",");
+    if (parts.length < 7 || Number(parts[1]) > 1) return null;
+    let bits = bitsFromPayload(parts[5] || "");
+    const fillBits = Number(parts[6]?.split("*")[0] || 0);
+    if (fillBits > 0) bits = bits.slice(0, -fillBits);
+    const type = unsigned(bits, 0, 6);
+    const sogRaw = [1, 2, 3].includes(type) ? unsigned(bits, 50, 10) : [18, 19].includes(type) ? unsigned(bits, 46, 10) : 1023;
+    return sogRaw === 1023 ? null : sogRaw / 10;
+  } catch { return null; }
+}
+
 function decimalHours(value: string) { const n = Number(value); return Number.isFinite(n) && n >= 0 ? n : 0; }
 function safeSpeed(value: string, fallback = 10) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
 function durationText(hours: number) {
@@ -153,6 +175,8 @@ export default function VoyagePlannerPage() {
   const [planningLimit, setPlanningLimit] = useState("14");
   const [additionalTargets, setAdditionalTargets] = useState<TimedTarget[]>([]);
   const [error, setError] = useState("");
+  const [useLiveSog, setUseLiveSog] = useState(false);
+  const [liveShip, setLiveShip] = useState<LiveShip | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,6 +202,32 @@ export default function VoyagePlannerPage() {
     }
     void loadSharedRoute();
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    let reconnectTimer = 0;
+    let ws: WebSocket | null = null;
+    const connect = () => {
+      if (disposed) return;
+      const next = new WebSocket(getAisWebSocketUrl());
+      ws = next;
+      next.onclose = () => { if (!disposed) reconnectTimer = window.setTimeout(connect, 2000); };
+      next.onmessage = (event) => {
+        let msg: any = event.data;
+        try { msg = JSON.parse(event.data); } catch {}
+        const line = extractAivdo(msg);
+        if (!line) return;
+        const sog = decodeSog(line);
+        if (sog !== null) setLiveShip({ sog, lastSeen: Date.now() });
+      };
+    };
+    connect();
+    return () => {
+      disposed = true;
+      window.clearTimeout(reconnectTimer);
+      if (ws) { ws.onclose = null; ws.close(); }
+    };
   }, []);
 
   const resolvedTargetWaypointIndex = route ? (targetWaypointIndex ?? route.waypoints.length - 1) : null;
@@ -233,17 +283,17 @@ export default function VoyagePlannerPage() {
     let cursor = new Date(start);
     const timeline = rawLegs.map((leg) => {
       const block = blocks.find((b) => leg.index >= b.fromIndex && leg.index < b.toIndex);
-      const effectiveSpeed = block?.requiredSpeed ?? leg.speed;
+      const effectiveSpeed = useLiveSog && liveShip && liveShip.sog > 0.1 ? liveShip.sog : (block?.requiredSpeed ?? leg.speed);
       const underwayHours = leg.distance / effectiveSpeed;
       const depart = new Date(cursor);
       const arrive = new Date(depart.getTime() + underwayHours * 3600000);
       const resume = new Date(arrive.getTime() + leg.holdHours * 3600000);
       cursor = resume;
-      return { ...leg, speed: effectiveSpeed, underwayHours, depart, arrive, resume, solvedSpeed: block?.requiredSpeed ?? null };
+      return { ...leg, speed: effectiveSpeed, underwayHours, depart, arrive, resume, solvedSpeed: useLiveSog ? null : (block?.requiredSpeed ?? null) };
     });
     const impossible = blocks.find((b) => b.requiredSpeed === null);
     return { timeline, blocks, error: impossible ? "A timed waypoint cannot be reached in the available time." : "" };
-  }, [route, departure, rawLegs, timedTargets]);
+  }, [route, departure, rawLegs, timedTargets, useLiveSog, liveShip?.sog]);
 
   const timeline = timingPlan.timeline;
   const totalDistance = rawLegs.reduce((sum, leg) => sum + leg.distance, 0);
@@ -321,6 +371,7 @@ export default function VoyagePlannerPage() {
               <label className="block"><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Departure · {waypointTimeZone(route?.waypoints[0]).label}</span><input type="datetime-local" value={departure} onChange={(e) => setDeparture(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></label>
               <div className={`border-2 border-[#c9a227] p-3 ${day ? "bg-amber-50" : "bg-[#c9a227]/10"}`}><div className="mb-2 text-[10px] font-black uppercase tracking-[.16em] text-[#c9a227]">Arrival Target Waypoint</div><select disabled={!route} value={resolvedTargetWaypointIndex ?? ""} onChange={(e) => setTargetWaypointIndex(Number(e.target.value))} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`}>{route ? route.waypoints.map((wp, index) => <option key={`${wp.id}-${index}`} value={index}>{index + 1} · {wp.name}</option>) : <option value="">Load route first</option>}</select></div>
               <div><div className="mb-1 flex items-center justify-between gap-2"><span className="block text-[9px] font-black uppercase tracking-[.12em] text-[#c9a227]">Target Arrival At Selected Waypoint · {waypointTimeZone(targetWaypoint).label}</span><button type="button" onClick={() => setTargetArrival("")} disabled={!targetArrival} className={`shrink-0 border px-2 py-1 text-[9px] font-black uppercase ${targetArrival ? "border-red-400/50 text-red-400" : "border-slate-500/20 text-slate-500"}`}>Clear</button></div><input type="datetime-local" value={targetArrival} onChange={(e) => setTargetArrival(e.target.value)} className={`w-full border-2 border-[#c9a227] px-3 py-3 text-base font-mono font-black ${control}`} /></div>
+              <label className={`flex cursor-pointer items-center justify-between gap-3 border p-3 ${inset}`}><span><span className="block text-[10px] font-black uppercase tracking-[.12em]">Use Current SOG for ETA</span><span className={`mt-1 block text-[10px] font-bold uppercase ${muted}`}>${liveShip ? `Live SOG ${liveShip.sog.toFixed(1)} KT · ETA display only` : "Waiting for live SOG"}</span></span><input type="checkbox" checked={useLiveSog} onChange={(e) => setUseLiveSog(e.target.checked)} disabled={!liveShip || liveShip.sog <= 0.1} className="h-5 w-5 accent-[#c9a227]" /></label>
               <div className="grid grid-cols-[1fr_110px] gap-2"><div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Default Speed</span><input type="number" min="0.1" step="0.1" value={defaultSpeed} onChange={(e) => setDefaultSpeed(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></div><div><span className={`mb-1 block text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Speed Limit</span><input type="number" min="0.1" step="0.1" value={planningLimit} onChange={(e) => setPlanningLimit(e.target.value)} className={`w-full border px-3 py-2 text-base font-mono ${control}`} /></div></div>
               <button type="button" onClick={applyDefaultSpeed} disabled={!route} className="border border-[#c9a227]/70 px-3 py-2 text-[10px] font-black uppercase text-[#c9a227]">Apply Default Speed To All Legs</button>
             </div>
