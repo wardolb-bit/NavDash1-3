@@ -29,6 +29,14 @@ function webMercator(lon: number, lat: number) {
   return { x, y };
 }
 
+async function fetchNoaaIdentify(url: string, timeoutMs: number) {
+  return fetch(url, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: { "User-Agent": "NavDash/1.3 NOAA ENC identify" },
+  });
+}
+
 export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams;
   const lat = finiteNumber(search.get("lat"));
@@ -67,47 +75,54 @@ export async function GET(request: NextRequest) {
     f: "json",
   });
 
-  try {
-    const response = await fetch(`${NOAA_IDENTIFY_URL}?${params.toString()}`, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-      headers: { "User-Agent": "NavDash/1.3 NOAA ENC identify" },
-    });
+  const url = `${NOAA_IDENTIFY_URL}?${params.toString()}`;
+  let lastError: unknown;
 
-    const text = await response.text();
-    let payload: any;
+  // NOAA's Maritime Chart Service occasionally stalls. Give the normal request a
+  // short window, then retry once with a longer window before reporting failure.
+  for (const timeoutMs of [8000, 18000]) {
     try {
-      payload = JSON.parse(text);
-    } catch {
-      return NextResponse.json(
-        { error: "NOAA returned a non-JSON response.", upstreamStatus: response.status, detail: text.slice(0, 500) },
-        { status: 502 },
-      );
-    }
+      const response = await fetchNoaaIdentify(url, timeoutMs);
+      const text = await response.text();
+      let payload: any;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        return NextResponse.json(
+          { error: "NOAA returned a non-JSON response.", upstreamStatus: response.status, detail: text.slice(0, 500) },
+          { status: 502 },
+        );
+      }
 
-    if (!response.ok || payload?.error) {
-      return NextResponse.json(
-        { error: "NOAA ENC identify request failed.", upstreamStatus: response.status, detail: payload?.error || payload },
-        { status: 502 },
-      );
-    }
+      if (!response.ok || payload?.error) {
+        return NextResponse.json(
+          { error: "NOAA ENC identify request failed.", upstreamStatus: response.status, detail: payload?.error || payload },
+          { status: 502 },
+        );
+      }
 
-    const results = Array.isArray(payload?.results) ? payload.results : [];
-    return NextResponse.json({
-      source: "NOAA Office of Coast Survey ENC Online",
-      queriedAt: new Date().toISOString(),
-      lat,
-      lon,
-      results,
-    });
-  } catch (error) {
-    const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-    return NextResponse.json(
-      {
-        error: timedOut ? "NOAA ENC lookup timed out." : "Unable to reach NOAA ENC Online.",
-        detail: error instanceof Error ? error.message : String(error),
-      },
-      { status: 502 },
-    );
+      const results = Array.isArray(payload?.results) ? payload.results : [];
+      return NextResponse.json({
+        source: "NOAA Office of Coast Survey ENC Online",
+        queriedAt: new Date().toISOString(),
+        lat,
+        lon,
+        results,
+      });
+    } catch (error) {
+      lastError = error;
+      const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      if (!timedOut) break;
+    }
   }
+
+  const timedOut =
+    lastError instanceof Error && (lastError.name === "TimeoutError" || lastError.name === "AbortError");
+  return NextResponse.json(
+    {
+      error: timedOut ? "NOAA ENC lookup timed out after retry." : "Unable to reach NOAA ENC Online.",
+      detail: lastError instanceof Error ? lastError.message : String(lastError),
+    },
+    { status: 502 },
+  );
 }
