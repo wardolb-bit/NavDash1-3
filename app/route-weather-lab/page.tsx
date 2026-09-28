@@ -183,8 +183,8 @@ function formatHours(hours: number) {
 }
 
 function forecastConfidence(leadHours: number) {
-  if (leadHours <= 72) return "FORECAST";
-  if (leadHours <= 168) return "FORECAST / LOWER CONFIDENCE";
+  if (leadHours <= 72) return "HIGHER CONFIDENCE";
+  if (leadHours <= 168) return "LOWER CONFIDENCE";
   if (leadHours <= 240) return "OUTLOOK";
   return "LONG-RANGE GUIDANCE";
 }
