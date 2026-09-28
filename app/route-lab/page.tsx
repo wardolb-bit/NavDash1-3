@@ -189,10 +189,8 @@ export default function RouteSandboxPage() {
       for (const layer of [baseLayerRef.current, seamarkLayerRef.current, encLayerRef.current]) { if (layer) try { map.removeLayer(layer); } catch {} }
       baseLayerRef.current = null; seamarkLayerRef.current = null; encLayerRef.current = null;
       if (mapEl.current) mapEl.current.style.background = day ? "#dbe5e8" : "#071019";
-      if (day) {
-        baseLayerRef.current = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-        seamarkLayerRef.current = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
-      }
+      baseLayerRef.current = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, opacity: day ? 1 : 0.34 }).addTo(map);
+      seamarkLayerRef.current = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18, opacity: day ? 1 : 0.7 }).addTo(map);
       encLayerRef.current = L.tileLayer.wms("/api/noaa-charts/wms", { layers: day ? "0,1,2,3,4,5,6,7" : "1,2,3,4,5,6,7", format: "image/png", transparent: true, version: "1.1.1", opacity: day ? 0.88 : 1, tileSize: 512, maxZoom: 18 } as any).addTo(map);
       routeLayerRef.current?.bringToFront?.(); weatherLayerRef.current?.bringToFront?.();
     }
