@@ -124,6 +124,14 @@ export function BridgeMapLayerControls() {
     setAmiLoaded(false);
   }
 
+  function clearUserChart() {
+    if (!host) return;
+    const clearMarks = Array.from(host.querySelectorAll<HTMLButtonElement>("button")).find(
+      (button) => (button.textContent || "").trim().toUpperCase() === "CLEAR MARKS",
+    );
+    clearMarks?.click();
+  }
+
   if (!host) return null;
 
   const buttonBase: React.CSSProperties = {
@@ -174,6 +182,17 @@ export function BridgeMapLayerControls() {
         }}
       >
         SEAMARKS {seamarksOn ? "ON" : "OFF"}
+      </button>
+      <button
+        type="button"
+        onClick={clearUserChart}
+        style={{
+          ...buttonBase,
+          color: "#f1d56b",
+          border: "1px solid rgba(241,213,107,.55)",
+        }}
+      >
+        CLEAR USER CHART
       </button>
       <button
         type="button"
