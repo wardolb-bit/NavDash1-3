@@ -40,7 +40,11 @@ type AtmosResponse = {
 };
 
 const UA = "NavDash NOAA route weather (wardmaritimegroup.com)";
-const TARGET_HOURS = [0, 3, 6, 9, 12, 18, 24];
+// Keep the route request compact enough for Vercel/NOMADS, but cover the full
+// 120-hour horizon currently supported by the GRIB route samplers. The old
+// 24-hour list made any voyage departure more than a day away appear to have
+// zero weather coverage even though GFS data was available.
+const TARGET_HOURS = [0, 6, 12, 24, 48, 72, 96, 120];
 const SAMPLE_SPACING_NM = 35;
 const MAX_SAMPLES = 9;
 
