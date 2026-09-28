@@ -8,6 +8,7 @@ import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
 import { BridgeRouteDistanceWgs84 } from "./BridgeRouteDistanceWgs84";
 import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
+import { BridgeGreatCircleRoute } from "./BridgeGreatCircleRoute";
 import { MainMapDisplayControls } from "./MainMapDisplayControls";
 import { EncScaleAwareLayer } from "./EncScaleAwareLayer";
 import { BridgeEncBrightnessMenu } from "./BridgeEncBrightnessMenu";
@@ -23,6 +24,7 @@ export function BridgeConsoleRouteGate() {
   return (
     <>
       <NavMapMainOverlayV2 />
+      <BridgeGreatCircleRoute />
       <MainMapDisplayControls />
       <EncScaleAwareLayer />
       <BridgeEncBrightnessMenu />
