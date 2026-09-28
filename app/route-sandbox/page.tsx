@@ -188,6 +188,7 @@ export default function RouteSandboxPage() {
   const weatherLayerRef = useRef<any>(null);
   const fitNextRef = useRef(true);
   const historyRef = useRef<Waypoint[][]>([]);
+  const redoRef = useRef<Waypoint[][]>([]);
 
   const [route, setRoute] = useState<Waypoint[]>([]);
   const [baseline, setBaseline] = useState<Waypoint[]>([]);
@@ -346,6 +347,7 @@ export default function RouteSandboxPage() {
 
   function pushHistory() {
     historyRef.current = [...historyRef.current.slice(-19), cloneRoute(route)];
+    redoRef.current = [];
   }
 
   function loadIntoSandbox(name: string, waypoints: Waypoint[]) {
@@ -357,6 +359,7 @@ export default function RouteSandboxPage() {
     setSelectedIndex(null);
     setWeather(null);
     historyRef.current = [];
+    redoRef.current = [];
     fitNextRef.current = true;
     setStatus(`${copy.length} waypoints copied into the sandbox. The source route is untouched.`);
   }
@@ -427,10 +430,21 @@ export default function RouteSandboxPage() {
   function undo() {
     const previous = historyRef.current.pop();
     if (!previous) return;
+    redoRef.current = [...redoRef.current.slice(-19), cloneRoute(route)];
     setRoute(cloneRoute(previous));
     setWeather(null);
     setSelectedIndex(null);
     setStatus("Last route edit undone.");
+  }
+
+  function redo() {
+    const next = redoRef.current.pop();
+    if (!next) return;
+    historyRef.current = [...historyRef.current.slice(-19), cloneRoute(route)];
+    setRoute(cloneRoute(next));
+    setWeather(null);
+    setSelectedIndex(null);
+    setStatus("Route edit redone.");
   }
 
   function resetSandbox() {
@@ -472,6 +486,7 @@ export default function RouteSandboxPage() {
         <label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && void loadRtz(e.target.files[0])}/></label>
         <button disabled={route.length < 2} onClick={() => setAddMode((value) => !value)} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${addMode ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-300"}`}>{addMode ? "CLICK MAP TO ADD WP" : "ADD WAYPOINT"}</button>
         <button disabled={!historyRef.current.length} onClick={undo} className="border border-slate-700 px-3 py-2 text-[10px] font-black text-slate-300 disabled:opacity-40">UNDO</button>
+        <button disabled={!redoRef.current.length} onClick={redo} className="border border-slate-700 px-3 py-2 text-[10px] font-black text-slate-300 disabled:opacity-40">REDO</button>
         <button disabled={baseline.length < 2} onClick={resetSandbox} className="border border-slate-700 px-3 py-2 text-[10px] font-black text-slate-300 disabled:opacity-40">RESET OPTION</button>
         <button disabled={route.length < 2 || analyzing} onClick={analyzeRoute} className="border border-emerald-400/40 bg-[#08130f] px-3 py-2 text-[10px] font-black text-emerald-200 disabled:opacity-40">{analyzing ? "ANALYZING…" : "TEST WEATHER"}</button>
         <button disabled={route.length < 2} onClick={exportRtz} className="border border-[#c9a227]/60 bg-[#17130a] px-3 py-2 text-[10px] font-black text-[#f1d56b] disabled:opacity-40">EXPORT RTZ</button>
