@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Coverage = {
   totalNm: number;
@@ -67,12 +68,29 @@ function readCoverage(): Coverage | null {
 
 export default function ForecastCoverageSummary() {
   const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [host, setHost] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
     let timer: number | null = null;
+    const ensureHost = () => {
+      const main = document.querySelector("main");
+      if (!main) return null;
+      let node = document.getElementById("route-weather-forecast-coverage-host");
+      if (!node) {
+        node = document.createElement("div");
+        node.id = "route-weather-forecast-coverage-host";
+        const header = main.firstElementChild;
+        if (header?.nextSibling) main.insertBefore(node, header.nextSibling);
+        else main.appendChild(node);
+      }
+      return node;
+    };
     const refresh = () => {
       if (timer !== null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => setCoverage(readCoverage()), 60);
+      timer = window.setTimeout(() => {
+        setHost(ensureHost());
+        setCoverage(readCoverage());
+      }, 60);
     };
     refresh();
     const observer = new MutationObserver(refresh);
@@ -84,14 +102,15 @@ export default function ForecastCoverageSummary() {
       window.removeEventListener("input", refresh, true);
       window.removeEventListener("change", refresh, true);
       if (timer !== null) window.clearTimeout(timer);
+      document.getElementById("route-weather-forecast-coverage-host")?.remove();
     };
   }, []);
 
-  if (!coverage) return null;
+  if (!coverage || !host) return null;
   const partial = coverage.percent < 99.5;
 
-  return (
-    <div className={`mx-2 mb-2 border p-3 ${partial ? "border-amber-500/60 bg-amber-950/20" : "border-emerald-500/40 bg-emerald-950/10"}`}>
+  return createPortal(
+    <div className={`mb-2 border p-3 ${partial ? "border-amber-500/60 bg-amber-950/20" : "border-emerald-500/40 bg-emerald-950/10"}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className={`text-[10px] font-black uppercase tracking-[0.15em] ${partial ? "text-amber-300" : "text-emerald-300"}`}>FORECAST ROUTE COVERAGE</div>
@@ -108,6 +127,7 @@ export default function ForecastCoverageSummary() {
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded bg-slate-800"><div className={`h-full ${partial ? "bg-amber-400" : "bg-emerald-400"}`} style={{ width: `${coverage.percent}%` }} /></div>
       {partial && <div className="mt-2 text-[10px] font-bold text-amber-200">MAX WIND and MAX SEAS apply only to the forecast-covered portion. Conditions beyond this point are not represented by the current model window.</div>}
-    </div>
+    </div>,
+    host,
   );
 }
