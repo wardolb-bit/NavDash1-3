@@ -43,19 +43,22 @@ function originalToggle(host: HTMLElement, label: string) {
 
 function syncMeasureReadout(host: HTMLElement) {
   const label = host.querySelector<HTMLElement>(".navmap-measure-label");
+  const text = label?.textContent?.trim() || "";
   let readout = document.getElementById("navdash-measure-readout");
-  if (!label?.textContent?.trim()) {
-    readout?.remove();
+  if (!text) {
+    if (readout) readout.remove();
     return;
   }
-  label.style.setProperty("display", "none", "important");
+  if (label && label.style.display !== "none") {
+    label.style.setProperty("display", "none", "important");
+  }
   if (!(readout instanceof HTMLElement)) {
     readout = document.createElement("div");
     readout.id = "navdash-measure-readout";
     readout.style.cssText = "position:absolute;top:72px;right:12px;z-index:1200;padding:7px 10px;border:1px solid #22d3ee;background:rgba(7,16,25,.94);color:#d9fbff;border-radius:4px;font:700 12px/1.2 system-ui,sans-serif;letter-spacing:.02em;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.25)";
     host.appendChild(readout);
   }
-  readout.textContent = label.textContent.trim();
+  if (readout.textContent !== text) readout.textContent = text;
 }
 
 function findWxPanel(host: HTMLElement) {
