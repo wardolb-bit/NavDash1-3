@@ -203,7 +203,31 @@ function buildSummary(results: IdentifyResult[], lat: number, lon: number) {
   if (usefulValue(status)) rows.push({ label: "Status", value: decodeCodes(status, STATUS) });
 
   const info = firstValue(attributes, "INFORM", "NINFOM");
-  if (usefulValue(info)) rows.push({ label: "Chart note", value: String(info) });
+  if (usefulValue(info)) {
+    const text = String(info);
+    if (text.startsWith("LIVE NDBC ")) {
+      const parts = text.split(" · ");
+      const station = parts.shift()?.replace(/^LIVE NDBC\s+/i, "") || "";
+      rows.push({ label: "Live NDBC", value: station, emphasis: true });
+      for (const part of parts) {
+        const match = part.match(/^(station position|wind|seas|dominant period|wave dir|pressure|water|obs)\s+(.+)$/i);
+        if (!match) continue;
+        const labels: Record<string, string> = {
+          "station position": "Live position",
+          wind: "Wind",
+          seas: "Seas",
+          "dominant period": "Period",
+          "wave dir": "Wave direction",
+          pressure: "Pressure",
+          water: "Water",
+          obs: "Observation",
+        };
+        rows.push({ label: labels[match[1].toLowerCase()] || match[1], value: match[2] });
+      }
+    } else {
+      rows.push({ label: "Chart note", value: text });
+    }
+  }
 
   rows.push({ label: "Position", value: formatLatLon(lat, lon) });
   return { attributes, rows };
