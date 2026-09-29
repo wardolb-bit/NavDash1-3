@@ -1,5 +1,5 @@
-import { PassageWorkspaceV2 } from "../../components/PassageWorkspaceV2";
+import { PassageWorkspaceV3 } from "../../components/PassageWorkspaceV3";
 
 export default function PassagePage() {
-  return <PassageWorkspaceV2 />;
+  return <PassageWorkspaceV3 />;
 }
