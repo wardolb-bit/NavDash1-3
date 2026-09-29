@@ -61,7 +61,7 @@ export function BridgeQuickAccess() {
       <a href="https://wx.wardlab.dev" className={buttonClass}>Weather</a>
       <Link href="/tides" className={buttonClass}>Tides</Link>
       <Link href="/position-report" className={buttonClass}>Position Report</Link>
-      <Link href="/nav-brief" className={buttonClass}>Nav Brief</Link>
+      <Link href="/passage" className={buttonClass}>Passage</Link>
       <Link href="/msi" className={buttonClass}>MSI</Link>
       <Link href="/tools" className={buttonClass}>Tools</Link>
     </>,
