@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type Waypoint = { name: string; lat: number; lon: number };
+type GeometryType = "GreatCircle" | "Loxodrome";
+type Waypoint = { name: string; lat: number; lon: number; geometryType?: GeometryType };
 type ForecastPoint = {
   lat: number;
   lon: number;
@@ -45,14 +46,85 @@ type WaveResponse = {
 };
 type EncounterPoint = ForecastPoint & { eta: Date; validAt: Date; deltaHours: number };
 
+const GREAT_CIRCLE_THRESHOLD_NM = 250;
+const GREAT_CIRCLE_STEP_NM = 35;
+
+function rad(value: number) { return value * Math.PI / 180; }
+function deg(value: number) { return value * 180 / Math.PI; }
+function longitudeNearReference(lon: number, referenceLon: number) {
+  let adjusted = lon;
+  while (adjusted - referenceLon > 180) adjusted -= 360;
+  while (adjusted - referenceLon < -180) adjusted += 360;
+  return adjusted;
+}
+
 function nmBetween(a: Waypoint, b: Waypoint) {
   const r = 3440.065;
-  const p1 = a.lat * Math.PI / 180;
-  const p2 = b.lat * Math.PI / 180;
-  const dp = (b.lat - a.lat) * Math.PI / 180;
-  const dl = (b.lon - a.lon) * Math.PI / 180;
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dp = rad(b.lat - a.lat);
+  let dlDeg = b.lon - a.lon;
+  while (dlDeg > 180) dlDeg -= 360;
+  while (dlDeg < -180) dlDeg += 360;
+  const dl = rad(dlDeg);
   const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
   return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function legIsGreatCircle(a: Waypoint, b: Waypoint) {
+  if (b.geometryType === "GreatCircle") return true;
+  if (b.geometryType === "Loxodrome") return false;
+  return nmBetween(a, b) >= GREAT_CIRCLE_THRESHOLD_NM;
+}
+
+function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
+  const p1 = rad(a.lat), l1 = rad(a.lon), p2 = rad(b.lat), l2 = rad(b.lon);
+  const v1 = [Math.cos(p1) * Math.cos(l1), Math.cos(p1) * Math.sin(l1), Math.sin(p1)];
+  const v2 = [Math.cos(p2) * Math.cos(l2), Math.cos(p2) * Math.sin(l2), Math.sin(p2)];
+  const dot = Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const omega = Math.acos(dot);
+  if (omega < 1e-12) return { lat: a.lat, lon: a.lon };
+  const sinOmega = Math.sin(omega);
+  const wa = Math.sin((1 - fraction) * omega) / sinOmega;
+  const wb = Math.sin(fraction * omega) / sinOmega;
+  const x = wa * v1[0] + wb * v2[0];
+  const y = wa * v1[1] + wb * v2[1];
+  const z = wa * v1[2] + wb * v2[2];
+  return { lat: deg(Math.atan2(z, Math.hypot(x, y))), lon: deg(Math.atan2(y, x)) };
+}
+
+function routeDisplay(route: Waypoint[]) {
+  if (!route.length) return [] as Array<[number, number]>;
+  const points: Array<[number, number]> = [[route[0].lat, route[0].lon]];
+  let referenceLon = route[0].lon;
+  for (let i = 1; i < route.length; i += 1) {
+    const a = route[i - 1];
+    const b = route[i];
+    const distance = nmBetween(a, b);
+    const segments = legIsGreatCircle(a, b) ? Math.max(2, Math.ceil(distance / GREAT_CIRCLE_STEP_NM)) : 1;
+    for (let step = 1; step <= segments; step += 1) {
+      const fraction = step / segments;
+      const point = segments === 1
+        ? { lat: b.lat, lon: b.lon }
+        : greatCirclePoint(a, b, fraction);
+      const lon = longitudeNearReference(point.lon, referenceLon);
+      points.push([point.lat, lon]);
+      referenceLon = lon;
+    }
+  }
+  return points;
+}
+
+function routeMarkerPositions(route: Waypoint[]) {
+  if (!route.length) return [] as Array<[number, number]>;
+  const points: Array<[number, number]> = [[route[0].lat, route[0].lon]];
+  let referenceLon = route[0].lon;
+  for (let i = 1; i < route.length; i += 1) {
+    const lon = longitudeNearReference(route[i].lon, referenceLon);
+    points.push([route[i].lat, lon]);
+    referenceLon = lon;
+  }
+  return points;
 }
 
 function routeLengthNm(route: Waypoint[]) {
@@ -73,23 +145,32 @@ function routeWaypointDistances(route: Waypoint[]) {
 
 function pointAtDistance(route: Waypoint[], targetNm: number) {
   if (!route.length) return null;
-  if (route.length === 1 || targetNm <= 0) return route[0];
+  if (route.length === 1 || targetNm <= 0) return { ...route[0] };
   let travelled = 0;
+  let referenceLon = route[0].lon;
   for (let i = 1; i < route.length; i += 1) {
     const a = route[i - 1];
     const b = route[i];
     const leg = nmBetween(a, b);
     if (travelled + leg >= targetNm) {
-      const ratio = leg <= 0 ? 0 : (targetNm - travelled) / leg;
+      const fraction = leg <= 0 ? 0 : Math.max(0, Math.min(1, (targetNm - travelled) / leg));
+      const point = legIsGreatCircle(a, b)
+        ? greatCirclePoint(a, b, fraction)
+        : {
+            lat: a.lat + (b.lat - a.lat) * fraction,
+            lon: a.lon + (longitudeNearReference(b.lon, a.lon) - a.lon) * fraction,
+          };
       return {
         name: "Expected vessel position",
-        lat: a.lat + (b.lat - a.lat) * ratio,
-        lon: a.lon + (b.lon - a.lon) * ratio,
+        lat: point.lat,
+        lon: longitudeNearReference(point.lon, referenceLon),
       };
     }
     travelled += leg;
+    referenceLon = longitudeNearReference(b.lon, referenceLon);
   }
-  return route[route.length - 1];
+  const last = route[route.length - 1];
+  return { ...last, lon: longitudeNearReference(last.lon, referenceLon) };
 }
 
 function routeSliceBetweenDistances(route: Waypoint[], startNm: number, endNm: number) {
@@ -97,28 +178,35 @@ function routeSliceBetweenDistances(route: Waypoint[], startNm: number, endNm: n
   const total = routeLengthNm(route);
   const start = Math.max(0, Math.min(total, Math.min(startNm, endNm)));
   const end = Math.max(start, Math.min(total, Math.max(startNm, endNm)));
-  const startPoint = pointAtDistance(route, start);
-  const endPoint = pointAtDistance(route, end);
-  if (!startPoint || !endPoint) return [] as Array<[number, number]>;
-
-  const distances = routeWaypointDistances(route);
-  const points: Array<[number, number]> = [[startPoint.lat, startPoint.lon]];
-  route.forEach((wp, i) => {
-    const d = distances[i];
-    if (d > start && d < end) points.push([wp.lat, wp.lon]);
-  });
-  points.push([endPoint.lat, endPoint.lon]);
+  const first = pointAtDistance(route, start);
+  if (!first) return [] as Array<[number, number]>;
+  const points: Array<[number, number]> = [[first.lat, first.lon]];
+  const steps = Math.max(1, Math.ceil((end - start) / GREAT_CIRCLE_STEP_NM));
+  for (let i = 1; i <= steps; i += 1) {
+    const point = pointAtDistance(route, start + (end - start) * (i / steps));
+    if (!point) continue;
+    points.push([point.lat, longitudeNearReference(point.lon, points[points.length - 1][1])]);
+  }
   return points;
 }
 
 function parseRtz(text: string): Waypoint[] {
   const doc = new DOMParser().parseFromString(text, "application/xml");
+  if (doc.querySelector("parsererror")) throw new Error("RTZ XML could not be parsed.");
   return Array.from(doc.querySelectorAll("waypoint")).map((node, index) => {
     const pos = node.querySelector("position");
+    const leg = node.querySelector("leg");
+    const rawGeometry = leg?.getAttribute("geometryType") || "";
+    const geometryType: GeometryType | undefined = /great/i.test(rawGeometry)
+      ? "GreatCircle"
+      : /lox|rhumb/i.test(rawGeometry)
+        ? "Loxodrome"
+        : undefined;
     return {
       name: node.getAttribute("name") || node.getAttribute("id") || `WP${String(index + 1).padStart(2, "0")}`,
       lat: Number(pos?.getAttribute("lat")),
       lon: Number(pos?.getAttribute("lon")),
+      geometryType,
     };
   }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
 }
@@ -294,10 +382,12 @@ export default function RouteWeatherLabPage() {
       const L = await import("leaflet");
       layer.clearLayers();
       if (route.length < 2) return;
-      const latlngs = route.map((wp) => [wp.lat, wp.lon] as [number, number]);
+      const latlngs = routeDisplay(route);
+      const markerPositions = routeMarkerPositions(route);
       L.polyline(latlngs, { color: "#22d3ee", weight: weather ? 2 : 3, opacity: weather ? 0.4 : 0.95 }).addTo(layer);
       route.forEach((wp, i) => {
-        L.circleMarker([wp.lat, wp.lon], {
+        const marker = markerPositions[i] || [wp.lat, wp.lon];
+        L.circleMarker(marker, {
           radius: 4,
           color: "#f1d56b",
           weight: 2,
@@ -507,11 +597,20 @@ export default function RouteWeatherLabPage() {
       if (!response.ok) throw new Error(json?.error || "Could not read current NavDash route.");
       if (!json?.hasRoute) throw new Error("There is no current shared NavDash route loaded.");
       const parsed: Waypoint[] = (Array.isArray(json?.waypoints) ? json.waypoints : [])
-        .map((wp: any, index: number) => ({
-          name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `WP${String(index + 1).padStart(2, "0")}`,
-          lat: Number(wp?.lat ?? wp?.latitude),
-          lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-        }))
+        .map((wp: any, index: number) => {
+          const rawGeometry = typeof wp?.geometryType === "string" ? wp.geometryType : "";
+          const geometryType: GeometryType | undefined = /great/i.test(rawGeometry)
+            ? "GreatCircle"
+            : /lox|rhumb/i.test(rawGeometry)
+              ? "Loxodrome"
+              : undefined;
+          return {
+            name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `WP${String(index + 1).padStart(2, "0")}`,
+            lat: Number(wp?.lat ?? wp?.latitude),
+            lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+            geometryType,
+          };
+        })
         .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
       if (parsed.length < 2) throw new Error("The current NavDash route does not contain enough usable waypoints.");
       setRoute(parsed);
