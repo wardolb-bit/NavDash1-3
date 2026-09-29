@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
-type Waypoint = { lat: number; lon: number; name?: string };
+type GeometryType = "GreatCircle" | "Loxodrome";
+type Waypoint = { lat: number; lon: number; name?: string; geometryType?: GeometryType };
 type SamplePoint = { lat: number; lon: number; distanceNm: number };
 type GridValue = { validTime?: string; value?: number | null };
 type ForecastPoint = {
@@ -43,15 +44,55 @@ const UA = "NavDash NOAA route weather (wardmaritimegroup.com)";
 const TARGET_HOURS = [0, 3, 6, 9, 12, 18, 24];
 const SAMPLE_SPACING_NM = 35;
 const MAX_SAMPLES = 9;
+const GREAT_CIRCLE_THRESHOLD_NM = 250;
+
+function rad(value: number) { return value * Math.PI / 180; }
+function deg(value: number) { return value * 180 / Math.PI; }
+function normalizeLon(value: number) { let lon = value; while (lon > 180) lon -= 360; while (lon < -180) lon += 360; return lon; }
 
 function nmBetween(a: Waypoint, b: Waypoint) {
   const r = 3440.065;
-  const p1 = a.lat * Math.PI / 180;
-  const p2 = b.lat * Math.PI / 180;
-  const dp = (b.lat - a.lat) * Math.PI / 180;
-  const dl = (b.lon - a.lon) * Math.PI / 180;
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dp = rad(b.lat - a.lat);
+  let dlDeg = b.lon - a.lon;
+  while (dlDeg > 180) dlDeg -= 360;
+  while (dlDeg < -180) dlDeg += 360;
+  const dl = rad(dlDeg);
   const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
   return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function legIsGreatCircle(a: Waypoint, b: Waypoint) {
+  if (b.geometryType === "GreatCircle") return true;
+  if (b.geometryType === "Loxodrome") return false;
+  return nmBetween(a, b) >= GREAT_CIRCLE_THRESHOLD_NM;
+}
+
+function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
+  const p1 = rad(a.lat), l1 = rad(a.lon), p2 = rad(b.lat), l2 = rad(b.lon);
+  const v1 = [Math.cos(p1) * Math.cos(l1), Math.cos(p1) * Math.sin(l1), Math.sin(p1)];
+  const v2 = [Math.cos(p2) * Math.cos(l2), Math.cos(p2) * Math.sin(l2), Math.sin(p2)];
+  const dot = Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const omega = Math.acos(dot);
+  if (omega < 1e-12) return { lat: a.lat, lon: a.lon };
+  const sinOmega = Math.sin(omega);
+  const wa = Math.sin((1 - fraction) * omega) / sinOmega;
+  const wb = Math.sin(fraction * omega) / sinOmega;
+  const x = wa * v1[0] + wb * v2[0];
+  const y = wa * v1[1] + wb * v2[1];
+  const z = wa * v1[2] + wb * v2[2];
+  return { lat: deg(Math.atan2(z, Math.hypot(x, y))), lon: normalizeLon(deg(Math.atan2(y, x))) };
+}
+
+function loxodromePoint(a: Waypoint, b: Waypoint, fraction: number) {
+  let lonB = b.lon;
+  while (lonB - a.lon > 180) lonB -= 360;
+  while (lonB - a.lon < -180) lonB += 360;
+  return {
+    lat: a.lat + (b.lat - a.lat) * fraction,
+    lon: normalizeLon(a.lon + (lonB - a.lon) * fraction),
+  };
 }
 
 function routeSamples(route: Waypoint[]): SamplePoint[] {
@@ -69,13 +110,8 @@ function routeSamples(route: Waypoint[]): SamplePoint[] {
     const b = route[leg + 1];
     const legNm = Math.max(0.0001, cumulative[leg + 1] - cumulative[leg]);
     const f = Math.max(0, Math.min(1, (target - cumulative[leg]) / legNm));
-    let lonB = b.lon;
-    while (lonB - a.lon > 180) lonB -= 360;
-    while (lonB - a.lon < -180) lonB += 360;
-    let lon = a.lon + (lonB - a.lon) * f;
-    while (lon > 180) lon -= 360;
-    while (lon < -180) lon += 360;
-    samples.push({ lat: a.lat + (b.lat - a.lat) * f, lon, distanceNm: target });
+    const point = legIsGreatCircle(a, b) ? greatCirclePoint(a, b, f) : loxodromePoint(a, b, f);
+    samples.push({ lat: point.lat, lon: point.lon, distanceNm: target });
   }
   return samples;
 }
@@ -158,7 +194,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const route: Waypoint[] = (Array.isArray(body?.waypoints) ? body.waypoints : [])
-      .map((wp: any) => ({ lat: Number(wp?.lat), lon: Number(wp?.lon), name: typeof wp?.name === "string" ? wp.name : undefined }))
+      .map((wp: any) => {
+        const rawGeometry = typeof wp?.geometryType === "string" ? wp.geometryType : "";
+        const geometryType: GeometryType | undefined = /great/i.test(rawGeometry) ? "GreatCircle" : /lox|rhumb/i.test(rawGeometry) ? "Loxodrome" : undefined;
+        return { lat: Number(wp?.lat), lon: Number(wp?.lon), name: typeof wp?.name === "string" ? wp.name : undefined, geometryType };
+      })
       .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
     if (route.length < 2) return NextResponse.json({ error: "Route requires at least two valid waypoints." }, { status: 400 });
 
