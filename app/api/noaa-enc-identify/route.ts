@@ -47,13 +47,24 @@ function parseLatestObservation(text: string) {
   const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (lines.length < 3) return null;
   const headers = lines[0].replace(/^#/, "").trim().split(/\s+/);
-  const values = lines[2].split(/\s+/);
-  const row: Record<string, string> = {};
-  headers.forEach((key, i) => { row[key] = values[i] || ""; });
-  const good = (key: string) => row[key] && row[key] !== "MM" ? row[key] : null;
+  const rows = lines.slice(2).map((line) => {
+    const values = line.split(/\s+/);
+    const row: Record<string, string> = {};
+    headers.forEach((key, i) => { row[key] = values[i] || ""; });
+    return row;
+  });
+  const row = rows[0];
+  if (!row) return null;
+  const good = (source: Record<string, string>, key: string) => source[key] && source[key] !== "MM" ? source[key] : null;
+  const waveRow = rows.find((candidate) => good(candidate, "WVHT")) || row;
   const y = Number(row.YY), m = Number(row.MM), d = Number(row.DD), h = Number(row.hh), min = Number(row.mm || 0);
   const observedAt = [y, m, d, h].every(Number.isFinite) ? new Date(Date.UTC(y, m - 1, d, h, min)).toISOString() : null;
-  return { observedAt, WDIR: good("WDIR"), WSPD: good("WSPD"), GST: good("GST"), WVHT: good("WVHT"), DPD: good("DPD"), APD: good("APD"), MWD: good("MWD"), PRES: good("PRES"), ATMP: good("ATMP"), WTMP: good("WTMP") };
+  return {
+    observedAt,
+    WDIR: good(row, "WDIR"), WSPD: good(row, "WSPD"), GST: good(row, "GST"),
+    WVHT: good(waveRow, "WVHT"), DPD: good(waveRow, "DPD"), APD: good(waveRow, "APD"), MWD: good(waveRow, "MWD"),
+    PRES: good(row, "PRES"), ATMP: good(row, "ATMP"), WTMP: good(row, "WTMP"),
+  };
 }
 function parseStationPosition(html: string) {
   const plain = html.replace(/<[^>]+>/g, " ").replace(/&deg;|&#176;/gi, "°").replace(/\s+/g, " ");
