@@ -8,6 +8,7 @@ const GREAT_CIRCLE_THRESHOLD_NM = 250;
 const GREAT_CIRCLE_STEP_NM = 50;
 
 type Waypoint = { lat: number; lon: number };
+type DisplayLeg = { index: number; points: Array<[number, number]>; distanceNm: number; bearing: number };
 
 function rad(value: number) { return value * Math.PI / 180; }
 function deg(value: number) { return value * 180 / Math.PI; }
@@ -29,6 +30,17 @@ function distanceNm(a: Waypoint, b: Waypoint) {
   return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
+function initialBearing(a: Waypoint, b: Waypoint) {
+  const p1 = rad(a.lat), p2 = rad(b.lat);
+  let dlDeg = b.lon - a.lon;
+  while (dlDeg > 180) dlDeg -= 360;
+  while (dlDeg < -180) dlDeg += 360;
+  const dl = rad(dlDeg);
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (deg(Math.atan2(y, x)) + 360) % 360;
+}
+
 function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
   const p1 = rad(a.lat), l1 = rad(a.lon);
   const p2 = rad(b.lat), l2 = rad(b.lon);
@@ -46,25 +58,26 @@ function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
   return { lat: deg(Math.atan2(z, Math.hypot(x, y))), lon: deg(Math.atan2(y, x)) };
 }
 
-function displayRoute(route: Waypoint[], referenceLon: number) {
-  if (!route.length) return [] as Array<[number, number]>;
-  const result: Array<[number, number]> = [];
+function displayLegs(route: Waypoint[], referenceLon: number) {
+  const legs: DisplayLeg[] = [];
+  if (route.length < 2) return legs;
   let previousLon = nearLon(route[0].lon, referenceLon);
-  result.push([route[0].lat, previousLon]);
 
   for (let index = 1; index < route.length; index += 1) {
     const start = route[index - 1];
     const end = route[index];
     const legNm = distanceNm(start, end);
     const segments = legNm >= GREAT_CIRCLE_THRESHOLD_NM ? Math.max(2, Math.ceil(legNm / GREAT_CIRCLE_STEP_NM)) : 1;
+    const points: Array<[number, number]> = [[start.lat, previousLon]];
     for (let step = 1; step <= segments; step += 1) {
       const point = segments === 1 ? end : greatCirclePoint(start, end, step / segments);
       const lon = nearLon(point.lon, previousLon);
-      result.push([point.lat, lon]);
+      points.push([point.lat, lon]);
       previousLon = lon;
     }
+    legs.push({ index, points, distanceNm: legNm, bearing: initialBearing(start, end) });
   }
-  return result;
+  return legs;
 }
 
 function normalizeRoute(payload: any): Waypoint[] {
@@ -129,13 +142,20 @@ export function BridgeGreatCircleRoute() {
           }
         });
         const referenceLon = map.getCenter().lng;
-        const points = displayRoute(route, referenceLon);
-        overlay = L.layerGroup([-360, 0, 360].map((offset) => L.polyline(points.map(([lat, lon]) => [lat, lon + offset]) as any, {
-          color: ROUTE_COLOR,
-          weight: 4,
-          opacity: 0.95,
-          interactive: false,
-        }))).addTo(map);
+        const legs = displayLegs(route, referenceLon);
+        overlay = L.layerGroup(legs.flatMap((leg) => [-360, 0, 360].map((offset) => L.polyline(
+          leg.points.map(([lat, lon]) => [lat, lon + offset]) as any,
+          {
+            color: ROUTE_COLOR,
+            weight: 4,
+            opacity: 0.95,
+            interactive: false,
+            navdashRouteLegIndex: leg.index,
+            navdashRouteLegDistanceNm: leg.distanceNm,
+            navdashRouteLegBearing: leg.bearing,
+            navdashGreatCircleLeg: true,
+          } as any,
+        )))).addTo(map);
       }
 
       timer = window.setTimeout(refresh, 1200);
