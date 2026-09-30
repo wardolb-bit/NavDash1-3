@@ -9,12 +9,14 @@ import { ArrivalPlannerBridgeButton } from "../../components/ArrivalPlannerBridg
 import { MapCursorReadout } from "../../components/MapCursorReadout";
 import { MapFloatingControlsContext } from "../../components/MapFloatingControlsContext";
 import { RouteLegInspector } from "../../components/RouteLegInspector";
+import { MainMapOpenWatersLayer } from "../../components/MainMapOpenWatersLayer";
 
 export default function BridgePage() {
   return (
     <>
       <MobileBridgeRedirect />
       <NavDashConsole />
+      <MainMapOpenWatersLayer />
       <ArrivalPlannerBridgeButton />
       <MainMapAisTargets />
       <MainMapAisAtons />
