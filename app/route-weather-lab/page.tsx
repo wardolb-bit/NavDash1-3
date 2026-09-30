@@ -51,6 +51,8 @@ const ROUTE_WEATHER_SPEED_KEY = "navdash-route-weather-speed-kt";
 const ENC_BRIGHTNESS_MIN = 40;
 const ENC_BRIGHTNESS_MAX = 140;
 const ENC_BRIGHTNESS_STEP = 10;
+const GREAT_CIRCLE_THRESHOLD_NM = 250;
+const GREAT_CIRCLE_STEP_NM = 50;
 
 function clampEncBrightness(value: number) {
   return Math.max(ENC_BRIGHTNESS_MIN, Math.min(ENC_BRIGHTNESS_MAX, Math.round(value / ENC_BRIGHTNESS_STEP) * ENC_BRIGHTNESS_STEP));
@@ -80,6 +82,62 @@ function unwrapRouteForDisplay(route: Waypoint[]) {
     unwrapped.push({ ...route[i], lon: longitudeNearReference(route[i].lon, previous.lon) });
   }
   return unwrapped;
+}
+
+function rad(value: number) { return value * Math.PI / 180; }
+function deg(value: number) { return value * 180 / Math.PI; }
+
+function gcDistanceNm(a: Waypoint, b: Waypoint) {
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dp = rad(b.lat - a.lat);
+  let dlDeg = b.lon - a.lon;
+  while (dlDeg > 180) dlDeg -= 360;
+  while (dlDeg < -180) dlDeg += 360;
+  const dl = rad(dlDeg);
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
+  const p1 = rad(a.lat), l1 = rad(a.lon);
+  const p2 = rad(b.lat), l2 = rad(b.lon);
+  const v1 = [Math.cos(p1) * Math.cos(l1), Math.cos(p1) * Math.sin(l1), Math.sin(p1)];
+  const v2 = [Math.cos(p2) * Math.cos(l2), Math.cos(p2) * Math.sin(l2), Math.sin(p2)];
+  const dot = Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const omega = Math.acos(dot);
+  if (omega < 1e-12) return { lat: a.lat, lon: a.lon };
+  const sinOmega = Math.sin(omega);
+  const wa = Math.sin((1 - fraction) * omega) / sinOmega;
+  const wb = Math.sin(fraction * omega) / sinOmega;
+  const x = wa * v1[0] + wb * v2[0];
+  const y = wa * v1[1] + wb * v2[1];
+  const z = wa * v1[2] + wb * v2[2];
+  return { lat: deg(Math.atan2(z, Math.hypot(x, y))), lon: deg(Math.atan2(y, x)) };
+}
+
+function routeDisplayPoints(route: Waypoint[]) {
+  if (!route.length) return [] as Array<[number, number]>;
+  const result: Array<[number, number]> = [];
+  let previousLon = route[0].lon;
+  result.push([route[0].lat, previousLon]);
+
+  for (let index = 1; index < route.length; index += 1) {
+    const start = route[index - 1];
+    const end = route[index];
+    const legNm = gcDistanceNm(start, end);
+    const segments = legNm >= GREAT_CIRCLE_THRESHOLD_NM
+      ? Math.max(2, Math.ceil(legNm / GREAT_CIRCLE_STEP_NM))
+      : 1;
+    for (let step = 1; step <= segments; step += 1) {
+      const point = segments === 1 ? end : greatCirclePoint(start, end, step / segments);
+      const lon = longitudeNearReference(point.lon, previousLon);
+      result.push([point.lat, lon]);
+      previousLon = lon;
+    }
+  }
+
+  return result;
 }
 
 function nmBetween(a: Waypoint, b: Waypoint) {
@@ -282,7 +340,6 @@ export default function RouteWeatherLabPage() {
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 
   const totalNm = useMemo(() => routeLengthNm(route), [route]);
-  const waypointDistances = useMemo(() => routeWaypointDistances(route), [route]);
 
   useEffect(() => {
     try {
@@ -488,10 +545,10 @@ export default function RouteWeatherLabPage() {
       const L = await import("leaflet");
       layer.clearLayers();
       if (route.length < 2) return;
-      const displayRoute = unwrapRouteForDisplay(route);
-      const latlngs = displayRoute.map((wp) => [wp.lat, wp.lon] as [number, number]);
+      const markerRoute = unwrapRouteForDisplay(route);
+      const latlngs = routeDisplayPoints(route);
       L.polyline(latlngs, { color: "#22d3ee", weight: weather ? 2 : 3, opacity: weather ? 0.4 : 0.95 }).addTo(layer);
-      displayRoute.forEach((wp, i) => {
+      markerRoute.forEach((wp, i) => {
         L.circleMarker([wp.lat, wp.lon], {
           radius: 4,
           color: "#f1d56b",
@@ -579,8 +636,6 @@ export default function RouteWeatherLabPage() {
   const maxWind = useMemo(() => maxBy(encounter, "windKt") as EncounterPoint | null, [encounter]);
   const maxGust = useMemo(() => maxBy(encounter, "gustKt") as EncounterPoint | null, [encounter]);
   const selectedFrame = weather?.frames?.[frameIndex];
-  const profileMaxSea = useMemo(() => Math.max(1, ...displayedPoints.map((p) => p.waveHeightFt || 0)), [displayedPoints]);
-  const profileMaxWind = useMemo(() => Math.max(1, ...displayedPoints.map((p) => p.windKt || 0)), [displayedPoints]);
 
   const expectedVesselNm = useMemo(() => {
     if (mode !== "time" || !selectedFrame || !route.length) return null;
@@ -589,15 +644,6 @@ export default function RouteWeatherLabPage() {
     if (!Number.isFinite(dep.getTime()) || !Number.isFinite(valid.getTime())) return null;
     return Math.max(0, Math.min(totalNm, ((valid.getTime() - dep.getTime()) / 3600000) * speedKt));
   }, [mode, selectedFrame, departure, route.length, totalNm, speedKt]);
-
-  const profileLabels = useMemo(() => {
-    if (!route.length || !totalNm) return [] as Array<{ name: string; distanceNm: number }>;
-    const maxLabels = 6;
-    if (route.length <= maxLabels) return route.map((wp, i) => ({ name: wp.name, distanceNm: waypointDistances[i] || 0 }));
-    const selected = new Set<number>([0, route.length - 1]);
-    for (let slot = 1; slot < maxLabels - 1; slot += 1) selected.add(Math.round((slot / (maxLabels - 1)) * (route.length - 1)));
-    return Array.from(selected).sort((a, b) => a - b).map((i) => ({ name: route[i].name, distanceNm: waypointDistances[i] || 0 }));
-  }, [route, waypointDistances, totalNm]);
 
   useEffect(() => {
     async function drawWeather() {
@@ -723,9 +769,6 @@ export default function RouteWeatherLabPage() {
 
   async function analyze() { await analyzeWaypoints(route); }
   function occurrence(point: EncounterPoint | null) { if (!point) return null; return `Occurs ${point.distanceNm.toFixed(0)} NM along route • ETA ${formatWhen(point.eta)}`; }
-  function profileXDistance(distanceNm: number) { if (totalNm <= 0) return 0; return Math.max(0, Math.min(1000, (distanceNm / totalNm) * 1000)); }
-  const seaProfile = displayedPoints.map((p) => `${profileXDistance(p.distanceNm)},${58 - ((p.waveHeightFt || 0) / profileMaxSea) * 36}`).join(" ");
-  const windProfile = displayedPoints.map((p) => `${profileXDistance(p.distanceNm)},${108 - ((p.windKt || 0) / profileMaxWind) * 32}`).join(" ");
 
   return (
     <main className="min-h-screen bg-[#04080c] p-2 text-slate-100">
@@ -736,7 +779,6 @@ export default function RouteWeatherLabPage() {
           {weather && <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-5"><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MODE</div><div className="mt-1 text-xs font-black text-cyan-200">{mode === "encounter" ? "ROUTE ENCOUNTER" : "WEATHER TIME"}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX SEAS</div><div className="mt-1 text-lg font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "--" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX WIND</div><div className="mt-1 text-lg font-black text-cyan-300">{maxWind?.windKt == null ? "--" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div><div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : `${totalNm.toFixed(0)} NM`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">ROUTE WX COVERAGE</div><div className="mt-1 text-xs font-black text-emerald-200">{formatHours(routeWxCoverage.coveredHours)} of {formatHours(routeWxCoverage.voyageHours)}</div><div className="mt-1 text-[9px] font-bold text-slate-500">{routeWxCoverage.percent.toFixed(0)}% of voyage</div></div></div>}
           <div className="relative overflow-hidden border border-slate-800"><div id="route-weather-lab-map" ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />{weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • arrows = wind flow • hover for details</div>}</div>
           {weather && mode === "time" && <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div><input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} /><div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>EARLIEST</span><span>GHOST VESSEL SHOWS EXPECTED POSITION</span><span>LATEST</span></div></div>}
-          {weather && displayedPoints.length > 1 && <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3"><div className="mb-2 flex items-center justify-between gap-3"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">ROUTE PROFILE</div><div className="text-[9px] text-slate-600">Distance-based, using names from the loaded route. Tap or hover a sample to highlight it on the map.</div></div><div className="text-right text-[9px] font-bold text-slate-500"><span className="text-[#f1d56b]">SEA HEIGHT</span> / <span className="text-cyan-300">WIND</span></div></div><svg viewBox="0 0 1000 160" className="h-[160px] w-full"><line x1="0" y1="62" x2="1000" y2="62" stroke="#334155" strokeWidth="1" /><line x1="0" y1="112" x2="1000" y2="112" stroke="#334155" strokeWidth="1" /><polyline points={seaProfile} fill="none" stroke="#f1d56b" strokeWidth="4" strokeLinejoin="round" strokeLinecap="round" /><polyline points={windProfile} fill="none" stroke="#67e8f9" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />{profileLabels.map((label, i) => { const x = profileXDistance(label.distanceNm); const anchor = i === 0 ? "start" : i === profileLabels.length - 1 ? "end" : "middle"; return <g key={`label-${i}`}><line x1={x} y1="116" x2={x} y2="123" stroke="#64748b" strokeWidth="1" /><text x={x} y="140" textAnchor={anchor} fill="#94a3b8" fontSize="14" fontWeight="700">{label.name}</text><text x={x} y="155" textAnchor={anchor} fill="#475569" fontSize="11">{label.distanceNm.toFixed(0)} NM</text></g>; })}{expectedVesselNm !== null && <g><line x1={profileXDistance(expectedVesselNm)} y1="46" x2={profileXDistance(expectedVesselNm)} y2="124" stroke="#22d3ee" strokeWidth="2" strokeDasharray="5 4" /><path d={`M ${profileXDistance(expectedVesselNm) - 7} 38 L ${profileXDistance(expectedVesselNm) + 7} 38 L ${profileXDistance(expectedVesselNm)} 50 Z`} fill="#22d3ee" stroke="#f8fafc" strokeWidth="1" /></g>}{displayedPoints.map((p, i) => { const x = profileXDistance(p.distanceNm); const seaY = 58 - ((p.waveHeightFt || 0) / profileMaxSea) * 36; const windY = 108 - ((p.windKt || 0) / profileMaxWind) * 32; const enc = mode === "encounter" ? (p as EncounterPoint) : null; const markerColor = enc?.beyondHorizon ? "#64748b" : seaColor(p.waveHeightFt); return <g key={`profile-${i}`} onMouseEnter={() => setFocusedIndex(i)} onClick={() => setFocusedIndex((current) => current === i ? null : i)} style={{ cursor: "pointer" }}><rect x={Math.max(0, x - 24)} y="0" width="48" height="116" fill="transparent" /><circle cx={x} cy={seaY} r={focusedIndex === i ? 7 : 4} fill={markerColor} stroke="#f8fafc" strokeWidth={focusedIndex === i ? 2 : 0} /><circle cx={x} cy={windY} r={focusedIndex === i ? 6 : 3} fill={enc?.beyondHorizon ? "#64748b" : "#67e8f9"} /></g>; })}</svg></div>}
         </section>
         <aside className="space-y-2">
           <section className="border border-slate-700/50 bg-[#071019] p-3"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">VOYAGE</div><div className="mt-1 truncate text-sm font-black text-cyan-200">{routeName}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-[9px] font-black text-slate-500">DEPARTURE<input type="datetime-local" value={departure} onChange={(e) => { const next = e.target.value; setDeparture(next); try { window.localStorage.setItem(ROUTE_WEATHER_DEPARTURE_KEY, next); } catch {} }} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label><label className="text-[9px] font-black text-slate-500">SPEED KT<input type="number" min="1" max="30" step="0.1" value={speedKt} onChange={(e) => { const next = Math.max(1, Number(e.target.value) || 1); setSpeedKt(next); try { window.localStorage.setItem(ROUTE_WEATHER_SPEED_KEY, String(next)); } catch {} }} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">WPTS</div><div className="font-black">{route.length || "--"}</div></div><div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">NM</div><div className="font-black">{route.length ? totalNm.toFixed(0) : "--"}</div></div><div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">HOURS</div><div className="font-black">{route.length ? (totalNm / speedKt).toFixed(1) : "--"}</div></div></div></section>
