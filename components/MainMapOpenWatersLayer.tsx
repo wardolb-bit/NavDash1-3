@@ -39,11 +39,12 @@ export function MainMapOpenWatersLayer() {
       }
 
       try {
-        const L = await import("leaflet");
-        const maplibregl = await import("maplibre-gl");
-        if (disposed) return;
+        const L: any = await import("leaflet");
+        const maplibreModule: any = await import("maplibre-gl");
+        const MapLibreMap: any = maplibreModule.Map || maplibreModule.default?.Map;
+        if (disposed || !MapLibreMap) return;
 
-        let pane = map.getPane(OPENWATERS_PANE);
+        let pane: any = map.getPane(OPENWATERS_PANE);
         if (!pane) pane = map.createPane(OPENWATERS_PANE);
         pane.style.zIndex = "180";
         pane.style.pointerEvents = "none";
@@ -57,7 +58,7 @@ export function MainMapOpenWatersLayer() {
         pane.appendChild(paneContainer);
 
         const center = map.getCenter();
-        glMap = new maplibregl.Map({
+        glMap = new MapLibreMap({
           container: paneContainer,
           style: OPENWATERS_STYLE,
           center: [center.lng, center.lat],
@@ -65,8 +66,7 @@ export function MainMapOpenWatersLayer() {
           interactive: false,
           attributionControl: false,
           renderWorldCopies: true,
-          fadeDuration: 0,
-        });
+        } as any);
 
         const sync = () => {
           if (!glMap || disposed) return;
@@ -76,7 +76,7 @@ export function MainMapOpenWatersLayer() {
             zoom: Math.max(0, map.getZoom() - 1),
             bearing: 0,
             pitch: 0,
-          });
+          } as any);
           glMap.resize();
         };
 
