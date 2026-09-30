@@ -161,14 +161,26 @@ function jcgTypeLabel(type: JcgAton["type"]) {
 }
 
 function jcgIconHtml(aton: JcgAton) {
-  const config = aton.type === "buoy"
-    ? { color: "#22d3ee", shape: '<circle cx="9" cy="9" r="6"/>' }
-    : aton.type === "beacon"
-      ? { color: "#a78bfa", shape: '<path d="M9 2 L16 16 L2 16 Z"/>' }
-      : aton.type === "lighthouse"
-        ? { color: "#fbbf24", shape: '<rect x="3" y="3" width="12" height="12" rx="1"/>' }
-        : { color: "#e2e8f0", shape: '<path d="M9 2 L16 9 L9 16 L2 9 Z"/>' };
-  return `<div style="width:18px;height:18px;filter:drop-shadow(0 0 2px rgba(0,0,0,.9))"><svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><g fill="#071019" stroke="${config.color}" stroke-width="2">${config.shape}</g></svg></div>`;
+  const halo = 'stroke="#f8fafc" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"';
+  const ink = 'stroke="#111827" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"';
+  const flare = '<g fill="none" stroke="#d946ef" stroke-width="1.5" stroke-linecap="round"><circle cx="13" cy="9" r="2.2" fill="#d946ef" stroke="none"/><path d="M13 2.5v3M13 12.5v3M6.5 9h3M16.5 9h3M8.4 4.4l2.1 2.1M15.5 11.5l2.1 2.1M17.6 4.4l-2.1 2.1M10.5 11.5l-2.1 2.1"/></g>';
+
+  if (aton.type === "buoy") {
+    const body = '<path d="M13 13v4M8.5 18.5h9L16 25H10zM7 25h12" fill="none"/>';
+    return `<div style="width:26px;height:34px;filter:drop-shadow(0 0 1px rgba(255,255,255,.75))"><svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg"><g ${halo}>${body}</g><g ${ink}>${body}</g>${flare}</svg></div>`;
+  }
+
+  if (aton.type === "beacon") {
+    const body = '<path d="M13 14v11M9.5 25h7M10.5 18h5M11 14h4" fill="none"/>';
+    return `<div style="width:26px;height:34px;filter:drop-shadow(0 0 1px rgba(255,255,255,.75))"><svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg"><g ${halo}>${body}</g><g ${ink}>${body}</g>${flare}</svg></div>`;
+  }
+
+  if (aton.type === "lighthouse") {
+    const body = '<path d="M10 14h6M9 25h8M10.5 14.5L9.5 25h7L15.5 14.5M9.5 18h7" fill="none"/>';
+    return `<div style="width:26px;height:34px;filter:drop-shadow(0 0 1px rgba(255,255,255,.75))"><svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg"><g ${halo}>${body}</g><g ${ink}>${body}</g>${flare}</svg></div>`;
+  }
+
+  return `<div style="width:26px;height:34px"><svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0 16)">${flare}</g></svg></div>`;
 }
 
 function jcgTooltip(aton: JcgAton) {
@@ -302,8 +314,8 @@ export function MainMapAisAtons() {
           const icon = L.divIcon({
             className: "navmap-main-jcg-aton-icon",
             html: jcgIconHtml(aton),
-            iconSize: [18, 18],
-            iconAnchor: [9, 9],
+            iconSize: [26, 34],
+            iconAnchor: [13, 25],
           });
           L.marker([aton.lat, aton.lon], { icon, pane: "navmap-main-jcg-atons-v1", interactive: true })
             .bindTooltip(jcgTooltip(aton), { direction: "top", opacity: 0.97, pane: "navmap-main-ais-info-v1" })
