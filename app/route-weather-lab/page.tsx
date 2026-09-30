@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type Waypoint = { name: string; lat: number; lon: number };
+type GeoPoint = { lat: number; lon: number };
+type Waypoint = GeoPoint & { name: string };
 type ForecastPoint = {
   lat: number;
   lon: number;
@@ -87,7 +88,7 @@ function unwrapRouteForDisplay(route: Waypoint[]) {
 function rad(value: number) { return value * Math.PI / 180; }
 function deg(value: number) { return value * 180 / Math.PI; }
 
-function gcDistanceNm(a: Waypoint, b: Waypoint) {
+function gcDistanceNm(a: GeoPoint, b: GeoPoint) {
   const p1 = rad(a.lat);
   const p2 = rad(b.lat);
   const dp = rad(b.lat - a.lat);
@@ -99,7 +100,7 @@ function gcDistanceNm(a: Waypoint, b: Waypoint) {
   return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
+function greatCirclePoint(a: GeoPoint, b: GeoPoint, fraction: number) {
   const p1 = rad(a.lat), l1 = rad(a.lon);
   const p2 = rad(b.lat), l2 = rad(b.lon);
   const v1 = [Math.cos(p1) * Math.cos(l1), Math.cos(p1) * Math.sin(l1), Math.sin(p1)];
@@ -140,71 +141,62 @@ function routeDisplayPoints(route: Waypoint[]) {
   return result;
 }
 
-function nmBetween(a: Waypoint, b: Waypoint) {
-  const r = 3440.065;
-  const p1 = a.lat * Math.PI / 180;
-  const p2 = b.lat * Math.PI / 180;
-  const dp = (b.lat - a.lat) * Math.PI / 180;
-  const dl = (b.lon - a.lon) * Math.PI / 180;
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+function routeGeometry(route: Waypoint[]) {
+  const points = routeDisplayPoints(route);
+  let distanceNm = 0;
+  return points.map(([lat, lon], index) => {
+    if (index > 0) {
+      const previous = points[index - 1];
+      distanceNm += gcDistanceNm({ lat: previous[0], lon: previous[1] }, { lat, lon });
+    }
+    return { lat, lon, distanceNm };
+  });
 }
 
 function routeLengthNm(route: Waypoint[]) {
-  let total = 0;
-  for (let i = 1; i < route.length; i += 1) total += nmBetween(route[i - 1], route[i]);
-  return total;
-}
-
-function routeWaypointDistances(route: Waypoint[]) {
-  const distances: number[] = [];
-  let total = 0;
-  route.forEach((wp, i) => {
-    if (i > 0) total += nmBetween(route[i - 1], wp);
-    distances.push(total);
-  });
-  return distances;
+  const geometry = routeGeometry(route);
+  return geometry.length ? geometry[geometry.length - 1].distanceNm : 0;
 }
 
 function pointAtDistance(route: Waypoint[], targetNm: number) {
-  if (!route.length) return null;
-  const displayRoute = unwrapRouteForDisplay(route);
-  if (displayRoute.length === 1 || targetNm <= 0) return displayRoute[0];
-  let travelled = 0;
-  for (let i = 1; i < route.length; i += 1) {
-    const a = route[i - 1];
-    const b = route[i];
-    const displayA = displayRoute[i - 1];
-    const displayB = displayRoute[i];
-    const leg = nmBetween(a, b);
-    if (travelled + leg >= targetNm) {
-      const ratio = leg <= 0 ? 0 : (targetNm - travelled) / leg;
+  const geometry = routeGeometry(route);
+  if (!geometry.length) return null;
+  if (geometry.length === 1 || targetNm <= 0) return { name: "Expected vessel position", lat: geometry[0].lat, lon: geometry[0].lon };
+  const total = geometry[geometry.length - 1].distanceNm;
+  const target = Math.max(0, Math.min(total, targetNm));
+  for (let i = 1; i < geometry.length; i += 1) {
+    const a = geometry[i - 1];
+    const b = geometry[i];
+    if (target <= b.distanceNm) {
+      const segmentNm = b.distanceNm - a.distanceNm;
+      const ratio = segmentNm <= 0 ? 0 : (target - a.distanceNm) / segmentNm;
       return {
         name: "Expected vessel position",
-        lat: displayA.lat + (displayB.lat - displayA.lat) * ratio,
-        lon: displayA.lon + (displayB.lon - displayA.lon) * ratio,
+        lat: a.lat + (b.lat - a.lat) * ratio,
+        lon: a.lon + (b.lon - a.lon) * ratio,
       };
     }
-    travelled += leg;
   }
-  return displayRoute[displayRoute.length - 1];
+  const last = geometry[geometry.length - 1];
+  return { name: "Expected vessel position", lat: last.lat, lon: last.lon };
 }
 
 function routeSliceBetweenDistances(route: Waypoint[], startNm: number, endNm: number) {
-  if (route.length < 2) return [] as Array<[number, number]>;
-  const total = routeLengthNm(route);
+  const geometry = routeGeometry(route);
+  if (geometry.length < 2) return [] as Array<[number, number]>;
+  const total = geometry[geometry.length - 1].distanceNm;
   const start = Math.max(0, Math.min(total, Math.min(startNm, endNm)));
   const end = Math.max(start, Math.min(total, Math.max(startNm, endNm)));
   const startPoint = pointAtDistance(route, start);
   const endPoint = pointAtDistance(route, end);
   if (!startPoint || !endPoint) return [] as Array<[number, number]>;
 
-  const distances = routeWaypointDistances(route);
-  const displayRoute = unwrapRouteForDisplay(route);
   const points: Array<[number, number]> = [[startPoint.lat, startPoint.lon]];
-  displayRoute.forEach((wp, i) => {
-    const d = distances[i];
-    if (d > start && d < end) points.push([wp.lat, wp.lon]);
+  geometry.forEach((point) => {
+    if (point.distanceNm > start && point.distanceNm < end) {
+      const previousLon = points[points.length - 1][1];
+      points.push([point.lat, longitudeNearReference(point.lon, previousLon)]);
+    }
   });
   points.push([endPoint.lat, longitudeNearReference(endPoint.lon, points[points.length - 1][1])]);
   return points;
