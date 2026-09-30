@@ -122,6 +122,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const [amiOverlay, setAmiOverlay] = useState<AmiOverlay | null>(null);
   const [amiVisible, setAmiVisible] = useState(true);
   const [amiSelectedIndex, setAmiSelectedIndex] = useState(0);
+  const [vesselSog, setVesselSog] = useState<number | null>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
 
@@ -200,6 +201,19 @@ export function NoaaLeafletPaneWeatherOverlay() {
     };
   }, [host]);
 
+  useEffect(() => {
+    if (!host) return;
+    const syncSog = () => {
+      const text = document.getElementById("bc2-sog")?.textContent || "";
+      const match = text.match(/([\d.]+)\s*KT/i);
+      const next = match ? Number(match[1]) : NaN;
+      setVesselSog(Number.isFinite(next) ? next : null);
+    };
+    syncSog();
+    const timer = window.setInterval(syncSog, 1000);
+    return () => window.clearInterval(timer);
+  }, [host]);
+
   const routeSignature = useMemo(() => route.map((wp) => `${wp.lat.toFixed(5)},${wp.lon.toFixed(5)}`).join(";"), [route]);
 
   useEffect(() => {
@@ -276,8 +290,14 @@ export function NoaaLeafletPaneWeatherOverlay() {
       layer.clearLayers();
       if (!visible || !frame) return;
 
+      const forecastEndMs = Math.max(...(forecast?.frames || []).map((item) => new Date(item.validAt).getTime()).filter(Number.isFinite));
+      const forecastHoursRemaining = Number.isFinite(forecastEndMs) ? Math.max(0, (forecastEndMs - Date.now()) / 3600000) : null;
+      const maxForecastDistanceNm = vesselSog !== null && vesselSog > 0.1 && forecastHoursRemaining !== null
+        ? vesselSog * forecastHoursRemaining
+        : null;
       const centerLon = map.getCenter().lng;
       for (const point of frame.points) {
+        if (maxForecastDistanceNm !== null && point.distanceNm > maxForecastDistanceNm) continue;
         const baseLon = longitudeNearReference(point.lon, centerLon);
         for (const offset of [-360, 0, 360]) {
           const icon = L.divIcon({
@@ -294,7 +314,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
     };
     draw();
     return () => { cancelled = true; };
-  }, [frame, visible, showWind, showSeas]);
+  }, [forecast, frame, visible, showWind, showSeas, vesselSog]);
 
   useEffect(() => () => {
     const map = mapRef.current;
