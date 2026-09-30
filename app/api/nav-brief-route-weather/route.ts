@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-type Waypoint = { name?: string; lat: number; lon: number };
+type GeometryType = "GreatCircle" | "Loxodrome";
+type Waypoint = { name?: string; lat: number; lon: number; geometryType?: GeometryType };
 type ForecastPoint = {
   lat: number;
   lon: number;
@@ -70,11 +71,20 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const route: Waypoint[] = (Array.isArray(body?.waypoints) ? body.waypoints : [])
-      .map((wp: any) => ({
-        name: typeof wp?.name === "string" ? wp.name : undefined,
-        lat: Number(wp?.lat ?? wp?.latitude),
-        lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-      }))
+      .map((wp: any) => {
+        const rawGeometry = typeof wp?.geometryType === "string" ? wp.geometryType : "";
+        const geometryType: GeometryType | undefined = /great/i.test(rawGeometry)
+          ? "GreatCircle"
+          : /lox|rhumb/i.test(rawGeometry)
+            ? "Loxodrome"
+            : undefined;
+        return {
+          name: typeof wp?.name === "string" ? wp.name : undefined,
+          lat: Number(wp?.lat ?? wp?.latitude),
+          lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+          geometryType,
+        };
+      })
       .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
 
     if (route.length < 2) {
