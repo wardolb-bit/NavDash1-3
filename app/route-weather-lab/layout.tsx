@@ -6,13 +6,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
   return (
     <>
       <style>{`
-        main svg[viewBox="0 0 1000 160"] {
-          display: none !important;
-        }
-        main div:has(> svg[viewBox="0 0 1000 160"]) {
-          display: none !important;
-        }
-
         aside > section:first-child .grid.grid-cols-2 {
           grid-template-columns: minmax(0, 1fr) !important;
           align-items: stretch;
