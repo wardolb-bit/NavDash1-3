@@ -59,7 +59,7 @@ export function MainMapOpenWatersLayer() {
           container: mapContainer,
           style: OPENWATERS_STYLE,
           center: [center.lng, center.lat],
-          zoom: Math.max(0, map.getZoom() - 1),
+          zoom: Math.max(0, map.getZoom()),
           interactive: false,
           attributionControl: false,
           renderWorldCopies: true,
@@ -70,7 +70,7 @@ export function MainMapOpenWatersLayer() {
           const nextCenter = map.getCenter();
           glMap.jumpTo({
             center: [nextCenter.lng, nextCenter.lat],
-            zoom: Math.max(0, map.getZoom() - 1),
+            zoom: Math.max(0, map.getZoom()),
             bearing: 0,
             pitch: 0,
           } as any);
