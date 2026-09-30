@@ -370,11 +370,15 @@ function nearestFrame(frames: WeatherFrame[], eta: Date) {
 function voyageSamples(weather: WardLabWeather, plan: WeatherPlan): RouteSample[] {
   const frames = Array.isArray(weather.frames) ? weather.frames.filter(frame => Array.isArray(frame.points) && frame.points.length) : [];
   if (!frames.length) return [];
+  const frameTimes = frames.map(frame => new Date(frame.validAt).getTime()).filter(Number.isFinite);
+  if (!frameTimes.length) return [];
+  const forecastEndMs = Math.max(...frameTimes);
   const reference = frames[0].points;
   return reference.map((referencePoint, index) => {
     const distanceNm = Number(referencePoint.distanceNm);
     const distance = Number.isFinite(distanceNm) ? distanceNm : 0;
     const eta = new Date(plan.departure.getTime() + (distance / plan.speedKt) * 3600000);
+    if (eta.getTime() > forecastEndMs) return null;
     const frame = nearestFrame(frames, eta);
     const point = frame.points[index] || frame.points.reduce((best, candidate) => {
       const candidateDistance = Number(candidate.distanceNm);
@@ -390,12 +394,22 @@ function voyageSamples(weather: WardLabWeather, plan: WeatherPlan): RouteSample[
 function renderWeatherCard(weather: WardLabWeather, route: WxRoute, plan: WeatherPlan) {
   const samples = voyageSamples(weather, plan);
   if (!samples.length) {
-    setWeatherMessage("The current WardLab weather feed returned no route samples for this RTZ.");
+    setWeatherMessage("The current WardLab weather feed returned no route samples inside the available forecast window for this RTZ.");
     return;
   }
 
+  const frames = Array.isArray(weather.frames) ? weather.frames.filter(frame => Array.isArray(frame.points) && frame.points.length) : [];
+  const frameTimes = frames.map(frame => new Date(frame.validAt).getTime()).filter(Number.isFinite);
+  const forecastEnd = frameTimes.length ? new Date(Math.max(...frameTimes)) : samples[samples.length - 1].eta;
+  const reference = frames[0]?.points || [];
+  const routeEndDistance = reference.reduce((max, point) => {
+    const distance = Number(point.distanceNm);
+    return Number.isFinite(distance) ? Math.max(max, distance) : max;
+  }, 0);
+
   const departure = samples[0];
   const arrival = samples[samples.length - 1];
+  const forecastLimited = routeEndDistance > 0 && arrival.distanceNm + 0.5 < routeEndDistance;
   const maxWind = samples.reduce((best, sample) => {
     const sampleWind = Math.max(Number(sample.point.windKt) || 0, Number(sample.point.gustKt) || 0);
     const bestWind = Math.max(Number(best.point.windKt) || 0, Number(best.point.gustKt) || 0);
@@ -419,13 +433,13 @@ function renderWeatherCard(weather: WardLabWeather, route: WxRoute, plan: Weathe
 
   const planLine = document.createElement("div");
   planLine.className = "mt-1 text-[9px] uppercase tracking-[.08em] text-[#8294a5]";
-  planLine.textContent = `${plan.source} · ${plan.speedKt.toFixed(1)} KT · DEP ${timeText(plan.departure, route)}`;
+  planLine.textContent = `${plan.source} · ${plan.speedKt.toFixed(1)} KT · DEP ${timeText(plan.departure, route)} · FORECAST THROUGH ${timeText(forecastEnd, route)}`;
 
   const detail = document.createElement("div");
   detail.className = "mt-2 grid grid-cols-1 gap-x-5 gap-y-1 text-[11px] leading-5 text-[#8294a5] md:grid-cols-2";
   const lines = [
     `Departure · ${windText(departure.point)} · ${seaText(departure.point)}`,
-    `Arrival · ${windText(arrival.point)} · ${seaText(arrival.point)}`,
+    `${forecastLimited ? "Forecast limit" : "Arrival"} · ${windText(arrival.point)} · ${seaText(arrival.point)} · ${arrival.distanceNm.toFixed(0)} NM along route · ${timeText(arrival.eta, route)}`,
     `Max wind · ${windText(maxWind.point)} · ${maxWind.distanceNm.toFixed(0)} NM along route · ${timeText(maxWind.eta, route)}`,
     `Max seas · ${seaText(maxSeas.point)} · ${maxSeas.distanceNm.toFixed(0)} NM along route · ${timeText(maxSeas.eta, route)}`,
   ];
