@@ -6,6 +6,81 @@ type Waypoint = { id: string; name: string; lat: number; lon: number };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
 type OwnShip = { lat?: number; lon?: number; cog?: number | null; heading?: number | null } | null;
 
+const GREAT_CIRCLE_THRESHOLD_NM = 250;
+const GREAT_CIRCLE_STEP_NM = 50;
+
+function rad(value: number) { return value * Math.PI / 180; }
+function deg(value: number) { return value * 180 / Math.PI; }
+
+function nearLon(lon: number, reference: number) {
+  let value = lon;
+  while (value - reference > 180) value -= 360;
+  while (value - reference < -180) value += 360;
+  return value;
+}
+
+function distanceNm(a: Waypoint, b: Waypoint) {
+  const p1 = rad(a.lat), p2 = rad(b.lat);
+  const dp = rad(b.lat - a.lat);
+  let dlDeg = b.lon - a.lon;
+  while (dlDeg > 180) dlDeg -= 360;
+  while (dlDeg < -180) dlDeg += 360;
+  const dl = rad(dlDeg);
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+}
+
+function greatCirclePoint(a: Waypoint, b: Waypoint, fraction: number) {
+  const p1 = rad(a.lat), l1 = rad(a.lon);
+  const p2 = rad(b.lat), l2 = rad(b.lon);
+  const v1 = [Math.cos(p1) * Math.cos(l1), Math.cos(p1) * Math.sin(l1), Math.sin(p1)];
+  const v2 = [Math.cos(p2) * Math.cos(l2), Math.cos(p2) * Math.sin(l2), Math.sin(p2)];
+  const dot = Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const omega = Math.acos(dot);
+  if (omega < 1e-12) return { lat: a.lat, lon: a.lon };
+  const sinOmega = Math.sin(omega);
+  const wa = Math.sin((1 - fraction) * omega) / sinOmega;
+  const wb = Math.sin(fraction * omega) / sinOmega;
+  const x = wa * v1[0] + wb * v2[0];
+  const y = wa * v1[1] + wb * v2[1];
+  const z = wa * v1[2] + wb * v2[2];
+  return { lat: deg(Math.atan2(z, Math.hypot(x, y))), lon: deg(Math.atan2(y, x)) };
+}
+
+function displayRoute(route: Waypoint[], referenceLon: number) {
+  if (!route.length) return [] as Array<[number, number]>;
+  const result: Array<[number, number]> = [];
+  let previousLon = nearLon(route[0].lon, referenceLon);
+  result.push([route[0].lat, previousLon]);
+
+  for (let index = 1; index < route.length; index += 1) {
+    const start = route[index - 1];
+    const end = route[index];
+    const legNm = distanceNm(start, end);
+    const segments = legNm >= GREAT_CIRCLE_THRESHOLD_NM
+      ? Math.max(2, Math.ceil(legNm / GREAT_CIRCLE_STEP_NM))
+      : 1;
+    for (let step = 1; step <= segments; step += 1) {
+      const point = segments === 1 ? end : greatCirclePoint(start, end, step / segments);
+      const lon = nearLon(point.lon, previousLon);
+      result.push([point.lat, lon]);
+      previousLon = lon;
+    }
+  }
+  return result;
+}
+
+function waypointDisplayPoints(route: Waypoint[], referenceLon: number) {
+  const points: Array<[number, number]> = [];
+  let previousLon = referenceLon;
+  for (const wp of route) {
+    const lon = nearLon(wp.lon, previousLon);
+    points.push([wp.lat, lon]);
+    previousLon = lon;
+  }
+  return points;
+}
+
 function s52NightDisplayParams() {
   return JSON.stringify({
     ECDISParameters: {
@@ -29,7 +104,6 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
   const routeLayerRef = useRef<any>(null);
   const shipLayerRef = useRef<any>(null);
   const fittedRef = useRef(false);
-
 
   useEffect(() => {
     let cancelled = false;
@@ -105,16 +179,16 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
       baseLayerRef.current = baseLayer;
 
       const chartLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
-            layers: "1,2,3,4,5,6,7,12",
-            format: "image/png",
-            transparent: true,
-            version: "1.3.0",
-            maxZoom: 15,
-            keepBuffer: 6,
-            updateWhenIdle: false,
-            updateWhenZooming: false,
-            attribution: "NOAA Office of Coast Survey ENC Online",
-          } as any);
+        layers: "1,2,3,4,5,6,7,12",
+        format: "image/png",
+        transparent: true,
+        version: "1.3.0",
+        maxZoom: 15,
+        keepBuffer: 6,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
+        attribution: "NOAA Office of Coast Survey ENC Online",
+      } as any);
 
       chartLayer.addTo(map);
       chartLayerRef.current = chartLayer;
@@ -148,23 +222,17 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
         shipLayerRef.current = null;
       }
 
-      const routePoints = route?.waypoints?.reduce((points, wp, index) => {
-        let lon = wp.lon;
-        if (index > 0) {
-          const previousLon = points[index - 1][1];
-          while (lon - previousLon > 180) lon -= 360;
-          while (lon - previousLon < -180) lon += 360;
-        }
-        points.push([wp.lat, lon] as [number, number]);
-        return points;
-      }, [] as [number, number][]) || [];
+      const waypoints = route?.waypoints || [];
+      const referenceLon = map.getCenter().lng;
+      const routePoints = displayRoute(waypoints, referenceLon);
+      const markerPoints = waypointDisplayPoints(waypoints, referenceLon);
       const routeGroup = L.layerGroup();
 
       if (route && routePoints.length > 1) {
         L.polyline(routePoints, { color: "#c9a227", weight: 3, opacity: 0.95 }).addTo(routeGroup);
         route.waypoints.forEach((wp, index) => {
           const isActive = index === route.activeWaypointIndex;
-          const marker = L.circleMarker(routePoints[index], {
+          const marker = L.circleMarker(markerPoints[index], {
             radius: isActive ? 6 : 4,
             weight: 2,
             color: isActive ? "#38bdf8" : "#c9a227",
@@ -201,7 +269,7 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
 
       if (!fittedRef.current) {
         const fitPoints = [...routePoints];
-        if (ship?.lat !== undefined && ship?.lon !== undefined) fitPoints.push([ship.lat, ship.lon]);
+        if (ship?.lat !== undefined && ship?.lon !== undefined) fitPoints.push([ship.lat, nearLon(ship.lon, referenceLon)]);
         if (fitPoints.length > 1) {
           map.fitBounds(L.latLngBounds(fitPoints), { padding: [28, 28], maxZoom: 12 });
           fittedRef.current = true;
