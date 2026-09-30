@@ -649,19 +649,6 @@ function IsolatedMainMap() {
           L.marker([point.lat, baseLon + offset], { icon, pane: "navmap-main-ami-v1" }).bindTooltip(amiTooltip(point), { direction: "top", opacity: 0.98, pane: "navmap-main-ami-v1" }).addTo(layer);
         }
       });
-
-      if (amiOverlay.cyclone?.track.length) {
-        const points = amiOverlay.cyclone.track.map((point) => [point.lat, longitudeNearReference(point.lon, centerLon)] as [number, number]);
-        for (const offset of offsets) {
-          L.polyline(points.map(([lat, lon]) => [lat, lon + offset]), { pane: "navmap-main-ami-v1", color: "#fb7185", weight: 3, opacity: 0.9, dashArray: "8 6" }).addTo(layer);
-          amiOverlay.cyclone.track.forEach((point) => {
-            const lon = longitudeNearReference(point.lon, centerLon) + offset;
-            L.circle([point.lat, lon], { pane: "navmap-main-ami-v1", radius: point.radius34KtNm * 1852, color: "#fb7185", fillColor: "#fb7185", fillOpacity: 0.035, weight: 1 }).addTo(layer);
-            L.circleMarker([point.lat, lon], { pane: "navmap-main-ami-v1", radius: 5, color: "#fecdd3", fillColor: "#9f1239", fillOpacity: 1, weight: 2 })
-              .bindTooltip(`<strong>${escapeMapText(amiOverlay.cyclone!.name)}</strong><br>${escapeMapText(amiTime(point.validAt))}<br>Max wind ${point.maximumWindKt} kt<br>34 kt radius ${point.radius34KtNm} NM${point.radius50KtNm !== null ? `<br>50 kt radius ${point.radius50KtNm} NM` : ""}`, { pane: "navmap-main-ami-v1" }).addTo(layer);
-          });
-        }
-      }
     }
     updateAmiOverlay();
   }, [amiOverlay, amiVisible, amiSelectedIndex]);
