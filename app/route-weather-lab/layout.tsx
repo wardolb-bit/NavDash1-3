@@ -53,8 +53,7 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           color: #075f68 !important;
         }
 
-        html[data-navdash-theme="day"] main .text-emerald-200,
-        html[data-navdash-theme="day"] main [class*="text-emerald-200"] {
+        html[data-navdash-theme="day"] main [class~="lg:grid-cols-5"] > div:nth-child(5) [class*="text-emerald-200"] {
           color: var(--nd-text) !important;
         }
 
