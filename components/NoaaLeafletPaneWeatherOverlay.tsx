@@ -292,7 +292,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
 
       const forecastEndMs = Math.max(...(forecast?.frames || []).map((item) => new Date(item.validAt).getTime()).filter(Number.isFinite));
       const forecastHoursRemaining = Number.isFinite(forecastEndMs) ? Math.max(0, (forecastEndMs - Date.now()) / 3600000) : null;
-      const maxForecastDistanceNm = vesselSog !== null && vesselSog > 0.1 && forecastHoursRemaining !== null
+      const maxForecastDistanceNm = vesselSog !== null && forecastHoursRemaining !== null
         ? vesselSog * forecastHoursRemaining
         : null;
       const centerLon = map.getCenter().lng;
