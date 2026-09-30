@@ -21,9 +21,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {`
             (() => {
               try {
+                const requested = new URLSearchParams(window.location.search).get("theme");
                 const saved = localStorage.getItem("navConsoleTheme");
-                const theme = saved === "day" ? "day" : "bridge-night";
+                const theme = requested === "day" || requested === "bridge-night"
+                  ? requested
+                  : saved === "day" ? "day" : "bridge-night";
+                localStorage.setItem("navConsoleTheme", theme);
                 document.documentElement.setAttribute("data-navdash-theme", theme);
+                document.body?.setAttribute("data-navdash-theme", theme);
               } catch {
                 document.documentElement.setAttribute("data-navdash-theme", "bridge-night");
               }
