@@ -402,6 +402,7 @@ function IsolatedMainMap() {
       const element = elementRef.current;
       if (!element || mapRef.current || cancelled) return;
       const L = await import("leaflet");
+      const { maplibreGL } = await import("@maplibre/maplibre-gl-leaflet");
       if (cancelled) return;
 
       if (!document.querySelector('link[data-navmap-main-leaflet="true"]')) {
@@ -409,6 +410,13 @@ function IsolatedMainMap() {
         link.rel = "stylesheet";
         link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
         link.setAttribute("data-navmap-main-leaflet", "true");
+        document.head.appendChild(link);
+      }
+      if (!document.querySelector('link[data-navmap-main-maplibre="true"]')) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css";
+        link.setAttribute("data-navmap-main-maplibre", "true");
         document.head.appendChild(link);
       }
 
@@ -421,8 +429,18 @@ function IsolatedMainMap() {
         map.setView([13.4443, 144.7937], 7, { animate: false });
       }
 
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-      L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+      try {
+        maplibreGL({
+          style: "https://tiles.openwaters.io/seamap/style.json",
+          pane: "tilePane",
+          interactive: false,
+          attributionControl: false,
+          renderWorldCopies: true,
+        } as any).addTo(map);
+      } catch {
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+        L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+      }
       try {
         L.tileLayer.wms("https://gis.charttools.noaa.gov/arcgis/rest/services/MCS/ENCOnline/MapServer/exts/MaritimeChartService/WMSServer", {
           layers: "1,2,3,4,5,6,7", format: "image/png", transparent: true, version: "1.1.1", opacity: 0.85, tileSize: 512,
