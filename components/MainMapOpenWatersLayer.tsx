@@ -15,9 +15,11 @@ export function MainMapOpenWatersLayer() {
   useEffect(() => {
     let disposed = false;
     let retryTimer = 0;
-    let openWatersLayer: any = null;
+    let glMap: any = null;
+    let paneContainer: HTMLDivElement | null = null;
     let attributionControl: any = null;
     const removedLegacyLayers: any[] = [];
+    const boundEvents: Array<[string, () => void]> = [];
 
     if (!document.querySelector('link[data-navdash-maplibre-css="true"]')) {
       const link = document.createElement("link");
@@ -28,7 +30,7 @@ export function MainMapOpenWatersLayer() {
     }
 
     const attach = async () => {
-      if (disposed || openWatersLayer) return;
+      if (disposed || glMap) return;
       const element = document.getElementById(MAP_ELEMENT_ID) as any;
       const map = element?.__navdashLeafletMap;
       if (!map) {
@@ -38,26 +40,54 @@ export function MainMapOpenWatersLayer() {
 
       try {
         const L = await import("leaflet");
-        const { maplibreGL } = await import("@maplibre/maplibre-gl-leaflet");
+        const maplibregl = await import("maplibre-gl");
         if (disposed) return;
 
-        if (!map.getPane(OPENWATERS_PANE)) {
-          const pane = map.createPane(OPENWATERS_PANE);
-          pane.style.zIndex = "180";
-          pane.style.pointerEvents = "none";
-        }
+        let pane = map.getPane(OPENWATERS_PANE);
+        if (!pane) pane = map.createPane(OPENWATERS_PANE);
+        pane.style.zIndex = "180";
+        pane.style.pointerEvents = "none";
 
-        openWatersLayer = maplibreGL({
+        paneContainer = document.createElement("div");
+        paneContainer.style.position = "absolute";
+        paneContainer.style.inset = "0";
+        paneContainer.style.width = "100%";
+        paneContainer.style.height = "100%";
+        paneContainer.style.pointerEvents = "none";
+        pane.appendChild(paneContainer);
+
+        const center = map.getCenter();
+        glMap = new maplibregl.Map({
+          container: paneContainer,
           style: OPENWATERS_STYLE,
-          pane: OPENWATERS_PANE,
+          center: [center.lng, center.lat],
+          zoom: Math.max(0, map.getZoom() - 1),
           interactive: false,
           attributionControl: false,
           renderWorldCopies: true,
-        } as any).addTo(map);
+          fadeDuration: 0,
+        });
 
-        const glMap = openWatersLayer.getMaplibreMap();
+        const sync = () => {
+          if (!glMap || disposed) return;
+          const nextCenter = map.getCenter();
+          glMap.jumpTo({
+            center: [nextCenter.lng, nextCenter.lat],
+            zoom: Math.max(0, map.getZoom() - 1),
+            bearing: 0,
+            pitch: 0,
+          });
+          glMap.resize();
+        };
+
+        for (const eventName of ["move", "zoom", "moveend", "zoomend", "resize"]) {
+          map.on(eventName, sync);
+          boundEvents.push([eventName, sync]);
+        }
+
         glMap.once("load", () => {
           if (disposed) return;
+          sync();
 
           map.eachLayer((layer: any) => {
             if (!isLegacyBaseLayer(layer)) return;
@@ -94,17 +124,23 @@ export function MainMapOpenWatersLayer() {
       window.removeEventListener("navdash-leaflet-map-ready", onMapReady);
       const element = document.getElementById(MAP_ELEMENT_ID) as any;
       const map = element?.__navdashLeafletMap;
-      if (map && attributionControl) {
-        try { map.removeControl(attributionControl); } catch {}
-      }
-      if (map && openWatersLayer) {
-        try { map.removeLayer(openWatersLayer); } catch {}
-      }
       if (map) {
+        for (const [eventName, handler] of boundEvents) {
+          try { map.off(eventName, handler); } catch {}
+        }
+        if (attributionControl) {
+          try { map.removeControl(attributionControl); } catch {}
+        }
         for (const layer of removedLegacyLayers) {
           try { layer.addTo(map); } catch {}
         }
       }
+      if (glMap) {
+        try { glMap.remove(); } catch {}
+        glMap = null;
+      }
+      if (paneContainer?.parentElement) paneContainer.parentElement.removeChild(paneContainer);
+      paneContainer = null;
     };
   }, []);
 
