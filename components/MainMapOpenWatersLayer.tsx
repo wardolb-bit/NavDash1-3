@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 
 const MAP_ELEMENT_ID = "navmap-main-isolated-v2";
-const OPENWATERS_PANE = "navmap-openwaters-v1";
 const OPENWATERS_STYLE = "https://tiles.openwaters.io/seamap/style.json";
 
 function isLegacyBaseLayer(layer: any) {
@@ -16,7 +15,7 @@ export function MainMapOpenWatersLayer() {
     let disposed = false;
     let retryTimer = 0;
     let glMap: any = null;
-    let paneContainer: HTMLDivElement | null = null;
+    let mapContainer: HTMLDivElement | null = null;
     let attributionControl: any = null;
     const removedLegacyLayers: any[] = [];
     const boundEvents: Array<[string, () => void]> = [];
@@ -44,22 +43,20 @@ export function MainMapOpenWatersLayer() {
         const MapLibreMap: any = maplibreModule.Map || maplibreModule.default?.Map;
         if (disposed || !MapLibreMap) return;
 
-        let pane: any = map.getPane(OPENWATERS_PANE);
-        if (!pane) pane = map.createPane(OPENWATERS_PANE);
-        pane.style.zIndex = "180";
-        pane.style.pointerEvents = "none";
-
-        paneContainer = document.createElement("div");
-        paneContainer.style.position = "absolute";
-        paneContainer.style.inset = "0";
-        paneContainer.style.width = "100%";
-        paneContainer.style.height = "100%";
-        paneContainer.style.pointerEvents = "none";
-        pane.appendChild(paneContainer);
+        mapContainer = document.createElement("div");
+        mapContainer.className = "navdash-openwaters-map";
+        mapContainer.style.position = "absolute";
+        mapContainer.style.inset = "0";
+        mapContainer.style.width = "100%";
+        mapContainer.style.height = "100%";
+        mapContainer.style.zIndex = "150";
+        mapContainer.style.pointerEvents = "none";
+        mapContainer.style.overflow = "hidden";
+        element.appendChild(mapContainer);
 
         const center = map.getCenter();
         glMap = new MapLibreMap({
-          container: paneContainer,
+          container: mapContainer,
           style: OPENWATERS_STYLE,
           center: [center.lng, center.lat],
           zoom: Math.max(0, map.getZoom() - 1),
@@ -139,13 +136,24 @@ export function MainMapOpenWatersLayer() {
         try { glMap.remove(); } catch {}
         glMap = null;
       }
-      if (paneContainer?.parentElement) paneContainer.parentElement.removeChild(paneContainer);
-      paneContainer = null;
+      if (mapContainer?.parentElement) mapContainer.parentElement.removeChild(mapContainer);
+      mapContainer = null;
     };
   }, []);
 
   return (
     <style jsx global>{`
+      #${MAP_ELEMENT_ID} > .navdash-openwaters-map {
+        position: absolute !important;
+        inset: 0 !important;
+        z-index: 150 !important;
+        pointer-events: none !important;
+      }
+      #${MAP_ELEMENT_ID} > .navdash-openwaters-map .maplibregl-canvas-container,
+      #${MAP_ELEMENT_ID} > .navdash-openwaters-map .maplibregl-canvas {
+        width: 100% !important;
+        height: 100% !important;
+      }
       .navdash-openwaters-attribution {
         padding: 2px 5px;
         border: 1px solid rgba(0,0,0,.18);
