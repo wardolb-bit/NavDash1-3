@@ -7,11 +7,13 @@ const SUPABASE_URL = "https://uujlsvgromzapubtinfg.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_f9vBEVE5oMGl1GeLTVUFVg_7a48xwEe";
 const TABLE_URL = `${SUPABASE_URL}/rest/v1/navdash_route_state`;
 
+type GeometryType = "GreatCircle" | "Loxodrome";
 type Waypoint = {
   id: string;
   name: string;
   lat: number;
   lon: number;
+  geometryType?: GeometryType;
 };
 
 type RouteState = {
@@ -31,6 +33,13 @@ function headers(extra: Record<string, string> = {}) {
   };
 }
 
+function normalizeGeometry(value: unknown): GeometryType | undefined {
+  if (typeof value !== "string") return undefined;
+  if (/great/i.test(value)) return "GreatCircle";
+  if (/lox|rhumb/i.test(value)) return "Loxodrome";
+  return undefined;
+}
+
 function normalizeRoutePayload(payload: any): RouteState | null {
   const rawWaypoints = Array.isArray(payload?.waypoints) ? payload.waypoints : [];
 
@@ -44,6 +53,7 @@ function normalizeRoutePayload(payload: any): RouteState | null {
         name: typeof wp?.name === "string" && wp.name.trim() ? wp.name : `Waypoint ${index + 1}`,
         lat,
         lon,
+        geometryType: normalizeGeometry(wp?.geometryType),
       };
     })
     .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon))
