@@ -16,6 +16,16 @@ type AisAton = {
   updatedAt: number;
 };
 
+type JcgAton = {
+  type: "lighthouse" | "buoy" | "beacon" | "other";
+  lat: number;
+  lon: number;
+  number: string;
+  name: string;
+  reading: string;
+  source: string;
+};
+
 type MultipartAssembly = {
   total: number;
   parts: string[];
@@ -143,6 +153,30 @@ function atonTooltip(aton: AisAton) {
   return `<strong>${title}</strong><br>MMSI ${aton.mmsi}<br>TYPE ${escapeHtml(atonTypeLabel(aton.aidType))}<br>STATUS ${status}<br>AIS AtoN ${mode}`;
 }
 
+function jcgTypeLabel(type: JcgAton["type"]) {
+  if (type === "buoy") return "LIGHT BUOY";
+  if (type === "beacon") return "LIGHT BEACON";
+  if (type === "lighthouse") return "LIGHTHOUSE";
+  return "OTHER LIGHT";
+}
+
+function jcgIconHtml(aton: JcgAton) {
+  const config = aton.type === "buoy"
+    ? { color: "#22d3ee", shape: '<circle cx="9" cy="9" r="6"/>' }
+    : aton.type === "beacon"
+      ? { color: "#a78bfa", shape: '<path d="M9 2 L16 16 L2 16 Z"/>' }
+      : aton.type === "lighthouse"
+        ? { color: "#fbbf24", shape: '<rect x="3" y="3" width="12" height="12" rx="1"/>' }
+        : { color: "#e2e8f0", shape: '<path d="M9 2 L16 9 L9 16 L2 9 Z"/>' };
+  return `<div style="width:18px;height:18px;filter:drop-shadow(0 0 2px rgba(0,0,0,.9))"><svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg"><g fill="#071019" stroke="${config.color}" stroke-width="2">${config.shape}</g></svg></div>`;
+}
+
+function jcgTooltip(aton: JcgAton) {
+  const title = aton.name || aton.reading || jcgTypeLabel(aton.type);
+  const number = aton.number ? `<br>JCG AtoN ${escapeHtml(aton.number)}` : "";
+  return `<strong>${escapeHtml(title)}</strong><br>${jcgTypeLabel(aton.type)}${number}<br>Japan Coast Guard · Umi-shiru<br><small>This service uses information obtained via the Umi-shiru API. The Japan Coast Guard does not guarantee this service's content.</small>`;
+}
+
 function normalizeTime(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) return value < 10_000_000_000 ? value * 1000 : value;
   if (typeof value === "string") {
@@ -179,12 +213,17 @@ export function MainMapAisAtons() {
   const fragmentsRef = useRef<Map<string, MultipartAssembly>>(new Map());
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
+  const jcgLayerRef = useRef<any>(null);
 
   useEffect(() => {
     let disposed = false;
     let socket: WebSocket | null = null;
     let reconnectTimer = 0;
     let ageTimer = 0;
+    let jcgTimer = 0;
+    let jcgRequest = 0;
+    let jcgLastKey = "";
+    let jcgBoundMap: any = null;
 
     const drawAton = (aton: AisAton, leaflet?: any) => {
       if (!mapRef.current || !layerRef.current) return;
@@ -217,6 +256,67 @@ export function MainMapAisAtons() {
       else void import("leaflet").then(update);
     };
 
+    const refreshJcgAtons = async () => {
+      const map = mapRef.current;
+      const layer = jcgLayerRef.current;
+      if (disposed || !map || !layer) return;
+
+      const center = map.getCenter();
+      const normalizedCenterLon = ((((center.lng + 180) % 360) + 360) % 360) - 180;
+      if (map.getZoom() < 7 || normalizedCenterLon < 120 || normalizedCenterLon > 156 || center.lat < 18 || center.lat > 49) {
+        jcgLastKey = "";
+        layer.clearLayers();
+        return;
+      }
+
+      const bounds = map.getBounds();
+      const worldShift = 360 * Math.round(center.lng / 360);
+      const west = Math.max(122, bounds.getWest() - worldShift);
+      const east = Math.min(154, bounds.getEast() - worldShift);
+      const south = Math.max(20, bounds.getSouth());
+      const north = Math.min(47, bounds.getNorth());
+      if (!(west < east && south < north)) {
+        jcgLastKey = "";
+        layer.clearLayers();
+        return;
+      }
+
+      const key = `${west.toFixed(2)}|${south.toFixed(2)}|${east.toFixed(2)}|${north.toFixed(2)}`;
+      if (key === jcgLastKey) return;
+      jcgLastKey = key;
+      const requestId = ++jcgRequest;
+
+      try {
+        const params = new URLSearchParams({ west: String(west), south: String(south), east: String(east), north: String(north) });
+        const response = await fetch(`/api/japan-atons?${params.toString()}`, { cache: "no-store" });
+        if (!response.ok) return;
+        const payload = await response.json();
+        if (disposed || requestId !== jcgRequest || !jcgLayerRef.current) return;
+        const aids: JcgAton[] = Array.isArray(payload?.aids) ? payload.aids : [];
+        const L = await import("leaflet");
+        if (disposed || requestId !== jcgRequest || !jcgLayerRef.current) return;
+
+        jcgLayerRef.current.clearLayers();
+        for (const aton of aids) {
+          if (!Number.isFinite(aton.lat) || !Number.isFinite(aton.lon)) continue;
+          const icon = L.divIcon({
+            className: "navmap-main-jcg-aton-icon",
+            html: jcgIconHtml(aton),
+            iconSize: [18, 18],
+            iconAnchor: [9, 9],
+          });
+          L.marker([aton.lat, aton.lon], { icon, pane: "navmap-main-jcg-atons-v1", interactive: true })
+            .bindTooltip(jcgTooltip(aton), { direction: "top", opacity: 0.97, pane: "navmap-main-ais-info-v1" })
+            .addTo(jcgLayerRef.current);
+        }
+      } catch {}
+    };
+
+    const scheduleJcgRefresh = () => {
+      window.clearTimeout(jcgTimer);
+      jcgTimer = window.setTimeout(() => { void refreshJcgAtons(); }, 120);
+    };
+
     const ensureLayer = async () => {
       if (disposed) return;
       const element = document.getElementById("navmap-main-isolated-v2") as any;
@@ -225,16 +325,28 @@ export function MainMapAisAtons() {
         reconnectTimer = window.setTimeout(ensureLayer, 250);
         return;
       }
-      if (mapRef.current === map && layerRef.current) return;
+      if (mapRef.current === map && layerRef.current && jcgLayerRef.current) return;
 
+      if (jcgBoundMap) {
+        try { jcgBoundMap.off("moveend", scheduleJcgRefresh); } catch {}
+        try { jcgBoundMap.off("zoomend", scheduleJcgRefresh); } catch {}
+        jcgBoundMap = null;
+      }
       if (layerRef.current && mapRef.current) {
         try { mapRef.current.removeLayer(layerRef.current); } catch {}
+      }
+      if (jcgLayerRef.current && mapRef.current) {
+        try { mapRef.current.removeLayer(jcgLayerRef.current); } catch {}
       }
       markersRef.current.clear();
 
       const L = await import("leaflet");
       if (disposed) return;
       mapRef.current = map;
+      if (!map.getPane("navmap-main-jcg-atons-v1")) {
+        const pane = map.createPane("navmap-main-jcg-atons-v1");
+        pane.style.zIndex = "714";
+      }
       if (!map.getPane("navmap-main-ais-atons-v1")) {
         const pane = map.createPane("navmap-main-ais-atons-v1");
         pane.style.zIndex = "716";
@@ -244,8 +356,13 @@ export function MainMapAisAtons() {
         pane.style.zIndex = "760";
         pane.style.pointerEvents = "none";
       }
+      jcgLayerRef.current = L.layerGroup([], { pane: "navmap-main-jcg-atons-v1" } as any).addTo(map);
       layerRef.current = L.layerGroup([], { pane: "navmap-main-ais-atons-v1" } as any).addTo(map);
       for (const aton of atonsRef.current.values()) drawAton(aton, L);
+      jcgBoundMap = map;
+      map.on("moveend", scheduleJcgRefresh);
+      map.on("zoomend", scheduleJcgRefresh);
+      scheduleJcgRefresh();
     };
 
     const applyAton = (aton: AisAton | null) => {
@@ -352,7 +469,12 @@ export function MainMapAisAtons() {
       disposed = true;
       window.removeEventListener("navdash-leaflet-map-ready", onMapReady);
       window.clearTimeout(reconnectTimer);
+      window.clearTimeout(jcgTimer);
       window.clearInterval(ageTimer);
+      if (jcgBoundMap) {
+        try { jcgBoundMap.off("moveend", scheduleJcgRefresh); } catch {}
+        try { jcgBoundMap.off("zoomend", scheduleJcgRefresh); } catch {}
+      }
       if (socket) {
         socket.onclose = null;
         socket.close();
@@ -360,7 +482,11 @@ export function MainMapAisAtons() {
       if (layerRef.current && mapRef.current) {
         try { mapRef.current.removeLayer(layerRef.current); } catch {}
       }
+      if (jcgLayerRef.current && mapRef.current) {
+        try { mapRef.current.removeLayer(jcgLayerRef.current); } catch {}
+      }
       layerRef.current = null;
+      jcgLayerRef.current = null;
       mapRef.current = null;
       markersRef.current.clear();
       atonsRef.current.clear();
