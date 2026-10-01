@@ -46,18 +46,19 @@ type AtmosResponse = {
 };
 
 const UA = "NavDash NOAA route weather (wardmaritimegroup.com)";
-// Keep the route request compact enough for Vercel/NOMADS, but cover the full
-// 120-hour horizon currently supported by the GRIB route samplers. The old
-// 24-hour list made any voyage departure more than a day away appear to have
-// zero weather coverage even though GFS data was available.
+// Keep the forecast horizon compact enough for Vercel/NOMADS while sampling
+// the route itself at operational spacing. GFS/WW3 sample the decoded GRIB
+// fields in memory, so route-point density does not create extra NOAA model
+// downloads. NWS point-grid fallback remains separately capped below.
 const TARGET_HOURS = [0, 6, 12, 24, 48, 72, 96, 120];
 const SAMPLE_SPACING_NM = 35;
-const MAX_SAMPLES = 9;
+const MAX_ROUTE_SAMPLES = 120;
+const MAX_NWS_FALLBACK_SAMPLES = 9;
 
 function routeSamples(route: Waypoint[]): SamplePoint[] {
   if (route.length < 2) return [];
   const total = routeDistanceNm(route);
-  const count = Math.min(MAX_SAMPLES, Math.max(2, Math.ceil(total / SAMPLE_SPACING_NM) + 1));
+  const count = Math.min(MAX_ROUTE_SAMPLES, Math.max(2, Math.ceil(total / SAMPLE_SPACING_NM) + 1));
   const samples: SamplePoint[] = [];
   for (let index = 0; index < count; index += 1) {
     const distanceNm = total * (index / (count - 1));
@@ -65,6 +66,17 @@ function routeSamples(route: Waypoint[]): SamplePoint[] {
     if (point) samples.push({ lat: point.lat, lon: point.lon, distanceNm });
   }
   return samples;
+}
+
+function nwsFallbackSampleIndexes(sampleCount: number) {
+  if (sampleCount <= MAX_NWS_FALLBACK_SAMPLES) {
+    return Array.from({ length: sampleCount }, (_, index) => index);
+  }
+  const indexes = new Set<number>();
+  for (let index = 0; index < MAX_NWS_FALLBACK_SAMPLES; index += 1) {
+    indexes.add(Math.round(index * (sampleCount - 1) / (MAX_NWS_FALLBACK_SAMPLES - 1)));
+  }
+  return Array.from(indexes).sort((a, b) => a - b);
 }
 
 function parseDurationMs(duration: string) {
@@ -154,10 +166,14 @@ export async function POST(request: Request) {
     now.setUTCMinutes(0, 0, 0);
     const validTimes = TARGET_HOURS.map((hours) => new Date(now.getTime() + hours * 3600000));
     const samples = routeSamples(route);
+    const fallbackIndexes = nwsFallbackSampleIndexes(samples.length);
     const origin = url.origin;
 
-    const [nwsResults, atmosResult] = await Promise.all([
-      Promise.all(samples.map((point) => sampleNwsPoint(point, validTimes))),
+    const [nwsFallbackResults, atmosResult] = await Promise.all([
+      Promise.all(fallbackIndexes.map(async (sampleIndex) => ({
+        sampleIndex,
+        result: await sampleNwsPoint(samples[sampleIndex], validTimes),
+      }))),
       nwsOnly
         ? Promise.resolve({ ok: false, json: null })
         : fetch(`${origin}/api/gfs-atmos-route`, {
@@ -168,13 +184,14 @@ export async function POST(request: Request) {
           }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
     ]);
 
+    const nwsBySampleIndex = new Map(nwsFallbackResults.map(({ sampleIndex, result }) => [sampleIndex, result]));
     const atmos = atmosResult.ok ? atmosResult.json as AtmosResponse : null;
     const atmosFrames = Array.isArray(atmos?.frames) ? atmos!.frames! : [];
 
     const frames: MarkerFrame[] = validTimes.map((validAt, frameIndex) => {
       const atmosFrame = atmosFrames.length ? nearestAtmosFrame(atmosFrames, validAt) : null;
       const points = samples.map((sample, sampleIndex): ForecastPoint => {
-        const nws = nwsResults[sampleIndex]?.[frameIndex] || null;
+        const nws = nwsBySampleIndex.get(sampleIndex)?.[frameIndex] || null;
         const grib = atmosFrame ? nearestAtmosPoint(atmosFrame.points, sample) : null;
         return {
           lat: sample.lat,
