@@ -11,6 +11,8 @@ import {
   routeSliceBetweenDistances as canonicalRouteSliceBetweenDistances,
   type LegGeometry,
 } from "../../lib/routeNavigation";
+import { projectPositionOntoRouteGeometry } from "../../lib/routeProgress";
+import { useOwnShipAis } from "../../lib/useOwnShipAis";
 
 type GeoPoint = { lat: number; lon: number };
 type Waypoint = GeoPoint & { name: string; geometryType?: LegGeometry };
@@ -62,6 +64,8 @@ const ENC_BRIGHTNESS_MIN = 40;
 const ENC_BRIGHTNESS_MAX = 140;
 const ENC_BRIGHTNESS_STEP = 10;
 const ROUTE_GEOMETRY_STEP_NM = 50;
+const LIVE_ROUTE_GEOMETRY_STEP_NM = 2;
+const LIVE_ROUTE_ANCHOR_MAX_XTE_NM = 50;
 
 function clampEncBrightness(value: number) {
   return Math.max(ENC_BRIGHTNESS_MIN, Math.min(ENC_BRIGHTNESS_MAX, Math.round(value / ENC_BRIGHTNESS_STEP) * ENC_BRIGHTNESS_STEP));
@@ -254,8 +258,20 @@ export default function RouteWeatherLabPage() {
   const [showSeas, setShowSeas] = useState(true);
   const [mode, setMode] = useState<"encounter" | "time">("encounter");
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const ownShip = useOwnShipAis();
 
   const totalNm = useMemo(() => routeDistanceNm(route), [route]);
+  const liveRouteGeometry = useMemo(
+    () => routeGeometryPoints(route, LIVE_ROUTE_GEOMETRY_STEP_NM),
+    [route],
+  );
+  const liveRouteProjection = useMemo(
+    () => ownShip ? projectPositionOntoRouteGeometry(ownShip, liveRouteGeometry) : null,
+    [ownShip, liveRouteGeometry],
+  );
+  const liveRouteAnchor = liveRouteProjection && liveRouteProjection.crossTrackNm <= LIVE_ROUTE_ANCHOR_MAX_XTE_NM
+    ? liveRouteProjection
+    : null;
 
   useEffect(() => {
     try {
@@ -480,20 +496,38 @@ export default function RouteWeatherLabPage() {
 
   const encounter = useMemo<EncounterPoint[]>(() => {
     if (!weather?.frames?.length || !Number.isFinite(speedKt) || speedKt <= 0) return [];
+
     const dep = new Date(departure);
-    if (!Number.isFinite(dep.getTime())) return [];
+    const usingLiveAnchor = Boolean(liveRouteAnchor && ownShip);
+    if (!usingLiveAnchor && !Number.isFinite(dep.getTime())) return [];
+
+    const anchorDistanceNm = liveRouteAnchor?.distanceNm ?? 0;
+    const anchorTimeMs = usingLiveAnchor ? ownShip!.receivedAtMs : dep.getTime();
     const generatedAt = new Date(weather.generatedAt).getTime();
     const validFrameTimes = weather.frames.map((frame) => new Date(frame.validAt).getTime()).filter(Number.isFinite);
     if (!validFrameTimes.length) return [];
+
     const latestValidMs = Math.max(...validFrameTimes);
-    const latestFrame = weather.frames.reduce((latest, frame) => new Date(frame.validAt).getTime() > new Date(latest.validAt).getTime() ? frame : latest, weather.frames[0]);
+    const latestFrame = weather.frames.reduce(
+      (latest, frame) => new Date(frame.validAt).getTime() > new Date(latest.validAt).getTime() ? frame : latest,
+      weather.frames[0],
+    );
     const count = weather.frames[0]?.points?.length || 0;
     const rows: EncounterPoint[] = [];
+
     for (let i = 0; i < count; i += 1) {
       const first = weather.frames[0].points[i];
       if (!first) continue;
-      const eta = new Date(dep.getTime() + (first.distanceNm / speedKt) * 3600000);
-      const leadHours = Number.isFinite(generatedAt) ? Math.max(0, (eta.getTime() - generatedAt) / 3600000) : Math.max(0, (eta.getTime() - dep.getTime()) / 3600000);
+      if (usingLiveAnchor && first.distanceNm < anchorDistanceNm - 0.1) continue;
+
+      const remainingToSampleNm = usingLiveAnchor
+        ? Math.max(0, first.distanceNm - anchorDistanceNm)
+        : first.distanceNm;
+      const eta = new Date(anchorTimeMs + (remainingToSampleNm / speedKt) * 3600000);
+      const leadHours = Number.isFinite(generatedAt)
+        ? Math.max(0, (eta.getTime() - generatedAt) / 3600000)
+        : Math.max(0, (eta.getTime() - anchorTimeMs) / 3600000);
+
       if (eta.getTime() > latestValidMs) {
         const latestPoint = latestFrame.points[i] || first;
         rows.push({
@@ -518,29 +552,60 @@ export default function RouteWeatherLabPage() {
         });
         continue;
       }
+
       let bestFrame = weather.frames[0];
       let bestDelta = Math.abs(new Date(bestFrame.validAt).getTime() - eta.getTime());
       for (const frame of weather.frames) {
         const delta = Math.abs(new Date(frame.validAt).getTime() - eta.getTime());
-        if (delta < bestDelta) { bestFrame = frame; bestDelta = delta; }
+        if (delta < bestDelta) {
+          bestFrame = frame;
+          bestDelta = delta;
+        }
       }
-      const p = bestFrame.points[i];
-      if (!p) continue;
-      rows.push({ ...p, eta, validAt: new Date(bestFrame.validAt), deltaHours: bestDelta / 3600000, leadHours, confidenceLabel: forecastConfidence(leadHours), beyondHorizon: false });
+
+      const point = bestFrame.points[i];
+      if (!point) continue;
+      rows.push({
+        ...point,
+        eta,
+        validAt: new Date(bestFrame.validAt),
+        deltaHours: bestDelta / 3600000,
+        leadHours,
+        confidenceLabel: forecastConfidence(leadHours),
+        beyondHorizon: false,
+      });
     }
+
     return rows;
-  }, [weather, speedKt, departure]);
+  }, [weather, speedKt, departure, liveRouteAnchor, ownShip]);
 
   const routeWxCoverage = useMemo(() => {
-    const voyageHours = Number.isFinite(speedKt) && speedKt > 0 ? totalNm / speedKt : 0;
-    if (!weather?.frames?.length || voyageHours <= 0) return { voyageHours, coveredHours: 0, percent: 0, latestValid: null as Date | null };
+    const usingLiveAnchor = Boolean(liveRouteAnchor && ownShip);
+    const remainingNm = usingLiveAnchor ? Math.max(0, totalNm - liveRouteAnchor!.distanceNm) : totalNm;
+    const voyageHours = Number.isFinite(speedKt) && speedKt > 0 ? remainingNm / speedKt : 0;
+    if (!weather?.frames?.length || voyageHours <= 0) {
+      return { voyageHours, coveredHours: 0, percent: 0, latestValid: null as Date | null };
+    }
+
     const dep = new Date(departure);
-    if (!Number.isFinite(dep.getTime())) return { voyageHours, coveredHours: 0, percent: 0, latestValid: null as Date | null };
+    const anchorTimeMs = usingLiveAnchor ? ownShip!.receivedAtMs : dep.getTime();
+    if (!Number.isFinite(anchorTimeMs)) {
+      return { voyageHours, coveredHours: 0, percent: 0, latestValid: null as Date | null };
+    }
+
     const latestMs = Math.max(...weather.frames.map((frame) => new Date(frame.validAt).getTime()).filter(Number.isFinite));
-    if (!Number.isFinite(latestMs)) return { voyageHours, coveredHours: 0, percent: 0, latestValid: null as Date | null };
-    const coveredHours = Math.max(0, Math.min(voyageHours, (latestMs - dep.getTime()) / 3600000));
-    return { voyageHours, coveredHours, percent: voyageHours > 0 ? (coveredHours / voyageHours) * 100 : 0, latestValid: new Date(latestMs) };
-  }, [weather, departure, totalNm, speedKt]);
+    if (!Number.isFinite(latestMs)) {
+      return { voyageHours, coveredHours: 0, percent: 0, latestValid: null as Date | null };
+    }
+
+    const coveredHours = Math.max(0, Math.min(voyageHours, (latestMs - anchorTimeMs) / 3600000));
+    return {
+      voyageHours,
+      coveredHours,
+      percent: voyageHours > 0 ? (coveredHours / voyageHours) * 100 : 0,
+      latestValid: new Date(latestMs),
+    };
+  }, [weather, departure, totalNm, speedKt, liveRouteAnchor, ownShip]);
 
   const displayedPoints = useMemo<ForecastPoint[]>(() => {
     if (!weather) return [];
@@ -555,11 +620,18 @@ export default function RouteWeatherLabPage() {
 
   const expectedVesselNm = useMemo(() => {
     if (mode !== "time" || !selectedFrame || !route.length) return null;
-    const dep = new Date(departure);
     const valid = new Date(selectedFrame.validAt);
-    if (!Number.isFinite(dep.getTime()) || !Number.isFinite(valid.getTime())) return null;
+    if (!Number.isFinite(valid.getTime())) return null;
+
+    if (liveRouteAnchor && ownShip) {
+      const hoursAhead = Math.max(0, (valid.getTime() - ownShip.receivedAtMs) / 3600000);
+      return Math.max(0, Math.min(totalNm, liveRouteAnchor.distanceNm + hoursAhead * speedKt));
+    }
+
+    const dep = new Date(departure);
+    if (!Number.isFinite(dep.getTime())) return null;
     return Math.max(0, Math.min(totalNm, ((valid.getTime() - dep.getTime()) / 3600000) * speedKt));
-  }, [mode, selectedFrame, departure, route.length, totalNm, speedKt]);
+  }, [mode, selectedFrame, departure, route.length, totalNm, speedKt, liveRouteAnchor, ownShip]);
 
   useEffect(() => {
     async function drawWeather() {
@@ -618,17 +690,31 @@ export default function RouteWeatherLabPage() {
         ].filter(Boolean).join("<br/>")).addTo(layer);
       });
 
+      if (liveRouteAnchor && ownShip) {
+        L.circleMarker([ownShip.lat, ownShip.lon], {
+          radius: 7,
+          color: "#071019",
+          weight: 2,
+          fillColor: "#f1d56b",
+          fillOpacity: 1,
+        }).bindTooltip(
+          `<b>LIVE OWN SHIP</b><br/>${liveRouteAnchor.distanceNm.toFixed(1)} NM along route<br/>XTE ${liveRouteAnchor.crossTrackNm.toFixed(2)} NM`,
+          { direction: "top", opacity: 0.98 },
+        ).addTo(layer);
+      }
+
       if (expectedVesselNm !== null) {
         const position = pointAtDistance(route, expectedVesselNm);
         if (position && selectedFrame) {
+          const label = liveRouteAnchor ? "AIS-ANCHORED EXPECTED POSITION" : "EXPECTED VESSEL POSITION";
           L.circleMarker([position.lat, position.lon], { radius: 9, color: "#f8fafc", weight: 2, fillColor: "#22d3ee", fillOpacity: 0.95 })
-            .bindTooltip(`<b>EXPECTED VESSEL POSITION</b><br/>${expectedVesselNm.toFixed(0)} NM along route<br/>${formatWhen(new Date(selectedFrame.validAt))}`, { direction: "top", opacity: 0.98 }).addTo(layer);
+            .bindTooltip(`<b>${label}</b><br/>${expectedVesselNm.toFixed(0)} NM along route<br/>${formatWhen(new Date(selectedFrame.validAt))}`, { direction: "top", opacity: 0.98 }).addTo(layer);
           L.circleMarker([position.lat, position.lon], { radius: 15, color: "#22d3ee", weight: 1, fillOpacity: 0, opacity: 0.45, interactive: false }).addTo(layer);
         }
       }
     }
     drawWeather();
-  }, [displayedPoints, showWind, showSeas, mode, selectedFrame, route, focusedIndex, expectedVesselNm]);
+  }, [displayedPoints, showWind, showSeas, mode, selectedFrame, route, focusedIndex, expectedVesselNm, liveRouteAnchor, ownShip]);
 
   async function loadRouteFile(file: File) {
     try {
@@ -694,9 +780,9 @@ export default function RouteWeatherLabPage() {
       <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="border border-slate-700/50 bg-[#071019] p-2">
           <div className="mb-2 flex flex-wrap items-center gap-2"><label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && loadRouteFile(e.target.files[0])} /></label><button type="button" onClick={() => loadCurrentRoute(false)} disabled={loadingCurrentRoute} className="border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{loadingCurrentRoute ? "LOADING CURRENT ROUTE…" : "LOAD CURRENT ROUTE"}</button><button type="button" disabled={route.length < 2} onClick={analyze} className="border border-emerald-400/40 bg-[#08130f] px-3 py-2 text-[10px] font-black text-emerald-200 disabled:opacity-40">ANALYZE ROUTE</button><button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button><button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button></div>
-          {weather && <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-5"><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MODE</div><div className="mt-1 text-xs font-black text-cyan-200">{mode === "encounter" ? "ROUTE ENCOUNTER" : "WEATHER TIME"}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX SEAS</div><div className="mt-1 text-lg font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "--" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX WIND</div><div className="mt-1 text-lg font-black text-cyan-300">{maxWind?.windKt == null ? "--" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div><div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : `${totalNm.toFixed(0)} NM`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">ROUTE WX COVERAGE</div><div className="mt-1 text-xs font-black text-emerald-200">{formatHours(routeWxCoverage.coveredHours)} of {formatHours(routeWxCoverage.voyageHours)}</div><div className="mt-1 text-[9px] font-bold text-slate-500">{routeWxCoverage.percent.toFixed(0)}% of voyage</div></div></div>}
+          {weather && <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-5"><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MODE</div><div className="mt-1 text-xs font-black text-cyan-200">{mode === "encounter" ? "ROUTE ENCOUNTER" : "WEATHER TIME"}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX SEAS</div><div className="mt-1 text-lg font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "--" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX WIND</div><div className="mt-1 text-lg font-black text-cyan-300">{maxWind?.windKt == null ? "--" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div><div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : `${totalNm.toFixed(0)} NM`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">ROUTE WX COVERAGE</div><div className="mt-1 text-xs font-black text-emerald-200">{formatHours(routeWxCoverage.coveredHours)} of {formatHours(routeWxCoverage.voyageHours)}</div><div className="mt-1 text-[9px] font-bold text-slate-500">{routeWxCoverage.percent.toFixed(0)}% of {liveRouteAnchor ? "remaining voyage" : "voyage"}</div></div></div>}
           <div className="relative overflow-hidden border border-slate-800"><div id="route-weather-lab-map" ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />{weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • arrows = wind flow • hover for details</div>}</div>
-          {weather && mode === "time" && <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div><input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} /><div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>EARLIEST</span><span>GHOST VESSEL SHOWS EXPECTED POSITION</span><span>LATEST</span></div></div>}
+          {weather && mode === "time" && <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div><input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} /><div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>EARLIEST</span><span>{liveRouteAnchor ? `AIS ANCHORED • ${liveRouteAnchor.distanceNm.toFixed(0)} NM ALONG ROUTE` : "GHOST VESSEL USES DEPARTURE + SPEED"}</span><span>LATEST</span></div></div>}
         </section>
         <aside className="space-y-2">
           <section className="border border-slate-700/50 bg-[#071019] p-3"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">VOYAGE</div><div className="mt-1 truncate text-sm font-black text-cyan-200">{routeName}</div><div className="mt-3 grid grid-cols-2 gap-2"><label className="text-[9px] font-black text-slate-500">DEPARTURE<input type="datetime-local" value={departure} onChange={(e) => { const next = e.target.value; setDeparture(next); try { window.localStorage.setItem(ROUTE_WEATHER_DEPARTURE_KEY, next); } catch {} }} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label><label className="text-[9px] font-black text-slate-500">SPEED KT<input type="number" min="1" max="30" step="0.1" value={speedKt} onChange={(e) => { const next = Math.max(1, Number(e.target.value) || 1); setSpeedKt(next); try { window.localStorage.setItem(ROUTE_WEATHER_SPEED_KEY, String(next)); } catch {} }} className="mt-1 w-full border border-slate-700 bg-[#050a0f] px-2 py-2 text-sm text-slate-100" /></label></div><div className="mt-3 grid grid-cols-3 gap-2 text-center"><div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">WPTS</div><div className="font-black">{route.length || "--"}</div></div><div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">NM</div><div className="font-black">{route.length ? totalNm.toFixed(0) : "--"}</div></div><div className="border border-slate-800 bg-[#050a0f] p-2"><div className="text-[8px] text-slate-500">HOURS</div><div className="font-black">{route.length ? (totalNm / speedKt).toFixed(1) : "--"}</div></div></div></section>
