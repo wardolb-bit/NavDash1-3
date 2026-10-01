@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
+import { normalizeLegGeometry, routeLegDistanceNm, type LegGeometry } from "../../lib/routeNavigation";
 
-type Waypoint = { id: string; name: string; lat: number; lon: number };
+type Waypoint = { id: string; name: string; lat: number; lon: number; geometryType?: LegGeometry };
 type RoutePlan = { routeName: string; waypoints: Waypoint[] };
 type Leg = { index: number; from: Waypoint; to: Waypoint; distance: number; bearing: number };
 type Finding = {
@@ -33,13 +34,6 @@ const WORKBENCH_INPUTS_KEY = "navdash-route-workbench-inputs-v1";
 
 function toRad(v: number) { return v * Math.PI / 180; }
 function toDeg(v: number) { return v * 180 / Math.PI; }
-function nmBetween(a: Pick<Waypoint, "lat" | "lon">, b: Pick<Waypoint, "lat" | "lon">) {
-  const r = 3440.065;
-  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
-  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
 function bearingBetween(a: Waypoint, b: Waypoint) {
   const lat1 = toRad(a.lat), lat2 = toRad(b.lat), dLon = toRad(b.lon - a.lon);
   return (toDeg(Math.atan2(
@@ -59,7 +53,7 @@ function buildLegs(route: RoutePlan | null): Leg[] {
     index: index + 1,
     from: route.waypoints[index],
     to,
-    distance: nmBetween(route.waypoints[index], to),
+    distance: routeLegDistanceNm(route.waypoints[index], to),
     bearing: bearingBetween(route.waypoints[index], to),
   }));
 }
@@ -87,13 +81,15 @@ function parseRtz(xmlText: string): RoutePlan {
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   if (doc.querySelector("parsererror")) throw new Error("Could not parse RTZ/XML route file.");
   const routeNode = doc.querySelector("route,Route") || doc.documentElement;
-  const routeName = getAttr(routeNode, ["name", "Name", "id", "ID"]) || routeNode.querySelector("routeName,name")?.textContent?.trim() || "Loaded RTZ Route";
+  const routeInfo = doc.querySelector("routeInfo,RouteInfo");
+  const routeName = getAttr(routeInfo || routeNode, ["routeName", "RouteName", "name", "Name", "id", "ID"]) || routeNode.querySelector("routeName,name")?.textContent?.trim() || "Loaded RTZ Route";
   const waypoints = Array.from(doc.querySelectorAll("waypoint,Waypoint,wp,WP")).map((node, index) => {
     const pos = node.querySelector("position,Position,pos") || node;
+    const leg = node.querySelector("leg,Leg");
     const lat = parseCoordinate(getAttr(pos, ["lat", "Lat", "latitude", "Latitude"]) || getAttr(node, ["lat", "Lat", "latitude", "Latitude"]), true);
     const lon = parseCoordinate(getAttr(pos, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]) || getAttr(node, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]), false);
     const name = getAttr(node, ["name", "Name", "id", "ID"]) || node.querySelector("name,Name,waypointName,WaypointName")?.textContent?.trim() || `Waypoint ${index + 1}`;
-    return { id: `WP${String(index + 1).padStart(2, "0")}`, name, lat, lon };
+    return { id: `WP${String(index + 1).padStart(2, "0")}`, name, lat, lon, geometryType: normalizeLegGeometry(leg?.getAttribute("geometryType") || leg?.getAttribute("GeometryType")) };
   }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (waypoints.length < 2) throw new Error("Route needs at least two valid waypoints.");
   return { routeName, waypoints };
@@ -105,6 +101,7 @@ function normalizeRoutePayload(payload: any): RoutePlan | null {
     name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`),
     lat: Number(wp?.lat ?? wp?.latitude),
     lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+    geometryType: normalizeLegGeometry(wp?.geometryType),
   })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
   if (waypoints.length < 2) return null;
   return { routeName: String(payload?.routeName || payload?.name || payload?.route?.routeName || "Current NavDash Route"), waypoints };
