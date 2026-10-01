@@ -136,16 +136,16 @@ function formatEvent(event: TideEvent, point: Pick<Waypoint, "lat" | "lon">) {
   const label = event.type === "H" ? "High Tide" : event.type === "L" ? "Low Tide" : event.type;
   return `${label} · ${formatLocalValue(event.time, point)} · ${event.valueFt.toFixed(1)} ft`;
 }
-function TideCard({ title, result, target }: { title: string; result: TideResult | null; target: Date | null }) {
+function TideCard({ title, result, target, timePoint }: { title: string; result: TideResult | null; target: Date | null; timePoint: Pick<Waypoint, "lat" | "lon"> | null }) {
   if (!target) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">Set departure time to calculate tide conditions.</div></div>;
   if (!result?.station) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">{result?.error || "Official tide data unavailable."}</div></div>;
-  const point = result.station;
+  const point = timePoint || result.station;
   const agency = result.station.agency || "Official";
   return <div className="print-sub print-avoid border border-white/10 p-3">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-[12px] font-black">{title}</div><div className="font-mono text-[10px] text-[#42d3c8]">{result.trend || "UNKNOWN"}</div></div>
     <div className="mt-2 text-[11px] leading-5 text-[#8294a5]">
       <b>{result.station.name}</b> · {agency} {result.station.id} · {(result.station.distanceNm ?? 0).toFixed(1)} NM from route endpoint<br/>
-      Target · {formatLocal(target, point)} · Datum {result.datum || "--"}<br/>
+      Target local · {formatLocal(target, point)} · Datum {result.datum || "--"}<br/>
       {result.source ? <>Source · {result.source}</> : null}
       <div className="mt-1 space-y-[1px]">{(result.events || []).map((event, index) => <div key={`${event.time}-${index}`}>{formatEvent(event, point)}</div>)}</div>
       {result.representativeWarning ? <><div className="mt-1"><b>Station caution:</b> {result.representativeWarning}</div></> : null}
@@ -257,11 +257,14 @@ function NavBriefEnhancer() {
     return () => window.clearTimeout(timer);
   }, [route, departureDate?.getTime(), eta?.getTime(), tides.loading]);
 
+  const origin = route?.waypoints[0] || null;
+  const destination = route?.waypoints[route.waypoints.length - 1] || null;
+
   if (!mount) return null;
   return createPortal(<div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
     {tides.loading ? <div className="col-span-full print-sub border border-white/10 p-3 text-[11px] text-[#8294a5]">Loading official departure / arrival tide predictions...</div> : null}
     {tides.error ? <div className="col-span-full print-sub border border-white/10 p-3 text-[11px] text-red-300">Tides: {tides.error}</div> : null}
-    {!tides.loading ? <><TideCard title="DEPARTURE TIDES" result={tides.departure} target={departureDate} /><TideCard title="ARRIVAL TIDES" result={tides.arrival} target={eta} /></> : null}
+    {!tides.loading ? <><TideCard title="DEPARTURE TIDES" result={tides.departure} target={departureDate} timePoint={origin} /><TideCard title="ARRIVAL TIDES" result={tides.arrival} target={eta} timePoint={destination} /></> : null}
   </div>, mount);
 }
 
