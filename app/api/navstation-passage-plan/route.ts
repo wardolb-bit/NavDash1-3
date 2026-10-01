@@ -20,6 +20,7 @@ type ParsedWaypoint = {
   xtdPortNm?: number;
   turnRadiusNm?: number;
   references?: string[];
+  note?: string;
 };
 
 function clean(value: string | undefined | null) {
@@ -118,18 +119,26 @@ function parsePartC(text: string, waypoints: Map<number, ParsedWaypoint>) {
   }
 }
 
-function parsePartDForXtd(text: string, waypoints: Map<number, ParsedWaypoint>) {
+function parsePartD(text: string, waypoints: Map<number, ParsedWaypoint>) {
   const part = section(text, /Passage Plan, part D:[\s\S]*?Leg safety parameters\/Remarks/i, /Passage Plan, part E:/i);
 
   for (const block of numberedBlocks(part)) {
     const wp = waypoints.get(block.number);
     if (!wp) continue;
-    const body = block.lines.filter(Boolean).join("\n");
+    const lines = block.lines.map(clean).filter(Boolean);
+    const body = lines.join("\n");
     const xtd = body.match(/(\d+(?:\.\d+)?)\s*NM\s+(\d+(?:\.\d+)?)\s*NM/i);
     if (xtd) {
       wp.xtdStbdNm = Number(xtd[1]);
       wp.xtdPortNm = Number(xtd[2]);
     }
+
+    const note = lines.filter(line =>
+      !/^(?:WP|WPT)\d+\b/i.test(line)
+      && !/^(?:Coastal|Ocean|Pilotage(?:\/fairway\/channel)?|fairway|channel)$/i.test(line)
+      && !/^(?:\d+(?:\.\d+)?\s*(?:NM|min)\s*)+$/i.test(line)
+    ).join(" ").trim();
+    if (note) wp.note = note;
   }
 }
 
@@ -144,7 +153,7 @@ function parsePassagePlan(text: string, fileName: string) {
 
   const waypoints = parsePartA(text);
   parsePartC(text, waypoints);
-  parsePartDForXtd(text, waypoints);
+  parsePartD(text, waypoints);
 
   return {
     sourceFile: fileName,
