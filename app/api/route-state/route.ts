@@ -12,6 +12,7 @@ type Waypoint = {
   name: string;
   lat: number;
   lon: number;
+  geometryType?: "Orthodrome" | "Loxodrome";
 };
 
 type RouteState = {
@@ -44,6 +45,7 @@ function normalizeRoutePayload(payload: any): RouteState | null {
         name: typeof wp?.name === "string" && wp.name.trim() ? wp.name : `Waypoint ${index + 1}`,
         lat,
         lon,
+        geometryType: wp?.geometryType === "Loxodrome" || wp?.geometryType === "Orthodrome" ? wp.geometryType : undefined,
       };
     })
     .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon))
