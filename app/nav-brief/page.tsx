@@ -3,8 +3,15 @@
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 import type { AmiForecastPoint, AmiRouteForecast } from "../../lib/amiRouteForecast";
+import {
+  geodesicDistanceNm,
+  normalizeLegGeometry,
+  routeDistanceNm,
+  routeLegDistanceNm,
+  type LegGeometry,
+} from "../../lib/routeNavigation";
 
-type Waypoint = { id: string; name: string; lat: number; lon: number; rtzNote?: string };
+type Waypoint = { id: string; name: string; lat: number; lon: number; geometryType?: LegGeometry; rtzNote?: string };
 type RouteBrief = { routeName: string; waypoints: Waypoint[] };
 type UserMark = { id: string; name: string; lat: number; lon: number };
 type OverlayResponse = { ok: boolean; forecast?: AmiRouteForecast; error?: string };
@@ -42,12 +49,6 @@ const AMI_OVERLAY_STORAGE_KEY = "navdash-ami-route-forecast-v1";
 
 function toRad(v: number) { return v * Math.PI / 180; }
 function toDeg(v: number) { return v * 180 / Math.PI; }
-function nmBetween(a: Pick<Waypoint, "lat" | "lon">, b: Pick<Waypoint, "lat" | "lon">) {
-  const r = 3440.065;
-  const lat1 = toRad(a.lat), lat2 = toRad(b.lat), dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
 function bearingBetween(a: Waypoint, b: Waypoint) {
   const lat1 = toRad(a.lat), lat2 = toRad(b.lat), dLon = toRad(b.lon - a.lon);
   return (toDeg(Math.atan2(Math.sin(dLon) * Math.cos(lat2), Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon))) + 360) % 360;
@@ -82,7 +83,8 @@ function parseRtz(xmlText: string): RouteBrief {
     const lat = parseCoordinate(getAttr(pos, ["lat", "Lat", "latitude", "Latitude"]) || getAttr(node, ["lat", "Lat", "latitude", "Latitude"]), true);
     const lon = parseCoordinate(getAttr(pos, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]) || getAttr(node, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]), false);
     const incomingLegNote = (getAttr(leg, ["legNote2", "LegNote2"]) || "").replace(/\s+/g, " ").trim();
-    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: findName(node, `Waypoint ${index + 1}`), lat, lon, incomingLegNote };
+    const geometryType = normalizeLegGeometry(getAttr(leg, ["geometryType", "GeometryType"]));
+    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: findName(node, `Waypoint ${index + 1}`), lat, lon, geometryType, incomingLegNote };
   }).filter(wp => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (parsed.length < 2) throw new Error("Route needs at least two valid waypoints.");
   const waypoints: Waypoint[] = parsed.map(({ incomingLegNote: _incomingLegNote, ...wp }) => wp);
@@ -94,7 +96,7 @@ function parseRtz(xmlText: string): RouteBrief {
 }
 function normalizeRoutePayload(payload: any): RouteBrief | null {
   const raw = Array.isArray(payload) ? payload : Array.isArray(payload?.waypoints) ? payload.waypoints : Array.isArray(payload?.route?.waypoints) ? payload.route.waypoints : [];
-  const waypoints = raw.map((wp: any, index: number) => ({ id: String(wp?.id || `WP${String(index + 1).padStart(3, "0")}`), name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`), lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude), rtzNote: typeof wp?.rtzNote === "string" ? wp.rtzNote : undefined })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+  const waypoints = raw.map((wp: any, index: number) => ({ id: String(wp?.id || `WP${String(index + 1).padStart(3, "0")}`), name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`), lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude), geometryType: normalizeLegGeometry(wp?.geometryType), rtzNote: typeof wp?.rtzNote === "string" ? wp.rtzNote : undefined })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
   return waypoints.length < 2 ? null : { routeName: String(payload?.routeName || payload?.name || payload?.route?.routeName || "Current NavDash Route"), waypoints };
 }
 function readCurrentRoute() { try { const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY); return raw ? normalizeRoutePayload(JSON.parse(raw)) : null; } catch { return null; } }
@@ -138,13 +140,13 @@ function parseUserChartText(text: string, fileName: string) {
 }
 function readUserMarks() { try { const parsed = JSON.parse(window.localStorage.getItem(USER_CHART_STORAGE_KEY) || "[]"); return Array.isArray(parsed) ? normalizeMarks(parsed) : []; } catch { return []; } }
 function readAmi(): AmiRouteForecast | null { try { const parsed = JSON.parse(window.localStorage.getItem(AMI_OVERLAY_STORAGE_KEY) || "null") as AmiRouteForecast | null; return parsed?.version === 1 && Array.isArray(parsed.forecastPoints) ? parsed : null; } catch { return null; } }
-function segmentRows(waypoints: Waypoint[]) { return waypoints.slice(1).map((to, index) => ({ from: waypoints[index], to, distance: nmBetween(waypoints[index], to), bearing: bearingBetween(waypoints[index], to) })); }
-function totalDistance(waypoints: Waypoint[]) { return segmentRows(waypoints).reduce((sum, leg) => sum + leg.distance, 0); }
+function segmentRows(waypoints: Waypoint[]) { return waypoints.slice(1).map((to, index) => ({ from: waypoints[index], to, distance: routeLegDistanceNm(waypoints[index], to), bearing: bearingBetween(waypoints[index], to) })); }
+function totalDistance(waypoints: Waypoint[]) { return routeDistanceNm(waypoints); }
 function safeNumber(value: string, fallback: number) { const n = Number(value); return Number.isFinite(n) && n > 0 ? n : fallback; }
 function formatDateTime(date: Date | null) { return !date || !Number.isFinite(date.getTime()) ? "--" : date.toLocaleString(undefined, { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }); }
 function formatUtc(value: string) { const date = new Date(value); return !Number.isFinite(date.getTime()) ? value : date.toLocaleString("en-US", { timeZone: "UTC", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) + "Z"; }
 function closestRouteReference(mark: UserMark, route: Waypoint[]) {
-  return route.reduce((best, waypoint) => { const distance = nmBetween(mark, waypoint); return distance < best.distance ? { distance, waypoint } : best; }, { distance: Number.POSITIVE_INFINITY, waypoint: route[0] });
+  return route.reduce((best, waypoint) => { const distance = geodesicDistanceNm(mark, waypoint); return distance < best.distance ? { distance, waypoint } : best; }, { distance: Number.POSITIVE_INFINITY, waypoint: route[0] });
 }
 function maxBy(points: AmiForecastPoint[], getter: (p: AmiForecastPoint) => number) { return points.reduce<AmiForecastPoint | null>((best, point) => !best || getter(point) > getter(best) ? point : best, null); }
 function normalizedName(value: string) { return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim(); }
@@ -209,7 +211,7 @@ export default function NavBriefBuilderPage() {
     route.waypoints.forEach((wp, index) => {
       const source = navStationForRouteWaypoint(passage, wp, index);
       if (!source || !Number.isFinite(source.lat) || !Number.isFinite(source.lon)) return;
-      const delta = nmBetween(wp, { lat: Number(source.lat), lon: Number(source.lon) });
+      const delta = geodesicDistanceNm(wp, { lat: Number(source.lat), lon: Number(source.lon) });
       if (delta > 0.05) issues.push(`${wp.name}: position differs by ${delta.toFixed(2)} NM`);
     });
     return issues.slice(0, 8);
