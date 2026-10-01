@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { geodesicDistanceNm, normalizeRouteWaypoints, type RouteWaypoint } from "../../../lib/routeNavigation";
 
-type Waypoint = { name?: string; lat: number; lon: number };
+type Waypoint = RouteWaypoint;
 type ForecastPoint = {
   lat: number;
   lon: number;
@@ -19,20 +20,6 @@ type WeatherResponse = { frames?: Frame[]; product?: string; provider?: string }
 type WaveResponse = { frames?: Array<{ validAt: string; points: ForecastPoint[] }> };
 
 const WX_ORIGIN = "https://wx.wardlab.dev";
-
-function toRad(value: number) {
-  return (value * Math.PI) / 180;
-}
-
-function distanceNm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const r = 3440.065;
-  const dLat = toRad(b.lat - a.lat);
-  const dLon = toRad(b.lon - a.lon);
-  const p1 = toRad(a.lat);
-  const p2 = toRad(b.lat);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
 
 function compass(deg: number | null | undefined) {
   if (deg === null || deg === undefined || !Number.isFinite(deg)) return "--";
@@ -105,7 +92,7 @@ function pickNearestForecastPoint(weather: WeatherResponse, shipLat: number, shi
   let nearestDistanceNm = Number.POSITIVE_INFINITY;
   for (const point of selectedFrame.points || []) {
     if (!Number.isFinite(point.lat) || !Number.isFinite(point.lon)) continue;
-    const delta = distanceNm(ship, point);
+    const delta = geodesicDistanceNm(ship, point);
     if (delta < nearestDistanceNm) {
       nearestDistanceNm = delta;
       selectedPoint = point;
@@ -118,13 +105,7 @@ function pickNearestForecastPoint(weather: WeatherResponse, shipLat: number, shi
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const route: Waypoint[] = (Array.isArray(body?.waypoints) ? body.waypoints : [])
-      .map((wp: any) => ({
-        name: typeof wp?.name === "string" ? wp.name : undefined,
-        lat: Number(wp?.lat ?? wp?.latitude),
-        lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-      }))
-      .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+    const route: Waypoint[] = normalizeRouteWaypoints(body?.waypoints);
 
     if (route.length < 2) return NextResponse.json({ error: "Route unavailable" }, { status: 400 });
 
