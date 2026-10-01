@@ -3,9 +3,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CrewNoaaMap } from "../../components/CrewNoaaMap";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
+import {
+  normalizeRouteWaypoints,
+  routeDistanceNm,
+  routeLegDistanceNm,
+  routeRemainingDistanceNm,
+  type RouteWaypoint,
+} from "../../lib/routeNavigation";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 
-type Waypoint = { id: string; name: string; lat: number; lon: number };
+type Waypoint = RouteWaypoint & { id: string; name: string };
 type RouteState = { routeName: string; waypoints: Waypoint[]; activeWaypointIndex: number };
 type AisTarget = { mmsi: number; source: "AIVDO" | "AIVDM"; type: number; lat?: number; lon?: number; sog?: number | null; cog?: number | null; heading?: number | null; lastSeen: number };
 type FragmentBuffer = { total: number; parts: string[]; fillBits: number; firstSeen: number };
@@ -16,13 +23,6 @@ const TARGET_STALE_MS = 10 * 60 * 1000;
 const FRAGMENT_TTL_MS = 15 * 1000;
 
 function toRad(v: number) { return (v * Math.PI) / 180; }
-function distanceNm(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const r = 3440.065;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 function formatLatLon(value?: number, isLat = true) {
   if (value === undefined || !Number.isFinite(value)) return "--";
   const abs = Math.abs(value); const deg = Math.floor(abs); const min = (abs - deg) * 60;
@@ -43,8 +43,11 @@ function formatEta(hours?: number | null) {
   return new Date(Date.now() + hours * 3600000).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 }
 function normalizeRoute(data: any): RouteState | null {
-  const raw = Array.isArray(data?.waypoints) ? data.waypoints : [];
-  const waypoints = raw.map((wp: any, i: number) => ({ id: `WP${String(i + 1).padStart(2, "0")}`, name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `Waypoint ${i + 1}`, lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude) })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  const waypoints: Waypoint[] = normalizeRouteWaypoints(data?.waypoints).map((wp, i) => ({
+    ...wp,
+    id: typeof wp.id === "string" && wp.id.trim() ? wp.id : `WP${String(i + 1).padStart(2, "0")}`,
+    name: typeof wp.name === "string" && wp.name.trim() ? wp.name : `Waypoint ${i + 1}`,
+  }));
   if (waypoints.length < 2) return null;
   const active = Number(data?.activeWaypointIndex);
   return { routeName: String(data?.routeName || "Shared Route"), waypoints, activeWaypointIndex: Number.isFinite(active) ? Math.max(1, Math.min(Math.round(active), waypoints.length - 1)) : 1 };
@@ -64,10 +67,11 @@ function liveRoute(route: RouteState | null, ship: AisTarget | null) {
   const index = Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1));
   const projection = segmentProjection(ship.lat, ship.lon, route.waypoints[index - 1], route.waypoints[index]);
   const legStart = route.waypoints[index - 1], next = route.waypoints[index];
-  const legLength = distanceNm(legStart.lat, legStart.lon, next.lat, next.lon);
-  let remaining = legLength * (1 - projection.ratio); for (let i = index; i < route.waypoints.length - 1; i += 1) remaining += distanceNm(route.waypoints[i].lat, route.waypoints[i].lon, route.waypoints[i + 1].lat, route.waypoints[i + 1].lon);
-  let total = 0; for (let i = 0; i < route.waypoints.length - 1; i += 1) total += distanceNm(route.waypoints[i].lat, route.waypoints[i].lon, route.waypoints[i + 1].lat, route.waypoints[i + 1].lon);
-  return { index, legStart, next, xte: projection.xte, nextDistance: distanceNm(ship.lat, ship.lon, next.lat, next.lon), remaining, progress: total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0 };
+  const position = { lat: ship.lat, lon: ship.lon };
+  const remaining = routeRemainingDistanceNm(position, route.waypoints, index);
+  const total = routeDistanceNm(route.waypoints);
+  const nextDistance = routeLegDistanceNm(position, next);
+  return { index, legStart, next, xte: projection.xte, nextDistance, remaining, progress: total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0 };
 }
 function aisPayloadToBits(payload: string) { let bits = ""; for (const ch of payload) { let v = ch.charCodeAt(0) - 48; if (v > 40) v -= 8; bits += v.toString(2).padStart(6, "0"); } return bits; }
 function readUnsigned(bits: string, start: number, len: number) { const c = bits.slice(start, start + len); return c.length < len ? null : parseInt(c, 2); }
