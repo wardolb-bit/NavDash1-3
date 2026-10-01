@@ -10,7 +10,7 @@ type TideEvent = { time: string; valueFt: number; type: string };
 type TideResult = {
   ok: boolean;
   targetTime?: string;
-  station?: { id: string; name: string; lat: number; lon: number; distanceNm?: number };
+  station?: { id: string; name: string; lat: number; lon: number; agency?: string; distanceNm?: number };
   datum?: string;
   units?: string;
   trend?: string;
@@ -79,6 +79,7 @@ function parseRtz(text: string): RouteBrief | null {
 }
 
 function zoneForPosition(lat: number, lon: number): LocalZone {
+  if (lat >= 24 && lat <= 46.5 && lon >= 122 && lon <= 146.5) return { iana: "Asia/Tokyo" };
   if (lat >= 18 && lat <= 23.5 && lon >= -161.5 && lon <= -154) return { iana: "Pacific/Honolulu" };
   if (lat >= 12 && lat <= 22 && lon >= 143 && lon <= 146.5) return { iana: "Pacific/Guam" };
   if (lat >= 17 && lat <= 20 && lon >= -68 && lon <= -64) return { iana: "America/Puerto_Rico" };
@@ -128,7 +129,7 @@ async function fetchTide(point: Waypoint, at: Date): Promise<TideResult> {
   const params = new URLSearchParams({ lat: String(point.lat), lon: String(point.lon), at: at.toISOString() });
   const response = await fetch(`/api/nav-brief-tides?${params}`, { cache: "no-store" });
   const json = await response.json() as TideResult;
-  if (!response.ok || !json.ok) throw new Error(json.error || `Tide lookup returned ${response.status}`);
+  if (!response.ok || !json.ok) return { ...json, ok: false, error: json.error || `Tide lookup returned ${response.status}` };
   return json;
 }
 function formatEvent(event: TideEvent, point: Pick<Waypoint, "lat" | "lon">) {
@@ -137,13 +138,15 @@ function formatEvent(event: TideEvent, point: Pick<Waypoint, "lat" | "lon">) {
 }
 function TideCard({ title, result, target }: { title: string; result: TideResult | null; target: Date | null }) {
   if (!target) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">Set departure time to calculate tide conditions.</div></div>;
-  if (!result?.station) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">NOAA tide data unavailable.</div></div>;
+  if (!result?.station) return <div className="print-sub print-avoid border border-white/10 p-3"><div className="text-[12px] font-black">{title}</div><div className="mt-2 text-[11px] text-[#8294a5]">{result?.error || "Official tide data unavailable."}</div></div>;
   const point = result.station;
+  const agency = result.station.agency || "Official";
   return <div className="print-sub print-avoid border border-white/10 p-3">
     <div className="flex flex-wrap items-baseline justify-between gap-2"><div className="text-[12px] font-black">{title}</div><div className="font-mono text-[10px] text-[#42d3c8]">{result.trend || "UNKNOWN"}</div></div>
     <div className="mt-2 text-[11px] leading-5 text-[#8294a5]">
-      <b>{result.station.name}</b> · NOAA {result.station.id} · {(result.station.distanceNm ?? 0).toFixed(1)} NM from route endpoint<br/>
-      Target · {formatLocal(target, point)} · Datum MLLW
+      <b>{result.station.name}</b> · {agency} {result.station.id} · {(result.station.distanceNm ?? 0).toFixed(1)} NM from route endpoint<br/>
+      Target · {formatLocal(target, point)} · Datum {result.datum || "--"}<br/>
+      {result.source ? <>Source · {result.source}</> : null}
       <div className="mt-1 space-y-[1px]">{(result.events || []).map((event, index) => <div key={`${event.time}-${index}`}>{formatEvent(event, point)}</div>)}</div>
       {result.representativeWarning ? <><div className="mt-1"><b>Station caution:</b> {result.representativeWarning}</div></> : null}
     </div>
@@ -213,7 +216,7 @@ function NavBriefEnhancer() {
       try {
         const [dep, arr] = await Promise.all([fetchTide(route.waypoints[0], departureDate), fetchTide(route.waypoints[route.waypoints.length - 1], eta)]);
         if (!cancelled) setTides({ departure: dep, arrival: arr, loading: false, error: "" });
-      } catch (error) { if (!cancelled) setTides({ departure: null, arrival: null, loading: false, error: error instanceof Error ? error.message : "NOAA tide lookup failed." }); }
+      } catch (error) { if (!cancelled) setTides({ departure: null, arrival: null, loading: false, error: error instanceof Error ? error.message : "Official tide lookup failed." }); }
     }
     void load(); return () => { cancelled = true; };
   }, [route, departureDate?.getTime(), eta?.getTime()]);
@@ -256,8 +259,8 @@ function NavBriefEnhancer() {
 
   if (!mount) return null;
   return createPortal(<div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-    {tides.loading ? <div className="col-span-full print-sub border border-white/10 p-3 text-[11px] text-[#8294a5]">Loading NOAA departure / arrival tide predictions...</div> : null}
-    {tides.error ? <div className="col-span-full print-sub border border-white/10 p-3 text-[11px] text-red-300">NOAA tides: {tides.error}</div> : null}
+    {tides.loading ? <div className="col-span-full print-sub border border-white/10 p-3 text-[11px] text-[#8294a5]">Loading official departure / arrival tide predictions...</div> : null}
+    {tides.error ? <div className="col-span-full print-sub border border-white/10 p-3 text-[11px] text-red-300">Tides: {tides.error}</div> : null}
     {!tides.loading ? <><TideCard title="DEPARTURE TIDES" result={tides.departure} target={departureDate} /><TideCard title="ARRIVAL TIDES" result={tides.arrival} target={eta} /></> : null}
   </div>, mount);
 }
