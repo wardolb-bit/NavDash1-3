@@ -73,19 +73,26 @@ function numberedBlocks(text: string) {
   return blocks;
 }
 
+function waypointIdPattern(number: number) {
+  return new RegExp(`^(?:WP|WPT)0*${number}\\b\\s*`, "i");
+}
+
 function parsePartA(text: string) {
   const part = section(text, /Passage Plan, part A:[\s\S]*?Navigational & Scheduling information/i, /Passage Plan, part B:/i);
   const map = new Map<number, ParsedWaypoint>();
 
   for (const block of numberedBlocks(part)) {
     if (block.number > 200) continue;
-    const body = block.lines.filter(Boolean).join("\n");
+    const lines = block.lines.map(clean).filter(Boolean);
+    const body = lines.join("\n");
     const latRaw = body.match(/\d{1,2}°\s*\d+(?:\.\d+)?['’]?\s*[NS]/i)?.[0];
     const lonRaw = body.match(/\d{1,3}°\s*\d+(?:\.\d+)?['’]?\s*[EW]/i)?.[0];
     if (!latRaw || !lonRaw) continue;
 
-    const name = clean(block.lines.find(line => line && !/^(Coastal|Ocean|Pilotage|fairway|channel)$/i.test(line) && !/[°]/.test(line) && !/^(WP|Passage|Position|Course|Steering|DTG|Leg|TTG|Security|Hardening|Nav\.|ER)/i.test(line)) || `Waypoint ${block.number}`);
-    const course = body.match(/(\d+(?:\.\d+)?)°\s*RL/i);
+    const idPattern = waypointIdPattern(block.number);
+    const waypointLine = lines.find(line => idPattern.test(line));
+    const name = clean(waypointLine?.replace(idPattern, "")) || `Waypoint ${block.number}`;
+    const course = body.match(/(\d+(?:\.\d+)?)°\s*(?:RL|GC)/i);
     const leg = body.match(/(\d+(?:\.\d+)?)\s*NM\s+(\d+(?:\.\d+)?)\s*kn/i);
     const local = body.match(/(\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})\s*(?=\n|$)/g);
 
@@ -110,12 +117,50 @@ function parsePartC(text: string, waypoints: Map<number, ParsedWaypoint>) {
   for (const block of numberedBlocks(part)) {
     const wp = waypoints.get(block.number);
     if (!wp) continue;
-    const body = block.lines.filter(Boolean).join("\n");
+    const lines = block.lines.map(clean).filter(Boolean);
+    const body = lines.join("\n");
     const radius = body.match(/(\d+(?:\.\d+)?)\s*NM\s+\d+(?:\.\d+)?°\/min/i);
     if (radius) wp.turnRadiusNm = Number(radius[1]);
 
-    const refs = block.lines.filter(line => /light/i.test(line) && !/^WP/i.test(line)).map(clean);
-    if (refs.length) wp.references = Array.from(new Set(refs));
+    const idPattern = waypointIdPattern(block.number);
+    const waypointLineIndex = lines.findIndex(line => idPattern.test(line));
+    if (waypointLineIndex < 0) continue;
+
+    let waypointPayload = clean(lines[waypointLineIndex].replace(idPattern, ""));
+    if (wp.name && !/^Waypoint \d+$/i.test(wp.name) && waypointPayload.toLowerCase().startsWith(wp.name.toLowerCase())) {
+      waypointPayload = clean(waypointPayload.slice(wp.name.length));
+    }
+
+    const referenceNames: string[] = [];
+    const inlineNumericIndex = waypointPayload.search(/\d+(?:\.\d+)?\s*°/);
+    const firstReferenceName = clean(inlineNumericIndex >= 0 ? waypointPayload.slice(0, inlineNumericIndex) : waypointPayload);
+    if (firstReferenceName) referenceNames.push(firstReferenceName);
+
+    let numericStartLine = waypointLineIndex + 1;
+    if (inlineNumericIndex < 0) {
+      for (let index = waypointLineIndex + 1; index < lines.length; index += 1) {
+        const line = lines[index];
+        if (/\d+(?:\.\d+)?\s*°/.test(line) || /^\d+(?:\.\d+)?\s*NM\b/i.test(line) || /^(?:Coastal|Ocean|Pilotage(?:\/fairway\/channel)?|fairway|channel)$/i.test(line)) {
+          numericStartLine = index;
+          break;
+        }
+        if (/^(?:Lt|Light)$/i.test(line) && referenceNames.length) referenceNames[referenceNames.length - 1] = `${referenceNames[referenceNames.length - 1]} ${line}`;
+        else referenceNames.push(line);
+        numericStartLine = index + 1;
+      }
+    }
+
+    if (!referenceNames.length) continue;
+
+    const numericText = [
+      inlineNumericIndex >= 0 ? waypointPayload.slice(inlineNumericIndex) : "",
+      ...lines.slice(numericStartLine),
+    ].filter(Boolean).join("\n");
+    const bearings = Array.from(numericText.matchAll(/(\d+(?:\.\d+)?)\s*°/g)).map(match => Number(match[1]));
+    const distances = Array.from(numericText.matchAll(/(\d+(?:\.\d+)?)\s*NM\b/gi)).map(match => Number(match[1]));
+
+    if (bearings.length < referenceNames.length || distances.length < referenceNames.length) continue;
+    wp.references = referenceNames.map((name, index) => `${name} · ${bearings[index].toFixed(1)}° · ${distances[index].toFixed(3).replace(/0+$/, "").replace(/\.$/, "")} NM`);
   }
 }
 
