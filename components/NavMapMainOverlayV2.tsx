@@ -465,7 +465,7 @@ function IsolatedMainMap() {
       const handleMapClick = (event: any) => {
         const point = { lat: Number(event.latlng.lat), lon: Number(event.latlng.lng) };
         if (toolModeRef.current === "mark") {
-          setUserMarks((current) => [...current, { id: `mark-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: `Mark ${current.length + 1}`, lat: point.lat, lon: point.lon }]);
+          setUserMarks((current) => [...current, { id: `mark-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: `Mark ${current.length + 1}`, lat: point.lat, lon: longitudeNearReference(point.lon, 0) }]);
           return;
         }
         if (toolModeRef.current !== "measure") return;
@@ -655,13 +655,20 @@ function IsolatedMainMap() {
 
   useEffect(() => {
     async function updateUserChart() {
+      const map = mapRef.current;
       const layer = userChartLayerRef.current;
-      if (!layer) return;
+      if (!map || !layer) return;
       const L = await import("leaflet");
       layer.clearLayers();
+      const centerLon = map.getCenter().lng;
+      const offsets = [-360, 0, 360];
       for (const mark of userMarks) {
-        const marker = L.circleMarker([mark.lat, mark.lon], { pane: "navmap-main-tools-v1", radius: 6, color: "#f1d56b", fillColor: "#071019", fillOpacity: 1, weight: 2 }).addTo(layer);
-        marker.bindTooltip(`${mark.name}<br>${mark.lat.toFixed(5)}, ${mark.lon.toFixed(5)}`);
+        const baseLon = longitudeNearReference(mark.lon, centerLon);
+        for (const offset of offsets) {
+          L.circleMarker([mark.lat, baseLon + offset], { pane: "navmap-main-tools-v1", radius: 6, color: "#f1d56b", fillColor: "#071019", fillOpacity: 1, weight: 2 })
+            .bindTooltip(`${mark.name}<br>${mark.lat.toFixed(5)}, ${mark.lon.toFixed(5)}`)
+            .addTo(layer);
+        }
       }
     }
     updateUserChart();
