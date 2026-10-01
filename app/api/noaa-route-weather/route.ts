@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
+import {
+  normalizeRouteWaypoints,
+  pointAtRouteDistanceNm,
+  routeDistanceNm,
+  type RouteWaypoint,
+} from "../../../lib/routeNavigation";
 
-type Waypoint = { lat: number; lon: number; name?: string };
+type Waypoint = RouteWaypoint;
 type SamplePoint = { lat: number; lon: number; distanceNm: number };
 type GridValue = { validTime?: string; value?: number | null };
 type ForecastPoint = {
@@ -48,38 +54,15 @@ const TARGET_HOURS = [0, 6, 12, 24, 48, 72, 96, 120];
 const SAMPLE_SPACING_NM = 35;
 const MAX_SAMPLES = 9;
 
-function nmBetween(a: Waypoint, b: Waypoint) {
-  const r = 3440.065;
-  const p1 = a.lat * Math.PI / 180;
-  const p2 = b.lat * Math.PI / 180;
-  const dp = (b.lat - a.lat) * Math.PI / 180;
-  const dl = (b.lon - a.lon) * Math.PI / 180;
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
 function routeSamples(route: Waypoint[]): SamplePoint[] {
   if (route.length < 2) return [];
-  const cumulative = [0];
-  for (let i = 1; i < route.length; i += 1) cumulative.push(cumulative[i - 1] + nmBetween(route[i - 1], route[i]));
-  const total = cumulative[cumulative.length - 1];
+  const total = routeDistanceNm(route);
   const count = Math.min(MAX_SAMPLES, Math.max(2, Math.ceil(total / SAMPLE_SPACING_NM) + 1));
   const samples: SamplePoint[] = [];
-  for (let s = 0; s < count; s += 1) {
-    const target = count === 1 ? 0 : total * (s / (count - 1));
-    let leg = 0;
-    while (leg < cumulative.length - 2 && cumulative[leg + 1] < target) leg += 1;
-    const a = route[leg];
-    const b = route[leg + 1];
-    const legNm = Math.max(0.0001, cumulative[leg + 1] - cumulative[leg]);
-    const f = Math.max(0, Math.min(1, (target - cumulative[leg]) / legNm));
-    let lonB = b.lon;
-    while (lonB - a.lon > 180) lonB -= 360;
-    while (lonB - a.lon < -180) lonB += 360;
-    let lon = a.lon + (lonB - a.lon) * f;
-    while (lon > 180) lon -= 360;
-    while (lon < -180) lon += 360;
-    samples.push({ lat: a.lat + (b.lat - a.lat) * f, lon, distanceNm: target });
+  for (let index = 0; index < count; index += 1) {
+    const distanceNm = total * (index / (count - 1));
+    const point = pointAtRouteDistanceNm(route, distanceNm, SAMPLE_SPACING_NM);
+    if (point) samples.push({ lat: point.lat, lon: point.lon, distanceNm });
   }
   return samples;
 }
@@ -161,9 +144,7 @@ function nearestAtmosPoint(points: AtmosPoint[], sample: SamplePoint) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const route: Waypoint[] = (Array.isArray(body?.waypoints) ? body.waypoints : [])
-      .map((wp: any) => ({ lat: Number(wp?.lat), lon: Number(wp?.lon), name: typeof wp?.name === "string" ? wp.name : undefined }))
-      .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+    const route: Waypoint[] = normalizeRouteWaypoints(body?.waypoints);
     if (route.length < 2) return NextResponse.json({ error: "Route requires at least two valid waypoints." }, { status: 400 });
 
     const url = new URL(request.url);
