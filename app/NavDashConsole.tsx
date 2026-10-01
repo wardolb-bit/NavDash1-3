@@ -3,12 +3,19 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 import { useBridgeTheme } from "../lib/useBridgeTheme";
+import {
+  geodesicDistanceNm,
+  normalizeLongitudeDelta,
+  normalizeRouteWaypoints,
+  parseRtzRouteXml,
+  routeRemainingDistanceNm,
+  type RouteWaypoint,
+} from "../lib/routeNavigation";
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const FULLSCREEN_PREF_KEY = "navconsole-fullscreen";
 
-type LegGeometry = "Orthodrome" | "Loxodrome";
-type Waypoint = { id: string; name: string; lat: number; lon: number; geometryType?: LegGeometry };
+type Waypoint = RouteWaypoint & { id: string; name: string };
 type OwnShip = { lat: number; lon: number; sog: number; cog: number; heading: number | null; lastSeen: number };
 type Multipart = { total: number; parts: string[]; fillBits: number };
 
@@ -92,36 +99,21 @@ function extractNmea(msg: any) {
 }
 
 function parseRtz(xml: string) {
-  const doc = new DOMParser().parseFromString(xml, "application/xml");
-  if (doc.querySelector("parsererror")) throw new Error("Could not parse RTZ/XML route.");
-  const routeNode = doc.querySelector("route");
-  const routeName = routeNode?.getAttribute("routeName") || routeNode?.getAttribute("name") || doc.querySelector("routeInfo")?.getAttribute("routeName") || "Loaded RTZ Route";
-  const waypoints = Array.from(doc.getElementsByTagName("waypoint")).map((wp, index) => {
-    const pos = wp.getElementsByTagName("position")[0];
-    const leg = wp.getElementsByTagName("leg")[0];
-    const geometryType = leg?.getAttribute("geometryType");
-    const lat = Number(pos?.getAttribute("lat") ?? pos?.getAttribute("latitude") ?? wp.getAttribute("lat") ?? wp.getAttribute("latitude"));
-    const lon = Number(pos?.getAttribute("lon") ?? pos?.getAttribute("longitude") ?? wp.getAttribute("lon") ?? wp.getAttribute("longitude"));
-    return {
-      id: wp.getAttribute("id") || wp.getAttribute("revision") || `WP${String(index + 1).padStart(2, "0")}`,
-      name: wp.getAttribute("name") || wp.getAttribute("waypointName") || wp.querySelector("name")?.textContent?.trim() || `Waypoint ${index + 1}`,
-      lat,
-      lon,
-      geometryType: (geometryType === "Orthodrome" || geometryType === "Loxodrome" ? geometryType : undefined) as LegGeometry | undefined,
-    };
-  }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
-  if (waypoints.length < 2) throw new Error("RTZ route must contain at least two usable waypoints.");
-  return { routeName, waypoints };
+  const parsed = parseRtzRouteXml(xml);
+  const waypoints: Waypoint[] = parsed.waypoints.map((waypoint, index) => ({
+    ...waypoint,
+    id: waypoint.id?.trim() || `WP${String(index + 1).padStart(2, "0")}`,
+    name: waypoint.name?.trim() || `Waypoint ${index + 1}`,
+  }));
+  return { routeName: parsed.routeName, waypoints };
 }
 
 function normalizeRoute(data: any) {
-  const waypoints: Waypoint[] = (Array.isArray(data?.waypoints) ? data.waypoints : []).map((wp: any, index: number) => ({
-    id: typeof wp?.id === "string" && wp.id.trim() ? wp.id : `WP${String(index + 1).padStart(2, "0")}`,
-    name: typeof wp?.name === "string" && wp.name.trim() ? wp.name : `Waypoint ${index + 1}`,
-    lat: Number(wp?.lat ?? wp?.latitude),
-    lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-    geometryType: wp?.geometryType === "Orthodrome" || wp?.geometryType === "Loxodrome" ? wp.geometryType : undefined,
-  })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  const waypoints: Waypoint[] = normalizeRouteWaypoints(data?.waypoints).map((waypoint, index) => ({
+    ...waypoint,
+    id: waypoint.id?.trim() || `WP${String(index + 1).padStart(2, "0")}`,
+    name: waypoint.name?.trim() || `Waypoint ${index + 1}`,
+  }));
   if (waypoints.length < 2) return null;
   const rawIndex = Number(data?.activeWaypointIndex);
   return {
@@ -148,98 +140,7 @@ function clearRouteStorage() {
 function rad(value: number) { return value * Math.PI / 180; }
 function deg(value: number) { return value * 180 / Math.PI; }
 function normalize360(value: number) { return ((value % 360) + 360) % 360; }
-function lonDelta(value: number) { let v = value; while (v > 180) v -= 360; while (v < -180) v += 360; return v; }
-
-const WGS84_A_M = 6378137;
-const WGS84_F = 1 / 298.257223563;
-const WGS84_B_M = WGS84_A_M * (1 - WGS84_F);
-const WGS84_E2 = WGS84_F * (2 - WGS84_F);
-const WGS84_E = Math.sqrt(WGS84_E2);
-const METERS_PER_NM = 1852;
-
-function sphericalDistanceNm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const p1 = rad(a.lat), p2 = rad(b.lat), dp = rad(b.lat - a.lat), dl = rad(lonDelta(b.lon - a.lon));
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
-function distanceNm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const phi1 = rad(a.lat);
-  const phi2 = rad(b.lat);
-  const L = rad(lonDelta(b.lon - a.lon));
-  const U1 = Math.atan((1 - WGS84_F) * Math.tan(phi1));
-  const U2 = Math.atan((1 - WGS84_F) * Math.tan(phi2));
-  const sinU1 = Math.sin(U1), cosU1 = Math.cos(U1);
-  const sinU2 = Math.sin(U2), cosU2 = Math.cos(U2);
-  let lambda = L;
-  let sinSigma = 0;
-  let cosSigma = 1;
-  let sigma = 0;
-  let sinAlpha = 0;
-  let cos2Alpha = 1;
-  let cos2SigmaM = 0;
-  let converged = false;
-
-  for (let iteration = 0; iteration < 100; iteration += 1) {
-    const sinLambda = Math.sin(lambda);
-    const cosLambda = Math.cos(lambda);
-    sinSigma = Math.sqrt((cosU2 * sinLambda) ** 2 + (cosU1 * sinU2 - sinU1 * cosU2 * cosLambda) ** 2);
-    if (sinSigma === 0) return 0;
-    cosSigma = sinU1 * sinU2 + cosU1 * cosU2 * cosLambda;
-    sigma = Math.atan2(sinSigma, cosSigma);
-    sinAlpha = cosU1 * cosU2 * sinLambda / sinSigma;
-    cos2Alpha = 1 - sinAlpha ** 2;
-    cos2SigmaM = cos2Alpha === 0 ? 0 : cosSigma - 2 * sinU1 * sinU2 / cos2Alpha;
-    const C = WGS84_F / 16 * cos2Alpha * (4 + WGS84_F * (4 - 3 * cos2Alpha));
-    const nextLambda = L + (1 - C) * WGS84_F * sinAlpha * (sigma + C * sinSigma * (cos2SigmaM + C * cosSigma * (-1 + 2 * cos2SigmaM ** 2)));
-    if (Math.abs(nextLambda - lambda) < 1e-12) {
-      lambda = nextLambda;
-      converged = true;
-      break;
-    }
-    lambda = nextLambda;
-  }
-
-  if (!converged) return sphericalDistanceNm(a, b);
-
-  const uSq = cos2Alpha * (WGS84_A_M ** 2 - WGS84_B_M ** 2) / WGS84_B_M ** 2;
-  const A = 1 + uSq / 16384 * (4096 + uSq * (-768 + uSq * (320 - 175 * uSq)));
-  const B = uSq / 1024 * (256 + uSq * (-128 + uSq * (74 - 47 * uSq)));
-  const deltaSigma = B * sinSigma * (cos2SigmaM + B / 4 * (cosSigma * (-1 + 2 * cos2SigmaM ** 2) - B / 6 * cos2SigmaM * (-3 + 4 * sinSigma ** 2) * (-3 + 4 * cos2SigmaM ** 2)));
-  return WGS84_B_M * A * (sigma - deltaSigma) / METERS_PER_NM;
-}
-
-function isometricLatitude(phi: number) {
-  const sinPhi = Math.sin(phi);
-  return Math.log(Math.tan(Math.PI / 4 + phi / 2)) - WGS84_E / 2 * Math.log((1 + WGS84_E * sinPhi) / (1 - WGS84_E * sinPhi));
-}
-
-function meridionalArcM(phi: number) {
-  const e2 = WGS84_E2;
-  return WGS84_A_M * (
-    (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * phi
-    - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * phi)
-    + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * phi)
-    - 35 * e2 ** 3 / 3072 * Math.sin(6 * phi)
-  );
-}
-
-function rhumbDistanceNm(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const phi1 = rad(a.lat);
-  const phi2 = rad(b.lat);
-  const dLambda = rad(lonDelta(b.lon - a.lon));
-  const dPsi = isometricLatitude(phi2) - isometricLatitude(phi1);
-  const dMeridian = meridionalArcM(phi2) - meridionalArcM(phi1);
-  const course = Math.atan2(dLambda, dPsi);
-  const cosCourse = Math.cos(course);
-  if (Math.abs(cosCourse) > 1e-12) return Math.abs(dMeridian / cosCourse) / METERS_PER_NM;
-  const primeVertical = WGS84_A_M / Math.sqrt(1 - WGS84_E2 * Math.sin(phi1) ** 2);
-  return Math.abs(primeVertical * Math.cos(phi1) * dLambda) / METERS_PER_NM;
-}
-
-function routeLegDistanceNm(start: { lat: number; lon: number }, end: Waypoint) {
-  return end.geometryType === "Loxodrome" ? rhumbDistanceNm(start, end) : distanceNm(start, end);
-}
+function lonDelta(value: number) { return normalizeLongitudeDelta(value); }
 
 function bearing(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
   const p1 = rad(a.lat), p2 = rad(b.lat), dl = rad(lonDelta(b.lon - a.lon));
@@ -277,7 +178,7 @@ function legMetrics(ship: OwnShip, start: Waypoint, end: Waypoint) {
   return {
     ratio,
     projectionRatio,
-    xte: distanceNm(ship, { lat: closestLat, lon: closestLon }),
+    xte: geodesicDistanceNm(ship, { lat: closestLat, lon: closestLon }),
     side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--",
   };
 }
@@ -297,9 +198,7 @@ function logicalRouteLeg(route: Waypoint[], ownShip: OwnShip | null, currentLegI
 
 function routeDtg(ship: OwnShip | null, route: Waypoint[], activeIndex: number) {
   if (!ship || route.length < 2 || !route[activeIndex]) return null;
-  let total = routeLegDistanceNm(ship, route[activeIndex]);
-  for (let i = activeIndex; i < route.length - 1; i += 1) total += routeLegDistanceNm(route[i], route[i + 1]);
-  return total;
+  return routeRemainingDistanceNm(ship, route, activeIndex);
 }
 
 function ddm(value: number, lat: boolean) {
