@@ -2,9 +2,18 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  normalizeRouteWaypoints,
+  parseRtzRouteXml,
+  pointAtRouteDistanceNm,
+  routeDistanceNm,
+  routeGeometryPoints,
+  routeSliceBetweenDistances as canonicalRouteSliceBetweenDistances,
+  type LegGeometry,
+} from "../../lib/routeNavigation";
 
 type GeoPoint = { lat: number; lon: number };
-type Waypoint = GeoPoint & { name: string };
+type Waypoint = GeoPoint & { name: string; geometryType?: LegGeometry };
 type ForecastPoint = {
   lat: number;
   lon: number;
@@ -52,8 +61,7 @@ const ROUTE_WEATHER_SPEED_KEY = "navdash-route-weather-speed-kt";
 const ENC_BRIGHTNESS_MIN = 40;
 const ENC_BRIGHTNESS_MAX = 140;
 const ENC_BRIGHTNESS_STEP = 10;
-const GREAT_CIRCLE_THRESHOLD_NM = 250;
-const GREAT_CIRCLE_STEP_NM = 50;
+const ROUTE_GEOMETRY_STEP_NM = 50;
 
 function clampEncBrightness(value: number) {
   return Math.max(ENC_BRIGHTNESS_MIN, Math.min(ENC_BRIGHTNESS_MAX, Math.round(value / ENC_BRIGHTNESS_STEP) * ENC_BRIGHTNESS_STEP));
@@ -85,133 +93,49 @@ function unwrapRouteForDisplay(route: Waypoint[]) {
   return unwrapped;
 }
 
-function rad(value: number) { return value * Math.PI / 180; }
-function deg(value: number) { return value * 180 / Math.PI; }
-
-function gcDistanceNm(a: GeoPoint, b: GeoPoint) {
-  const p1 = rad(a.lat);
-  const p2 = rad(b.lat);
-  const dp = rad(b.lat - a.lat);
-  let dlDeg = b.lon - a.lon;
-  while (dlDeg > 180) dlDeg -= 360;
-  while (dlDeg < -180) dlDeg += 360;
-  const dl = rad(dlDeg);
-  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
-  return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
-function greatCirclePoint(a: GeoPoint, b: GeoPoint, fraction: number) {
-  const p1 = rad(a.lat), l1 = rad(a.lon);
-  const p2 = rad(b.lat), l2 = rad(b.lon);
-  const v1 = [Math.cos(p1) * Math.cos(l1), Math.cos(p1) * Math.sin(l1), Math.sin(p1)];
-  const v2 = [Math.cos(p2) * Math.cos(l2), Math.cos(p2) * Math.sin(l2), Math.sin(p2)];
-  const dot = Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
-  const omega = Math.acos(dot);
-  if (omega < 1e-12) return { lat: a.lat, lon: a.lon };
-  const sinOmega = Math.sin(omega);
-  const wa = Math.sin((1 - fraction) * omega) / sinOmega;
-  const wb = Math.sin(fraction * omega) / sinOmega;
-  const x = wa * v1[0] + wb * v2[0];
-  const y = wa * v1[1] + wb * v2[1];
-  const z = wa * v1[2] + wb * v2[2];
-  return { lat: deg(Math.atan2(z, Math.hypot(x, y))), lon: deg(Math.atan2(y, x)) };
-}
-
 function routeDisplayPoints(route: Waypoint[]) {
-  if (!route.length) return [] as Array<[number, number]>;
+  const geometry = routeGeometryPoints(route, ROUTE_GEOMETRY_STEP_NM);
+  if (!geometry.length) return [] as Array<[number, number]>;
   const result: Array<[number, number]> = [];
-  let previousLon = route[0].lon;
-  result.push([route[0].lat, previousLon]);
-
-  for (let index = 1; index < route.length; index += 1) {
-    const start = route[index - 1];
-    const end = route[index];
-    const legNm = gcDistanceNm(start, end);
-    const segments = legNm >= GREAT_CIRCLE_THRESHOLD_NM
-      ? Math.max(2, Math.ceil(legNm / GREAT_CIRCLE_STEP_NM))
-      : 1;
-    for (let step = 1; step <= segments; step += 1) {
-      const point = segments === 1 ? end : greatCirclePoint(start, end, step / segments);
-      const lon = longitudeNearReference(point.lon, previousLon);
-      result.push([point.lat, lon]);
-      previousLon = lon;
-    }
+  let previousLon = geometry[0].lon;
+  result.push([geometry[0].lat, previousLon]);
+  for (let index = 1; index < geometry.length; index += 1) {
+    const point = geometry[index];
+    const lon = longitudeNearReference(point.lon, previousLon);
+    result.push([point.lat, lon]);
+    previousLon = lon;
   }
-
   return result;
 }
 
-function routeGeometry(route: Waypoint[]) {
-  const points = routeDisplayPoints(route);
-  let distanceNm = 0;
-  return points.map(([lat, lon], index) => {
-    if (index > 0) {
-      const previous = points[index - 1];
-      distanceNm += gcDistanceNm({ lat: previous[0], lon: previous[1] }, { lat, lon });
-    }
-    return { lat, lon, distanceNm };
-  });
-}
-
-function routeLengthNm(route: Waypoint[]) {
-  const geometry = routeGeometry(route);
-  return geometry.length ? geometry[geometry.length - 1].distanceNm : 0;
-}
-
 function pointAtDistance(route: Waypoint[], targetNm: number) {
-  const geometry = routeGeometry(route);
-  if (!geometry.length) return null;
-  if (geometry.length === 1 || targetNm <= 0) return { name: "Expected vessel position", lat: geometry[0].lat, lon: geometry[0].lon };
-  const total = geometry[geometry.length - 1].distanceNm;
-  const target = Math.max(0, Math.min(total, targetNm));
-  for (let i = 1; i < geometry.length; i += 1) {
-    const a = geometry[i - 1];
-    const b = geometry[i];
-    if (target <= b.distanceNm) {
-      const segmentNm = b.distanceNm - a.distanceNm;
-      const ratio = segmentNm <= 0 ? 0 : (target - a.distanceNm) / segmentNm;
-      return {
-        name: "Expected vessel position",
-        lat: a.lat + (b.lat - a.lat) * ratio,
-        lon: a.lon + (b.lon - a.lon) * ratio,
-      };
-    }
-  }
-  const last = geometry[geometry.length - 1];
-  return { name: "Expected vessel position", lat: last.lat, lon: last.lon };
+  const point = pointAtRouteDistanceNm(route, targetNm, ROUTE_GEOMETRY_STEP_NM);
+  return point ? { name: "Expected vessel position", lat: point.lat, lon: point.lon } : null;
 }
 
 function routeSliceBetweenDistances(route: Waypoint[], startNm: number, endNm: number) {
-  const geometry = routeGeometry(route);
-  if (geometry.length < 2) return [] as Array<[number, number]>;
-  const total = geometry[geometry.length - 1].distanceNm;
-  const start = Math.max(0, Math.min(total, Math.min(startNm, endNm)));
-  const end = Math.max(start, Math.min(total, Math.max(startNm, endNm)));
-  const startPoint = pointAtDistance(route, start);
-  const endPoint = pointAtDistance(route, end);
-  if (!startPoint || !endPoint) return [] as Array<[number, number]>;
-
-  const points: Array<[number, number]> = [[startPoint.lat, startPoint.lon]];
-  geometry.forEach((point) => {
-    if (point.distanceNm > start && point.distanceNm < end) {
-      const previousLon = points[points.length - 1][1];
-      points.push([point.lat, longitudeNearReference(point.lon, previousLon)]);
-    }
-  });
-  points.push([endPoint.lat, longitudeNearReference(endPoint.lon, points[points.length - 1][1])]);
+  const geometry = canonicalRouteSliceBetweenDistances(route, startNm, endNm, ROUTE_GEOMETRY_STEP_NM);
+  if (!geometry.length) return [] as Array<[number, number]>;
+  const points: Array<[number, number]> = [];
+  let previousLon = geometry[0].lon;
+  points.push([geometry[0].lat, previousLon]);
+  for (let index = 1; index < geometry.length; index += 1) {
+    const point = geometry[index];
+    const lon = longitudeNearReference(point.lon, previousLon);
+    points.push([point.lat, lon]);
+    previousLon = lon;
+  }
   return points;
 }
 
 function parseRtz(text: string): Waypoint[] {
-  const doc = new DOMParser().parseFromString(text, "application/xml");
-  return Array.from(doc.querySelectorAll("waypoint")).map((node, index) => {
-    const pos = node.querySelector("position");
-    return {
-      name: node.getAttribute("name") || node.getAttribute("id") || `WP${String(index + 1).padStart(2, "0")}`,
-      lat: Number(pos?.getAttribute("lat")),
-      lon: Number(pos?.getAttribute("lon")),
-    };
-  }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+  const parsed = parseRtzRouteXml(text);
+  return parsed.waypoints.map((waypoint, index) => ({
+    name: waypoint.name?.trim() || waypoint.id?.trim() || `WP${String(index + 1).padStart(2, "0")}`,
+    lat: waypoint.lat,
+    lon: waypoint.lon,
+    geometryType: waypoint.geometryType,
+  }));
 }
 
 function formatWhen(date: Date) {
@@ -331,7 +255,7 @@ export default function RouteWeatherLabPage() {
   const [mode, setMode] = useState<"encounter" | "time">("encounter");
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
 
-  const totalNm = useMemo(() => routeLengthNm(route), [route]);
+  const totalNm = useMemo(() => routeDistanceNm(route), [route]);
 
   useEffect(() => {
     try {
@@ -748,10 +672,12 @@ export default function RouteWeatherLabPage() {
       const json = await response.json();
       if (!response.ok) throw new Error(json?.error || "Could not read current NavDash route.");
       if (!json?.hasRoute) throw new Error("There is no current shared NavDash route loaded.");
-      const parsed: Waypoint[] = (Array.isArray(json?.waypoints) ? json.waypoints : []).map((wp: any, index: number) => ({
-        name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `WP${String(index + 1).padStart(2, "0")}`,
-        lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-      })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+      const parsed: Waypoint[] = normalizeRouteWaypoints(json?.waypoints).map((waypoint, index) => ({
+        name: waypoint.name?.trim() || `WP${String(index + 1).padStart(2, "0")}`,
+        lat: waypoint.lat,
+        lon: waypoint.lon,
+        geometryType: waypoint.geometryType,
+      }));
       if (parsed.length < 2) throw new Error("The current NavDash route does not contain enough usable waypoints.");
       setRoute(parsed); setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route"); setWeather(null); setFrameIndex(0); setFocusedIndex(null);
       if (autoAnalyze) await analyzeWaypoints(parsed); else setStatus(`${parsed.length} waypoints loaded from the current NavDash route. Ready to analyze route weather.`);
