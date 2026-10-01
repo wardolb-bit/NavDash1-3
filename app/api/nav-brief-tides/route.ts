@@ -264,7 +264,7 @@ function parseJmaHighLowHtml(html: string) {
     const year = Number(dateMatch[1]);
     const month = Number(dateMatch[2]);
     const day = Number(dateMatch[3]);
-    const tideCells = rawCells.slice(1);
+    const tideCells = rawCells.length >= 18 ? rawCells.slice(2) : rawCells.slice(1);
     const highCells = tideCells.slice(0, 8);
     const lowCells = tideCells.slice(8, 16);
     events.push(...parseJmaPairs(highCells, "H", year, month, day));
