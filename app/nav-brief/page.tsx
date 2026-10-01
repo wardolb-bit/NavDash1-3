@@ -28,6 +28,7 @@ type NavStationWaypoint = {
   xtdPortNm?: number;
   turnRadiusNm?: number;
   references?: string[];
+  note?: string;
 };
 type NavStationPassage = {
   sourceFile: string;
@@ -96,7 +97,7 @@ function parseRtz(xmlText: string): RouteBrief {
 }
 function normalizeRoutePayload(payload: any): RouteBrief | null {
   const raw = Array.isArray(payload) ? payload : Array.isArray(payload?.waypoints) ? payload.waypoints : Array.isArray(payload?.route?.waypoints) ? payload.route.waypoints : [];
-  const waypoints = raw.map((wp: any, index: number) => ({ id: String(wp?.id || `WP${String(index + 1).padStart(3, "0")}`), name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`), lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude), geometryType: normalizeLegGeometry(wp?.geometryType), rtzNote: typeof wp?.rtzNote === "string" ? wp.rtzNote : undefined })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+  const waypoints = raw.map((wp: any, index: number) => ({ id: String(wp?.id || `WP${String(index + 1).padStart(3, "0")}`), name: String(wp?.name || wp?.id || `Waypoint ${index + 1}`), lat: Number(wp?.lat ?? wp?.latitude), lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude), geometryType: normalizeLegGeometry(wp?.geometryType) })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
   return waypoints.length < 2 ? null : { routeName: String(payload?.routeName || payload?.name || payload?.route?.routeName || "Current NavDash Route"), waypoints };
 }
 function readCurrentRoute() { try { const raw = window.localStorage.getItem(ROUTE_STORAGE_KEY); return raw ? normalizeRoutePayload(JSON.parse(raw)) : null; } catch { return null; } }
@@ -199,7 +200,7 @@ export default function NavBriefBuilderPage() {
   const selectedWp = route?.waypoints.find(wp => wp.id === selectedWaypoint) || route?.waypoints[0] || null;
   const printedNotes = useMemo(() => route ? route.waypoints.map((wp, index) => {
     const source = navStationForRouteWaypoint(passage, wp, index);
-    const importedNote = (wp.rtzNote || "").trim();
+    const importedNote = (source?.note || wp.rtzNote || "").trim();
     const manualNote = (waypointNotes[wp.id] || "").trim();
     return { wp, index, note: [importedNote, manualNote].filter(Boolean).join("\n\n"), importedNote, manualNote, passage: source };
   }).filter(item => item.note) : [], [route, waypointNotes, passage]);
