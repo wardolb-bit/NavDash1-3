@@ -307,21 +307,7 @@ export default function RouteWeatherLabPage() {
         document.head.appendChild(link);
       }
 
-      const map = L.map(mapEl.current, {
-        attributionControl: false,
-        zoomControl: true,
-        worldCopyJump: true,
-      }).setView([20, 0], 3);
-
-      const syncSingleWorldMinZoom = () => {
-        const viewportWidthPx = Math.max(1, map.getSize().x);
-        const minZoom = Math.max(0, Math.ceil(Math.log2(viewportWidthPx / 256)));
-        map.setMinZoom(minZoom);
-        if (map.getZoom() < minZoom) map.setZoom(minZoom);
-      };
-      syncSingleWorldMinZoom();
-      map.on("resize", syncSingleWorldMinZoom);
-
+      const map = L.map(mapEl.current, { zoomControl: true, attributionControl: false, preferCanvas: false, worldCopyJump: true, minZoom: 3 }).setView([20, 0], 3);
       const encPane = map.createPane("routeWeatherEnc");
       encPane.style.zIndex = "250";
 
@@ -466,16 +452,12 @@ export default function RouteWeatherLabPage() {
       weatherLayerRef.current = L.layerGroup().addTo(map);
       mapRef.current = map;
       (map as any).__routeWeatherCleanup = () => {
-        map.off("resize", syncSingleWorldMinZoom);
         mapEl.current?.removeEventListener("contextmenu", openBrightnessMenu);
         document.removeEventListener("pointerdown", onDocumentPointerDown, true);
         window.removeEventListener("navdash-theme-change", onThemeChange);
         closeBrightnessMenu();
       };
-      setTimeout(() => {
-        map.invalidateSize();
-        syncSingleWorldMinZoom();
-      }, 100);
+      setTimeout(() => map.invalidateSize(), 100);
     }
 
     init();
