@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeRouteWaypoints, type RouteWaypoint } from "../../../lib/routeNavigation";
 
-type Waypoint = { name?: string; lat: number; lon: number };
+type Waypoint = RouteWaypoint;
 type ForecastPoint = {
   lat: number;
   lon: number;
@@ -69,13 +70,7 @@ function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherRes
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const route: Waypoint[] = (Array.isArray(body?.waypoints) ? body.waypoints : [])
-      .map((wp: any) => ({
-        name: typeof wp?.name === "string" ? wp.name : undefined,
-        lat: Number(wp?.lat ?? wp?.latitude),
-        lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
-      }))
-      .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
+    const route: Waypoint[] = normalizeRouteWaypoints(body?.waypoints);
 
     if (route.length < 2) {
       return NextResponse.json({ ok: false, error: "Route unavailable" }, { status: 400 });
