@@ -4,8 +4,9 @@ import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { CrewNoaaMap } from "../../components/CrewNoaaMap";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
+import { normalizeLegGeometry, routeLegDistanceNm, type LegGeometry } from "../../lib/routeNavigation";
 
-type Waypoint = { id: string; name: string; lat: number; lon: number };
+type Waypoint = { id: string; name: string; lat: number; lon: number; geometryType?: LegGeometry };
 type PlanningRoute = { routeName: string; waypoints: Waypoint[] };
 type LegPlan = { speed: number; holdHours: number };
 type TimedTarget = { id: string; waypointIndex: number; arrival: string };
@@ -22,11 +23,6 @@ type SolveResult = {
 
 function toRad(value: number) { return value * Math.PI / 180; }
 function lonDelta(value: number) { let v = value; while (v > 180) v -= 360; while (v < -180) v += 360; return v; }
-function distanceNm(a: Pick<Waypoint, "lat" | "lon">, b: Pick<Waypoint, "lat" | "lon">) {
-  const lat1 = toRad(a.lat), lat2 = toRad(b.lat), dLat = toRad(b.lat - a.lat), dLon = toRad(lonDelta(b.lon - a.lon));
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
 function crossesInternationalDateLine(a: Waypoint, b: Waypoint) {
   return Math.abs(b.lon - a.lon) > 180;
 }
@@ -63,9 +59,10 @@ function parseRtz(xmlText: string): PlanningRoute {
   const routeName = getAttr(routeInfo, ["routeName", "RouteName", "name", "Name"]) || getAttr(routeNode, ["routeName", "RouteName", "name", "Name", "id", "ID"]) || routeNode.querySelector("routeName,name")?.textContent?.trim() || "Planning Route";
   const waypoints = Array.from(doc.querySelectorAll("waypoint,Waypoint,wp,WP")).map((node, index) => {
     const pos = node.querySelector("position,Position,pos") || node;
+    const leg = node.querySelector("leg,Leg");
     const lat = parseCoordinate(getAttr(pos, ["lat", "Lat", "latitude", "Latitude"]) || getAttr(node, ["lat", "Lat", "latitude", "Latitude"]), true);
     const lon = parseCoordinate(getAttr(pos, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]) || getAttr(node, ["lon", "Lon", "longitude", "Longitude", "long", "Long"]), false);
-    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: waypointName(node, `Waypoint ${index + 1}`), lat, lon };
+    return { id: getAttr(node, ["id", "ID", "revision", "number"]) || `WP${String(index + 1).padStart(3, "0")}`, name: waypointName(node, `Waypoint ${index + 1}`), lat, lon, geometryType: normalizeLegGeometry(getAttr(leg, ["geometryType", "GeometryType"])) };
   }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (waypoints.length < 2) throw new Error("Route needs at least two valid waypoints.");
   return { routeName, waypoints };
@@ -95,6 +92,7 @@ function normalizeSharedRoute(data: any): PlanningRoute | null {
       name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `Waypoint ${index + 1}`,
       lat: Number(wp?.lat ?? wp?.latitude),
       lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+      geometryType: normalizeLegGeometry(wp?.geometryType),
     }))
     .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (waypoints.length < 2) return null;
@@ -235,7 +233,7 @@ export default function VoyagePlannerPage() {
   const rawLegs = useMemo(() => {
     if (!route) return [];
     return route.waypoints.slice(1).map((to, index) => {
-      const from = route.waypoints[index], distance = distanceNm(from, to);
+      const from = route.waypoints[index], distance = routeLegDistanceNm(from, to);
       const speed = plans[index]?.speed || safeSpeed(defaultSpeed), holdHours = plans[index]?.holdHours || 0;
       return { index, from, to, distance, bearing: bearingDeg(from, to), speed, holdHours };
     });
