@@ -107,7 +107,7 @@ function parseRtz(xml: string) {
       name: wp.getAttribute("name") || wp.getAttribute("waypointName") || wp.querySelector("name")?.textContent?.trim() || `Waypoint ${index + 1}`,
       lat,
       lon,
-      geometryType: geometryType === "Orthodrome" || geometryType === "Loxodrome" ? geometryType : undefined,
+      geometryType: (geometryType === "Orthodrome" || geometryType === "Loxodrome" ? geometryType : undefined) as LegGeometry | undefined,
     };
   }).filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   if (waypoints.length < 2) throw new Error("RTZ route must contain at least two usable waypoints.");
