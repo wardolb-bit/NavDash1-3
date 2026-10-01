@@ -91,6 +91,7 @@ function zoneForPosition(lat: number, lon: number): LocalZone {
   return { offsetHours: Math.max(-12, Math.min(14, Math.round(lon / 15))) };
 }
 function zoneLabel(date: Date, zone: LocalZone) {
+  if (zone.iana === "Asia/Tokyo") return "JST";
   if (zone.iana) {
     const parts = new Intl.DateTimeFormat("en-US", { timeZone: zone.iana, timeZoneName: "short" }).formatToParts(date);
     return parts.find(part => part.type === "timeZoneName")?.value || zone.iana;
