@@ -9,9 +9,6 @@ export function CelestialFinderControlDock() {
   useEffect(() => {
     if (!pathname.startsWith("/celestial")) return;
 
-    let dockedStrip: HTMLElement | null = null;
-    let originalParent: HTMLElement | null = null;
-
     const dockControls = () => {
       const main = document.querySelector("main");
       if (!main) return;
@@ -20,17 +17,23 @@ export function CelestialFinderControlDock() {
       const portButton = buttons.find((button) => button.textContent?.trim() === "PORT") as HTMLButtonElement | undefined;
       const constellationsButton = buttons.find((button) => button.textContent?.trim() === "CONSTELLATIONS") as HTMLButtonElement | undefined;
       const starFieldButton = buttons.find((button) => button.textContent?.trim() === "STAR FIELD") as HTMLButtonElement | undefined;
+      const view360Button = buttons.find((button) => button.textContent?.trim() === "360°") as HTMLButtonElement | undefined;
 
       const viewRow = portButton?.parentElement as HTMLElement | null;
       const strip = constellationsButton?.parentElement as HTMLElement | null;
       if (!viewRow || !strip || !portButton || !constellationsButton || !starFieldButton || starFieldButton.parentElement !== strip) return;
 
-      if (!originalParent) originalParent = strip.parentElement as HTMLElement | null;
-      if (strip.parentElement !== viewRow) viewRow.appendChild(strip);
+      // Keep the React portal controls in their original DOM container so React's
+      // delegated click events continue to work. Position the strip over the view
+      // control row instead of re-parenting it into that row.
+      const reference = portButton.getBoundingClientRect();
+      const anchor = (view360Button?.parentElement === viewRow ? view360Button : null)?.getBoundingClientRect() ?? reference;
 
-      strip.style.position = "static";
+      strip.style.position = "fixed";
+      strip.style.left = `${Math.round(anchor.right + 4)}px`;
       strip.style.right = "auto";
-      strip.style.top = "auto";
+      strip.style.top = `${Math.round(reference.top)}px`;
+      strip.style.zIndex = "50";
       strip.style.padding = "0";
       strip.style.border = "0";
       strip.style.background = "transparent";
@@ -40,7 +43,6 @@ export function CelestialFinderControlDock() {
       strip.style.gap = "4px";
       strip.style.alignItems = "center";
 
-      const reference = portButton.getBoundingClientRect();
       for (const button of [constellationsButton, starFieldButton]) {
         button.style.width = "auto";
         button.style.minWidth = "0";
@@ -52,18 +54,17 @@ export function CelestialFinderControlDock() {
         button.style.letterSpacing = ".08em";
         button.style.whiteSpace = "nowrap";
       }
-
-      dockedStrip = strip;
     };
 
     dockControls();
-    const timer = window.setInterval(dockControls, 500);
+    const timer = window.setInterval(dockControls, 250);
+    window.addEventListener("resize", dockControls);
+    window.addEventListener("scroll", dockControls, true);
 
     return () => {
       window.clearInterval(timer);
-      if (dockedStrip && originalParent && originalParent.isConnected) {
-        originalParent.appendChild(dockedStrip);
-      }
+      window.removeEventListener("resize", dockControls);
+      window.removeEventListener("scroll", dockControls, true);
     };
   }, [pathname]);
 
