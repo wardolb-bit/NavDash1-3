@@ -2,15 +2,15 @@
 
 import { useEffect } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
+import { normalizeRouteWaypoints, type RouteWaypoint } from "../lib/routeNavigation";
 
 const ROUTE_STORAGE_KEY = "navconsole-saved-route";
 const CLOUD_FALLBACK_DELAY_MS = 1200;
 
-type Waypoint = { id?: string; name?: string; lat: number; lon: number };
 type RouteState = {
   type?: string;
   routeName?: string;
-  waypoints?: Waypoint[];
+  waypoints?: RouteWaypoint[];
   activeWaypointIndex?: number;
   savedAt?: string;
 };
@@ -22,14 +22,8 @@ function sequentialId(index: number) {
 function normalizeRoute(data: RouteState | null | undefined) {
   if (!data || !Array.isArray(data.waypoints)) return null;
 
-  const waypoints = data.waypoints
-    .map((wp, index) => ({
-      id: sequentialId(index),
-      name: typeof wp?.name === "string" && wp.name.trim() ? wp.name.trim() : `Waypoint ${index + 1}`,
-      lat: Number((wp as any)?.lat ?? (wp as any)?.latitude),
-      lon: Number((wp as any)?.lon ?? (wp as any)?.lng ?? (wp as any)?.longitude),
-    }))
-    .filter((wp) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+  const waypoints = normalizeRouteWaypoints(data.waypoints)
+    .map((waypoint, index) => ({ ...waypoint, id: sequentialId(index) }));
 
   if (waypoints.length < 2) return null;
 
@@ -135,7 +129,7 @@ export function SharedRouteSync() {
           if (!normalized) return;
           writeBrowserRoute(normalized);
 
-          const needsRenumber = message.waypoints.some((wp: Waypoint, index: number) => String(wp?.id || "").trim() !== sequentialId(index));
+          const needsRenumber = message.waypoints.some((waypoint: RouteWaypoint, index: number) => String(waypoint?.id || "").trim() !== sequentialId(index));
           if (needsRenumber && socket?.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify(normalized));
             fetch("/api/route-state", {
