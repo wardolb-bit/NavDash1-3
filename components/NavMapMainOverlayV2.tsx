@@ -357,7 +357,7 @@ function IsolatedMainMap() {
   const [measurement, setMeasurement] = useState<{ distanceNm: number; bearing: number; source: MeasureMode } | null>(null);
   const [sunEventsVisible, setSunEventsVisible] = useState(true);
   const [amiOverlay, setAmiOverlay] = useState<AmiRouteForecast | null>(null);
-  const [amiVisible, setAmiVisible] = useState(true);
+  const [amiVisible, setAmiVisible] = useState(false);
   const [amiSelectedIndex, setAmiSelectedIndex] = useState(0);
 
   useEffect(() => { toolModeRef.current = toolMode; }, [toolMode]);
