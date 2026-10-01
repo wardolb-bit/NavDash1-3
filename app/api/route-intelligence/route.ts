@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  geodesicDistanceNm,
+  normalizeRouteWaypoints,
+  pointAtRouteDistanceNm,
+  routeDistanceNm,
+  type RouteWaypoint,
+} from "../../../lib/routeNavigation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-type Waypoint = { id?: string; name?: string; lat: number; lon: number };
+type Waypoint = RouteWaypoint;
 type Finding = {
   id: string;
   category: "WEATHER" | "TIDES" | "NAVIGATION";
@@ -21,39 +28,18 @@ const NWS_HEADERS = {
   "User-Agent": "NavDash Voyage Workbench route intelligence",
 };
 
-function toRad(v: number) { return v * Math.PI / 180; }
-function nmBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const r = 3440.065;
-  const lat1 = toRad(a.lat), lat2 = toRad(b.lat);
-  const dLat = toRad(b.lat - a.lat), dLon = toRad(b.lon - a.lon);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
-  return 2 * r * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
-}
-
 function sampleRoute(route: Waypoint[], spacingNm = 40) {
-  const points: Array<{ lat: number; lon: number; legIndex: number }> = [];
-  if (!route.length) return points;
-  points.push({ lat: route[0].lat, lon: route[0].lon, legIndex: 0 });
-  for (let i = 1; i < route.length; i += 1) {
-    const a = route[i - 1], b = route[i];
-    const d = nmBetween(a, b);
-    const segments = Math.max(1, Math.ceil(d / spacingNm));
-    for (let s = 1; s <= segments; s += 1) {
-      const f = s / segments;
-      points.push({
-        lat: a.lat + (b.lat - a.lat) * f,
-        lon: a.lon + (b.lon - a.lon) * f,
-        legIndex: i,
-      });
-    }
-  }
-  const seen = new Set<string>();
-  return points.filter((p) => {
-    const key = `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 24);
+  if (!route.length) return [] as Array<{ lat: number; lon: number; legIndex: number }>;
+  const totalNm = routeDistanceNm(route);
+  if (totalNm <= 0) return [{ lat: route[0].lat, lon: route[0].lon, legIndex: 0 }];
+  const count = Math.max(2, Math.min(24, Math.ceil(totalNm / spacingNm) + 1));
+  return Array.from({ length: count }, (_, index) => {
+    const distanceNm = totalNm * index / (count - 1);
+    const point = pointAtRouteDistanceNm(route, distanceNm, spacingNm);
+    if (point) return { lat: point.lat, lon: point.lon, legIndex: point.legIndex };
+    const fallback = route[route.length - 1];
+    return { lat: fallback.lat, lon: fallback.lon, legIndex: route.length - 1 };
+  });
 }
 
 async function jsonFetch(url: string, init?: RequestInit) {
@@ -162,7 +148,7 @@ function nearestStation(stations: any[], point: Waypoint) {
   let best: any = null;
   let bestNm = Number.POSITIVE_INFINITY;
   for (const station of stations) {
-    const d = nmBetween(point, station);
+    const d = geodesicDistanceNm(point, station);
     if (d < bestNm) { bestNm = d; best = station; }
   }
   return best ? { ...best, distanceNm: bestNm } : null;
@@ -199,14 +185,12 @@ async function tideFinding(station: any, label: string, when: Date): Promise<Fin
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const route: Waypoint[] = (Array.isArray(body?.waypoints) ? body.waypoints : [])
-      .map((wp: any) => ({ id: String(wp?.id || ""), name: String(wp?.name || ""), lat: Number(wp?.lat), lon: Number(wp?.lon) }))
-      .filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
+    const route: Waypoint[] = normalizeRouteWaypoints(body?.waypoints);
     if (route.length < 2) return NextResponse.json({ ok: false, error: "At least two route waypoints are required." }, { status: 400 });
 
     const departure = body?.departureTime ? new Date(body.departureTime) : new Date();
     const plannedSpeed = Math.max(0.1, Number(body?.plannedSpeed) || 10);
-    const totalNm = route.slice(1).reduce((sum, wp, i) => sum + nmBetween(route[i], wp), 0);
+    const totalNm = routeDistanceNm(route);
     const arrival = new Date(departure.getTime() + (totalNm / plannedSpeed) * 3600000);
     const samples = sampleRoute(route, 40);
 
