@@ -210,6 +210,7 @@ function ddm(value: number, lat: boolean) {
 function destinationZone(position: Waypoint) {
   if (position.lat >= 18 && position.lat <= 23 && position.lon >= -161 && position.lon <= -154) return { timeZone: "Pacific/Honolulu", label: "HST" };
   if (position.lat >= 10 && position.lat <= 22 && position.lon >= 138 && position.lon <= 150) return { timeZone: "Pacific/Guam", label: "ChST" };
+  if (position.lat >= 24 && position.lat <= 46 && position.lon >= 129 && position.lon <= 146) return { timeZone: "Asia/Tokyo", label: "JST" };
   return null;
 }
 
