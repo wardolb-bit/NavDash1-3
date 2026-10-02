@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CrewNoaaMap } from "../../components/CrewNoaaMap";
 import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
+import { calculateNavigationSolution } from "../../lib/navigationSolution";
 import {
   normalizeRouteWaypoints,
-  routeDistanceNm,
-  routeLegDistanceNm,
-  routeRemainingDistanceNm,
   type RouteWaypoint,
 } from "../../lib/routeNavigation";
 import { useBridgeTheme } from "../../lib/useBridgeTheme";
@@ -22,7 +20,6 @@ type TideData = { station?: { name?: string }; highLow?: Array<{ time: string; v
 const TARGET_STALE_MS = 10 * 60 * 1000;
 const FRAGMENT_TTL_MS = 15 * 1000;
 
-function toRad(v: number) { return (v * Math.PI) / 180; }
 function formatLatLon(value?: number, isLat = true) {
   if (value === undefined || !Number.isFinite(value)) return "--";
   const abs = Math.abs(value); const deg = Math.floor(abs); const min = (abs - deg) * 60;
@@ -64,27 +61,6 @@ function normalizeRoute(data: any): RouteState | null {
   const active = Number(data?.activeWaypointIndex);
   return { routeName: String(data?.routeName || "Shared Route"), waypoints, activeWaypointIndex: Number.isFinite(active) ? Math.max(1, Math.min(Math.round(active), waypoints.length - 1)) : 1 };
 }
-function segmentProjection(shipLat: number, shipLon: number, a: Waypoint, b: Waypoint) {
-  const refLat = (shipLat + a.lat + b.lat) / 3; const refLon = (shipLon + a.lon + b.lon) / 3;
-  const p = { x: (shipLon - refLon) * 60 * Math.cos(toRad(refLat)), y: (shipLat - refLat) * 60 };
-  const s = { x: (a.lon - refLon) * 60 * Math.cos(toRad(refLat)), y: (a.lat - refLat) * 60 };
-  const e = { x: (b.lon - refLon) * 60 * Math.cos(toRad(refLat)), y: (b.lat - refLat) * 60 };
-  const vx = e.x - s.x, vy = e.y - s.y, wx = p.x - s.x, wy = p.y - s.y; const len2 = vx * vx + vy * vy;
-  const ratio = len2 > 0 ? Math.max(0, Math.min(1, (wx * vx + wy * vy) / len2)) : 0;
-  const dx = p.x - (s.x + ratio * vx), dy = p.y - (s.y + ratio * vy);
-  return { ratio, xte: Math.sqrt(dx * dx + dy * dy) };
-}
-function liveRoute(route: RouteState | null, ship: AisTarget | null) {
-  if (!route || ship?.lat === undefined || ship?.lon === undefined) return null;
-  const index = Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1));
-  const projection = segmentProjection(ship.lat, ship.lon, route.waypoints[index - 1], route.waypoints[index]);
-  const legStart = route.waypoints[index - 1], next = route.waypoints[index];
-  const position = { lat: ship.lat, lon: ship.lon };
-  const remaining = routeRemainingDistanceNm(position, route.waypoints, index);
-  const total = routeDistanceNm(route.waypoints);
-  const nextDistance = routeLegDistanceNm(position, next);
-  return { index, legStart, next, xte: projection.xte, nextDistance, remaining, progress: total > 0 ? Math.max(0, Math.min(100, ((total - remaining) / total) * 100)) : 0 };
-}
 function aisPayloadToBits(payload: string) { let bits = ""; for (const ch of payload) { let v = ch.charCodeAt(0) - 48; if (v > 40) v -= 8; bits += v.toString(2).padStart(6, "0"); } return bits; }
 function readUnsigned(bits: string, start: number, len: number) { const c = bits.slice(start, start + len); return c.length < len ? null : parseInt(c, 2); }
 function readSigned(bits: string, start: number, len: number) { const c = bits.slice(start, start + len); if (c.length < len) return null; const u = parseInt(c, 2); return c[0] === "1" ? u - 2 ** len : u; }
@@ -109,9 +85,18 @@ export default function CrewViewPage() {
   const [route, setRoute] = useState<RouteState | null>(null); const [connection, setConnection] = useState("CONNECTING"); const [targets, setTargets] = useState<Record<number, AisTarget>>({}); const [wx, setWx] = useState<CrewWeather | null>(null); const [tides, setTides] = useState<TideData | null>(null); const fragments = useRef<Map<string, FragmentBuffer>>(new Map());
   const targetList = useMemo(() => Object.values(targets).filter((t) => Date.now() - t.lastSeen < TARGET_STALE_MS), [targets]);
   const ownShip = useMemo(() => targetList.filter((t) => t.source === "AIVDO" && t.lat !== undefined && t.lon !== undefined).sort((a, b) => b.lastSeen - a.lastSeen)[0] || null, [targetList]);
-  const nav = useMemo(() => liveRoute(route, ownShip), [route, ownShip]); const etaHours = nav && ownShip?.sog && ownShip.sog > 0 ? nav.remaining / ownShip.sog : null;
-  const routeActiveIndex = route ? Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1)) : null; const routePreviousWaypoint = routeActiveIndex !== null && route ? route.waypoints[routeActiveIndex - 1] : null; const routeNextWaypoint = routeActiveIndex !== null && route ? route.waypoints[routeActiveIndex] : null;
-  const routeDestination = route?.waypoints[route.waypoints.length - 1];
+  const nav = useMemo(() => {
+    if (!route || ownShip?.lat === undefined || ownShip?.lon === undefined) return null;
+    return calculateNavigationSolution(
+      route.waypoints,
+      { lat: ownShip.lat, lon: ownShip.lon, sog: ownShip.sog },
+      route.activeWaypointIndex,
+    );
+  }, [route, ownShip]);
+  const routeActiveIndex = nav?.activeIndex ?? (route ? Math.max(1, Math.min(route.activeWaypointIndex, route.waypoints.length - 1)) : null);
+  const routePreviousWaypoint = nav?.start ?? (routeActiveIndex !== null && route ? route.waypoints[routeActiveIndex - 1] : null);
+  const routeNextWaypoint = nav?.next ?? (routeActiveIndex !== null && route ? route.waypoints[routeActiveIndex] : null);
+  const routeDestination = nav?.destination ?? route?.waypoints[route.waypoints.length - 1];
 
   useEffect(() => { setTheme("day"); }, []);
   useEffect(() => { const loadRoute = () => fetch("/api/route-state", { cache: "no-store" }).then((r) => r.ok ? r.json() : null).then((d) => setRoute(normalizeRoute(d))).catch(() => setRoute(null)); loadRoute(); const id = window.setInterval(loadRoute, 30000); return () => window.clearInterval(id); }, []);
@@ -141,7 +126,7 @@ export default function CrewViewPage() {
     <div className="grid gap-3 lg:grid-cols-[minmax(0,1.7fr)_minmax(360px,.8fr)] xl:grid-cols-[minmax(0,2fr)_minmax(390px,.72fr)]"><section className={`min-h-[430px] overflow-hidden border lg:sticky lg:top-3 lg:h-[calc(100vh-110px)] ${panel}`}><div className="flex items-center justify-between border-b border-current/10 px-3 py-2"><Title text="NOAA ENC · Route Overview" muted={muted} /><div className={`text-[9px] font-black uppercase tracking-[.12em] ${muted}`}>Read only</div></div><div className="h-[430px] lg:h-[calc(100%-37px)]"><CrewNoaaMap route={route} ship={ownShip} nightMode={nightMode} /></div></section>
     <div className="grid content-start gap-3"><section className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4"><Status label="GPS" value={connection} accent={connection === "LIVE"} panel={panel} muted={muted} /><Status label="SOG" value={fmt(ownShip?.sog, " kt")} panel={panel} muted={muted} /><Status label="COG" value={fmt(ownShip?.cog, "°")} panel={panel} muted={muted} /><Status label="Heading" value={fmt(ownShip?.heading, "°", 0)} panel={panel} muted={muted} /></section>
     <section className={`border p-4 ${panel}`}><div className="mb-3 flex items-center justify-between gap-3"><Title text="Own Ship" muted={muted} /><div className={`text-[10px] font-bold uppercase ${muted}`}>Age {ageText(ownShip?.lastSeen)}</div></div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><Metric label="Latitude" value={formatLatLon(ownShip?.lat, true)} inset={inset} muted={muted} /><Metric label="Longitude" value={formatLatLon(ownShip?.lon, false)} inset={inset} muted={muted} /></div></section>
-    <section className={`border p-4 ${panel}`}><Title text="Voyage" muted={muted} /><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><Metric label="Route" value={route?.routeName || "No route loaded"} inset={inset} muted={muted} wide /><Metric label="Active Leg" value={routePreviousWaypoint && routeNextWaypoint ? `${routePreviousWaypoint.name} → ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide /><Metric label="Next Waypoint" value={routeActiveIndex !== null && routeNextWaypoint ? `${routeNextWaypoint.id} · ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide /><Metric label="Next WP" value={nav ? `${nav.nextDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="Distance To Go" value={nav ? `${nav.remaining.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="ETA" value={formatEta(etaHours, routeDestination)} inset={inset} muted={muted} /><Metric label="Cross Track" value={nav ? `${nav.xte.toFixed(2)} nm` : "--"} inset={inset} muted={muted} /></div><div className={`mt-3 border p-3 ${inset}`}><div className="mb-2 flex justify-between text-[10px] font-black uppercase tracking-[.12em]"><span className={muted}>Route Progress</span><span>{nav ? `${nav.progress.toFixed(0)}%` : "--"}</span></div><div className={day ? "h-2 bg-slate-200" : "h-2 bg-black/40"}><div className="h-2 bg-[#c9a227]" style={{ width: `${nav?.progress || 0}%` }} /></div></div></section>
+    <section className={`border p-4 ${panel}`}><Title text="Voyage" muted={muted} /><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"><Metric label="Route" value={route?.routeName || "No route loaded"} inset={inset} muted={muted} wide /><Metric label="Active Leg" value={routePreviousWaypoint && routeNextWaypoint ? `${routePreviousWaypoint.name} → ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide /><Metric label="Next Waypoint" value={routeActiveIndex !== null && routeNextWaypoint ? `${routeNextWaypoint.id} · ${routeNextWaypoint.name}` : "--"} inset={inset} muted={muted} wide /><Metric label="Next WP" value={nav ? `${nav.nextDistance.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="Distance To Go" value={nav ? `${nav.dtg.toFixed(1)} nm` : "--"} inset={inset} muted={muted} /><Metric label="ETA" value={formatEta(nav?.etaHours, routeDestination)} inset={inset} muted={muted} /><Metric label="Cross Track" value={nav ? `${nav.metrics.xte.toFixed(2)} nm ${nav.metrics.side}` : "--"} inset={inset} muted={muted} /></div><div className={`mt-3 border p-3 ${inset}`}><div className="mb-2 flex justify-between text-[10px] font-black uppercase tracking-[.12em]"><span className={muted}>Route Progress</span><span>{nav ? `${nav.progress.toFixed(0)}%` : "--"}</span></div><div className={day ? "h-2 bg-slate-200" : "h-2 bg-black/40"}><div className="h-2 bg-[#c9a227]" style={{ width: `${nav?.progress || 0}%` }} /></div></div></section>
     <section className={`border p-4 ${panel}`}><Title text="Weather" muted={muted} /><div className="mt-3 grid grid-cols-2 gap-2"><Metric label="Wind" value={fmt(wxWind, " kt")} inset={inset} muted={muted} /><Metric label="Seas" value={fmt(wxSeas, " ft")} inset={inset} muted={muted} /></div></section>
     <section className={`border p-4 ${panel}`}><Title text="Tides" muted={muted} /><div className={`mt-2 text-xs ${muted}`}>{tides?.station?.name || "Nearest station pending"}</div><div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">{nextTides.length ? nextTides.map((t, i) => <Metric key={`${t.time}-${i}`} label={t.type || "Prediction"} value={`${new Date(t.time).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })} · ${Number(t.valueFt).toFixed(1)} ft`} inset={inset} muted={muted} />) : <div className={`border p-3 text-sm ${inset} ${muted}`}>Tide data pending</div>}</div></section></div></div>
     <footer className={`mt-3 border p-3 text-center text-[10px] font-bold uppercase tracking-[.1em] ${panel} ${muted}`}></footer></div></main>;
