@@ -126,28 +126,43 @@ function parsePartC(text: string, waypoints: Map<number, ParsedWaypoint>) {
     const waypointLineIndex = lines.findIndex(line => idPattern.test(line));
     if (waypointLineIndex < 0) continue;
 
+    // The WP/WPT row is the waypoint identity row, not a position-reference row.
+    // Strip the waypoint identity before considering any same-line reference data.
     let waypointPayload = clean(lines[waypointLineIndex].replace(idPattern, ""));
     if (wp.name && !/^Waypoint \d+$/i.test(wp.name) && waypointPayload.toLowerCase().startsWith(wp.name.toLowerCase())) {
       waypointPayload = clean(waypointPayload.slice(wp.name.length));
+    } else {
+      // If Part A and Part C names differ slightly, do not promote the Part C
+      // waypoint label into a route reference. Only same-line text with actual
+      // bearing/range data can be treated as a reference.
+      const firstBearing = waypointPayload.search(/\d+(?:\.\d+)?\s*°/);
+      if (firstBearing < 0) waypointPayload = "";
     }
 
     const referenceNames: string[] = [];
     const inlineNumericIndex = waypointPayload.search(/\d+(?:\.\d+)?\s*°/);
-    const firstReferenceName = clean(inlineNumericIndex >= 0 ? waypointPayload.slice(0, inlineNumericIndex) : waypointPayload);
-    if (firstReferenceName) referenceNames.push(firstReferenceName);
+    if (inlineNumericIndex > 0) {
+      const inlineReferenceName = clean(waypointPayload.slice(0, inlineNumericIndex));
+      if (inlineReferenceName) referenceNames.push(inlineReferenceName);
+    }
 
+    // Reference names are read only from rows after the waypoint identity row.
+    // Stop at the first bearing/range or leg-classification row, then pair the
+    // collected names with the numeric bearing/range columns below it.
     let numericStartLine = waypointLineIndex + 1;
-    if (inlineNumericIndex < 0) {
-      for (let index = waypointLineIndex + 1; index < lines.length; index += 1) {
-        const line = lines[index];
-        if (/\d+(?:\.\d+)?\s*°/.test(line) || /^\d+(?:\.\d+)?\s*NM\b/i.test(line) || /^(?:Coastal|Ocean|Pilotage(?:\/fairway\/channel)?|fairway|channel)$/i.test(line)) {
-          numericStartLine = index;
-          break;
-        }
-        if (/^(?:Lt|Light)$/i.test(line) && referenceNames.length) referenceNames[referenceNames.length - 1] = `${referenceNames[referenceNames.length - 1]} ${line}`;
-        else referenceNames.push(line);
-        numericStartLine = index + 1;
+    for (let index = waypointLineIndex + 1; index < lines.length; index += 1) {
+      const line = lines[index];
+      if (/\d+(?:\.\d+)?\s*°/.test(line) || /^\d+(?:\.\d+)?\s*NM\b/i.test(line) || /^(?:Coastal|Ocean|Pilotage(?:\/fairway\/channel)?|fairway|channel)$/i.test(line)) {
+        numericStartLine = index;
+        break;
       }
+      if (/^(?:WP|WPT)\d+\b/i.test(line)) break;
+      if (/^(?:Lt|Light)$/i.test(line) && referenceNames.length) {
+        referenceNames[referenceNames.length - 1] = `${referenceNames[referenceNames.length - 1]} ${line}`;
+      } else {
+        referenceNames.push(line);
+      }
+      numericStartLine = index + 1;
     }
 
     if (!referenceNames.length) continue;
