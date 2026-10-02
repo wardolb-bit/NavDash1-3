@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getAisWebSocketUrl } from '../../lib/aisWebSocket';
 import { useBridgeTheme } from '../../lib/useBridgeTheme';
+import { useOwnShipAis } from '../../lib/useOwnShipAis';
 
 type OwnShip = {
   lat?: number;
@@ -48,46 +49,6 @@ function buildUtcReportSubject(reportTimeUtc: string) {
   const month = now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toUpperCase();
   const year = now.getUTCFullYear();
   return `${day}${reportTimeUtc}Z${month}${year}`;
-}
-
-function sixBitCharToValue(char: string) {
-  const code = char.charCodeAt(0);
-  return code < 88 ? code - 48 : code - 56;
-}
-
-function payloadToBits(payload: string) {
-  return payload.split('').map(char => sixBitCharToValue(char).toString(2).padStart(6, '0')).join('');
-}
-
-function getUnsigned(bits: string, start: number, length: number) {
-  return parseInt(bits.slice(start, start + length), 2);
-}
-
-function getSigned(bits: string, start: number, length: number) {
-  const value = getUnsigned(bits, start, length);
-  const signBit = 1 << (length - 1);
-  return value & signBit ? value - (1 << length) : value;
-}
-
-function decodeAisPosition(sentence: string): OwnShip | null {
-  try {
-    const parts = sentence.split(',');
-    if (parts.length < 6) return null;
-    const payload = parts[5];
-    if (!payload) return null;
-    const bits = payloadToBits(payload);
-    const messageType = getUnsigned(bits, 0, 6);
-    if (![1, 2, 3].includes(messageType)) return null;
-    const sog = getUnsigned(bits, 50, 10) / 10;
-    const lon = getSigned(bits, 61, 28) / 600000;
-    const lat = getSigned(bits, 89, 27) / 600000;
-    const cog = getUnsigned(bits, 116, 12) / 10;
-    const headingRaw = getUnsigned(bits, 128, 9);
-    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
-    return { lat, lon, sog, cog, heading: headingRaw === 511 ? null : headingRaw };
-  } catch {
-    return null;
-  }
 }
 
 function padCourse(value?: number | null) {
@@ -255,8 +216,9 @@ function normalizePositionHistory(candidate: unknown): PositionLogEntry[] {
 }
 
 export default function PositionReportPage() {
-  const [lastWsMessage, setLastWsMessage] = useState('');
-  const [ownShip, setOwnShip] = useState<OwnShip>({});
+  const liveOwnShip = useOwnShipAis();
+  const [historyOwnShip, setHistoryOwnShip] = useState<OwnShip>({});
+  const ownShip: OwnShip = liveOwnShip ?? historyOwnShip;
   const [route, setRoute] = useState<RouteState>({});
   const [positionLog, setPositionLog] = useState<PositionLogEntry[]>([]);
   const [positionLogStatus, setPositionLogStatus] = useState('Waiting for wheelhouse history');
@@ -323,23 +285,19 @@ export default function PositionReportPage() {
     ws.onmessage = event => {
       try {
         const msg = JSON.parse(event.data);
-        setLastWsMessage(JSON.stringify(msg).slice(0, 500));
 
         if (msg.type === 'position-history') {
           const entries = normalizePositionHistory(msg.entries ?? msg);
           setPositionLog(entries);
           setPositionLogStatus(entries.length ? `${entries.length} wheelhouse samples` : 'Collecting wheelhouse samples');
           const latest = entries[entries.length - 1];
-          if (latest) setOwnShip(prev => ({
-            lat: prev.lat ?? latest.lat, lon: prev.lon ?? latest.lon,
-            sog: prev.sog ?? latest.sog ?? undefined, cog: prev.cog ?? latest.cog ?? undefined,
-            heading: prev.heading ?? latest.heading ?? null,
-          }));
-        }
-
-        if (msg.type === 'nmea') {
-          const decoded = decodeAisPosition(msg.line);
-          if (decoded && String(msg.line).startsWith('!AIVDO')) setOwnShip(decoded);
+          if (latest) setHistoryOwnShip({
+            lat: latest.lat,
+            lon: latest.lon,
+            sog: latest.sog ?? undefined,
+            cog: latest.cog ?? undefined,
+            heading: latest.heading ?? null,
+          });
         }
 
         if (msg.type === 'route-state') {
@@ -392,7 +350,7 @@ export default function PositionReportPage() {
     return elapsedHours > 0 ? distance / elapsedHours : null;
   }, [positionLog]);
 
-  const livePositionActive = ownShip.lat !== undefined && ownShip.lon !== undefined;
+  const livePositionActive = liveOwnShip !== null;
 
   function updateField(field: keyof typeof manual, value: string) {
     setManual(prev => ({ ...prev, [field]: value }));
