@@ -147,8 +147,8 @@ export function calculateNavigationSolution<TWaypoint extends RouteWaypoint>(
   const progress = total > 0
     ? Math.max(0, Math.min(100, ((total - dtg) / total) * 100))
     : 0;
-  const etaHours = Number.isFinite(ship.sog) && (ship.sog ?? 0) > 0.1
-    ? dtg / (ship.sog as number)
+  const etaHours = typeof ship.sog === "number" && Number.isFinite(ship.sog) && ship.sog > 0.1
+    ? dtg / ship.sog
     : null;
 
   return {
