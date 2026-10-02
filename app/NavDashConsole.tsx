@@ -2,13 +2,11 @@
 
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
+import { calculateNavigationSolution, logicalRouteLegIndex } from "../lib/navigationSolution";
 import { useBridgeTheme } from "../lib/useBridgeTheme";
 import {
-  geodesicDistanceNm,
-  normalizeLongitudeDelta,
   normalizeRouteWaypoints,
   parseRtzRouteXml,
-  routeRemainingDistanceNm,
   type RouteWaypoint,
 } from "../lib/routeNavigation";
 
@@ -137,70 +135,6 @@ function clearRouteStorage() {
   fetch("/api/route-state", { method: "DELETE" }).catch(() => {});
 }
 
-function rad(value: number) { return value * Math.PI / 180; }
-function deg(value: number) { return value * 180 / Math.PI; }
-function normalize360(value: number) { return ((value % 360) + 360) % 360; }
-function lonDelta(value: number) { return normalizeLongitudeDelta(value); }
-
-function bearing(a: { lat: number; lon: number }, b: { lat: number; lon: number }) {
-  const p1 = rad(a.lat), p2 = rad(b.lat), dl = rad(lonDelta(b.lon - a.lon));
-  return normalize360(deg(Math.atan2(Math.sin(dl) * Math.cos(p2), Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl))));
-}
-
-function legMetrics(ship: OwnShip, start: Waypoint, end: Waypoint) {
-  const mercatorY = (lat: number) => {
-    const clampedLat = Math.max(-85.05112878, Math.min(85.05112878, lat));
-    return Math.log(Math.tan(Math.PI / 4 + rad(clampedLat) / 2));
-  };
-
-  const startX = rad(start.lon);
-  const startY = mercatorY(start.lat);
-  const endX = startX + rad(lonDelta(end.lon - start.lon));
-  const endY = mercatorY(end.lat);
-  const shipX = startX + rad(lonDelta(ship.lon - start.lon));
-  const shipY = mercatorY(ship.lat);
-
-  const vx = endX - startX;
-  const vy = endY - startY;
-  const wx = shipX - startX;
-  const wy = shipY - startY;
-  const len2 = vx * vx + vy * vy;
-  if (len2 <= 1e-16) return { ratio: 0, projectionRatio: 0, xte: 0, side: "--" };
-
-  const ratio = (wx * vx + wy * vy) / len2;
-  const projectionRatio = Math.max(0, Math.min(1, ratio));
-  const closestX = startX + projectionRatio * vx;
-  const closestY = startY + projectionRatio * vy;
-  const closestLat = deg(Math.atan(Math.sinh(closestY)));
-  const closestLon = deg(closestX);
-  const cross = vx * wy - vy * wx;
-
-  return {
-    ratio,
-    projectionRatio,
-    xte: geodesicDistanceNm(ship, { lat: closestLat, lon: closestLon }),
-    side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--",
-  };
-}
-
-function logicalRouteLeg(route: Waypoint[], ownShip: OwnShip | null, currentLegIndex: number) {
-  if (!ownShip || route.length < 2) return null;
-  let best: { index: number; metrics: ReturnType<typeof legMetrics>; score: number } | null = null;
-  for (let i = 1; i < route.length; i += 1) {
-    const metrics = legMetrics(ownShip, route[i - 1], route[i]);
-    const jumpPenalty = Math.abs(i - currentLegIndex) * 0.35;
-    const endPenalty = metrics.projectionRatio <= 0 || metrics.projectionRatio >= 1 ? 0.25 : 0;
-    const score = metrics.xte + jumpPenalty + endPenalty;
-    if (!best || score < best.score) best = { index: i, metrics, score };
-  }
-  return best;
-}
-
-function routeDtg(ship: OwnShip | null, route: Waypoint[], activeIndex: number) {
-  if (!ship || route.length < 2 || !route[activeIndex]) return null;
-  return routeRemainingDistanceNm(ship, route, activeIndex);
-}
-
 function ddm(value: number, lat: boolean) {
   const hemi = lat ? (value >= 0 ? "N" : "S") : value >= 0 ? "E" : "W";
   const abs = Math.abs(value), degrees = Math.floor(abs), minutes = (abs - degrees) * 60;
@@ -317,7 +251,7 @@ export default function NavDashConsole() {
 
   useEffect(() => {
     if (!ownShip || route.length < 2) return;
-    setActiveIndex((current) => logicalRouteLeg(route, ownShip, current)?.index ?? current);
+    setActiveIndex((current) => logicalRouteLegIndex(route, ownShip, current) ?? current);
   }, [ownShip?.lat, ownShip?.lon, route]);
 
   useEffect(() => {
@@ -334,13 +268,17 @@ export default function NavDashConsole() {
     });
   }, [aisOn, vectorOn, ownShip]);
 
-  const destination = route[route.length - 1];
-  const start = route[Math.max(0, activeIndex - 1)];
-  const next = route[activeIndex];
-  const metrics = ownShip && start && next ? legMetrics(ownShip, start, next) : null;
-  const dtg = useMemo(() => routeDtg(ownShip, route, activeIndex), [ownShip, route, activeIndex]);
-  const etaHours = dtg !== null && ownShip && ownShip.sog > 0.1 ? dtg / ownShip.sog : null;
-  const brg = start && next ? bearing(start, next) : null;
+  const navigation = useMemo(
+    () => calculateNavigationSolution(route, ownShip, activeIndex),
+    [route, ownShip, activeIndex],
+  );
+  const destination = navigation?.destination ?? route[route.length - 1];
+  const start = navigation?.start ?? route[Math.max(0, activeIndex - 1)];
+  const next = navigation?.next ?? route[activeIndex];
+  const metrics = navigation?.metrics ?? null;
+  const dtg = navigation?.dtg ?? null;
+  const etaHours = navigation?.etaHours ?? null;
+  const brg = navigation?.bearing ?? null;
   const legText = start && next ? `${start.id} → ${next.id}` : "--";
   const routeLoaded = route.length >= 2;
 
