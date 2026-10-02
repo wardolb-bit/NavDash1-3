@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getAisWebSocketUrl } from '../../lib/aisWebSocket';
 import { useBridgeTheme } from '../../lib/useBridgeTheme';
 import { useOwnShipAis } from '../../lib/useOwnShipAis';
+import { normalizeLegGeometry, routeRemainingDistanceNm, type LegGeometry } from '../../lib/routeNavigation';
 
 type OwnShip = {
   lat?: number;
@@ -18,6 +19,7 @@ type Waypoint = {
   name?: string;
   lat: number;
   lon: number;
+  geometryType?: LegGeometry;
 };
 
 type RouteState = {
@@ -159,6 +161,12 @@ function readWaypointCoordinate(wp: unknown, primary: string, secondary: string)
   return finiteNumber(record[primary] ?? record[secondary] ?? position[primary] ?? position[secondary]);
 }
 
+function readWaypointGeometry(wp: unknown) {
+  if (!wp || typeof wp !== 'object') return undefined;
+  const record = wp as Record<string, unknown>;
+  return normalizeLegGeometry(record.geometryType ?? record.legGeometry ?? record.geometry);
+}
+
 function normalizeRouteState(candidate: unknown): RouteState | null {
   try {
     if (!candidate || typeof candidate !== 'object') return null;
@@ -167,6 +175,7 @@ function normalizeRouteState(candidate: unknown): RouteState | null {
     const waypoints = rawWaypoints.map((wp, index) => ({
       id: readWaypointId(wp, index), name: readWaypointName(wp, index),
       lat: readWaypointCoordinate(wp, 'lat', 'latitude'), lon: readWaypointCoordinate(wp, 'lon', 'longitude'),
+      geometryType: readWaypointGeometry(wp),
     })).filter(wp => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
     if (waypoints.length < 2) return null;
     const rawIndex = finiteNumber(parsed.activeWaypointIndex, 1);
@@ -324,14 +333,10 @@ export default function PositionReportPage() {
   }, []);
 
   const distanceToGo = useMemo(() => {
-    if (!ownShip.lat || !ownShip.lon || !route.waypoints?.length) return null;
+    if (ownShip.lat === undefined || ownShip.lon === undefined || !route.waypoints?.length) return null;
     const activeIndex = Math.min(Math.max(route.activeWaypointIndex ?? 1, 1), route.waypoints.length - 1);
-    const remaining = route.waypoints.slice(activeIndex);
-    if (!remaining.length) return null;
-    let total = distanceNm(ownShip.lat, ownShip.lon, remaining[0].lat, remaining[0].lon);
-    for (let i = 0; i < remaining.length - 1; i++) total += distanceNm(remaining[i].lat, remaining[i].lon, remaining[i + 1].lat, remaining[i + 1].lon);
-    return total;
-  }, [ownShip, route]);
+    return routeRemainingDistanceNm({ lat: ownShip.lat, lon: ownShip.lon }, route.waypoints, activeIndex);
+  }, [ownShip.lat, ownShip.lon, route.waypoints, route.activeWaypointIndex]);
 
   const destinationName = useMemo(() => {
     const waypoints = route.waypoints || []; const finalWaypoint = waypoints[waypoints.length - 1];
