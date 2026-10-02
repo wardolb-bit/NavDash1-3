@@ -2,43 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { getAisWebSocketUrl } from "../../lib/aisWebSocket";
+import { useOwnShipAis } from "../../lib/useOwnShipAis";
 
 type SpeedMode = "planned" | "sog";
-
-function sixBitCharToValue(char: string) {
-  const code = char.charCodeAt(0);
-  return code < 88 ? code - 48 : code - 56;
-}
-
-function payloadToBits(payload: string) {
-  return payload
-    .split("")
-    .map((char) => sixBitCharToValue(char).toString(2).padStart(6, "0"))
-    .join("");
-}
-
-function getUnsigned(bits: string, start: number, length: number) {
-  return parseInt(bits.slice(start, start + length), 2);
-}
-
-function decodeSog(sentence: string) {
-  try {
-    const parts = sentence.split(",");
-    if (parts.length < 6) return null;
-    const payload = parts[5];
-    if (!payload) return null;
-    const bits = payloadToBits(payload);
-    const messageType = getUnsigned(bits, 0, 6);
-    if (![1, 2, 3].includes(messageType)) return null;
-    const raw = getUnsigned(bits, 50, 10);
-    if (raw >= 1023) return null;
-    const sog = raw / 10;
-    return Number.isFinite(sog) ? sog : null;
-  } catch {
-    return null;
-  }
-}
 
 function setReactInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
@@ -50,7 +16,8 @@ function setReactInputValue(input: HTMLInputElement, value: string) {
 export default function SpeedSourceSelector() {
   const [mount, setMount] = useState<HTMLElement | null>(null);
   const [mode, setMode] = useState<SpeedMode>("planned");
-  const [liveSog, setLiveSog] = useState<number | null>(null);
+  const ownShip = useOwnShipAis();
+  const liveSog = ownShip?.sog ?? null;
   const plannedSpeedRef = useRef<number | null>(null);
   const speedInputRef = useRef<HTMLInputElement | null>(null);
   const modeRef = useRef<SpeedMode>("planned");
@@ -101,37 +68,11 @@ export default function SpeedSourceSelector() {
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(getAisWebSocketUrl());
-
-    ws.onmessage = (event) => {
-      let message: any = event.data;
-      try {
-        message = JSON.parse(String(event.data));
-      } catch {}
-
-      let sog: number | null = null;
-      const structured = Number(message?.sog ?? message?.speed);
-      if (Number.isFinite(structured)) {
-        sog = structured;
-      } else {
-        const line = typeof message === "string"
-          ? message.trim()
-          : typeof message?.line === "string"
-            ? message.line.trim()
-            : "";
-        if (line.startsWith("!AIVDO")) sog = decodeSog(line);
-      }
-
-      if (sog === null || !Number.isFinite(sog)) return;
-      setLiveSog(sog);
-
-      if (modeRef.current === "sog" && sog >= 1 && speedInputRef.current) {
-        setReactInputValue(speedInputRef.current, sog.toFixed(1));
-      }
-    };
-
-    return () => ws.close();
-  }, []);
+    if (liveSog === null || !Number.isFinite(liveSog)) return;
+    if (modeRef.current === "sog" && liveSog >= 1 && speedInputRef.current) {
+      setReactInputValue(speedInputRef.current, liveSog.toFixed(1));
+    }
+  }, [liveSog]);
 
   function selectPlanned() {
     setMode("planned");
