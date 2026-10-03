@@ -137,7 +137,15 @@ export default function BridgeCelestial(){
       ws.onopen=()=>setStatus("AIS LIVE");
       ws.onerror=()=>setStatus("AIS UNAVAILABLE");
       ws.onclose=()=>{setStatus("AIS UNAVAILABLE");if(!done)retry=window.setTimeout(connect,3000)};
-      ws.onmessage=e=>{try{const m=JSON.parse(String(e.data));if(m?.type!=="nmea"||typeof m.line!=="string")return;const d=decode(m.line);if(d)setNav(v=>({...v,...d}))}catch{}};
+      ws.onmessage=e=>{
+        let m:any=e.data;
+        try{m=JSON.parse(String(e.data))}catch{}
+        const values=[m?.line,m?.sentence,m?.nmea,m?.raw,m?.data,m?.payload,m];
+        const line=values.find(value=>typeof value==="string"&&/^[!$]/.test(value.trim()))?.trim()||"";
+        if(!line)return;
+        const d=decode(line);
+        if(d)setNav(v=>({...v,...d}));
+      };
     }catch{setStatus("AIS UNAVAILABLE")}};
     connect();return()=>{done=true;if(retry)clearTimeout(retry);ws?.close()};
   },[]);
