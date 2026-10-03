@@ -7,7 +7,7 @@ const ROUTE_COLOR = "#c9a227";
 const GREAT_CIRCLE_THRESHOLD_NM = 250;
 const GREAT_CIRCLE_STEP_NM = 50;
 
-type Waypoint = { lat: number; lon: number };
+type Waypoint = { lat: number; lon: number; geometryType?: "Orthodrome" | "Loxodrome" };
 
 function rad(value: number) { return value * Math.PI / 180; }
 function deg(value: number) { return value * 180 / Math.PI; }
@@ -56,7 +56,10 @@ function displayRoute(route: Waypoint[], referenceLon: number) {
     const start = route[index - 1];
     const end = route[index];
     const legNm = distanceNm(start, end);
-    const segments = legNm >= GREAT_CIRCLE_THRESHOLD_NM ? Math.max(2, Math.ceil(legNm / GREAT_CIRCLE_STEP_NM)) : 1;
+    const isOrthodrome = end.geometryType === "Orthodrome";
+    const segments = isOrthodrome && legNm >= GREAT_CIRCLE_THRESHOLD_NM
+      ? Math.max(2, Math.ceil(legNm / GREAT_CIRCLE_STEP_NM))
+      : 1;
     for (let step = 1; step <= segments; step += 1) {
       const point = segments === 1 ? end : greatCirclePoint(start, end, step / segments);
       const lon = nearLon(point.lon, previousLon);
@@ -71,6 +74,7 @@ function normalizeRoute(payload: any): Waypoint[] {
   return (Array.isArray(payload?.waypoints) ? payload.waypoints : []).map((wp: any) => ({
     lat: Number(wp?.lat ?? wp?.latitude),
     lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+    geometryType: wp?.geometryType === "Orthodrome" || wp?.geometryType === "Loxodrome" ? wp.geometryType : undefined,
   })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon) && Math.abs(wp.lat) <= 90 && Math.abs(wp.lon) <= 180);
 }
 
@@ -111,7 +115,7 @@ export function BridgeGreatCircleRoute() {
         return;
       }
 
-      const signature = route.map((wp) => `${wp.lat.toFixed(6)},${wp.lon.toFixed(6)}`).join(";");
+      const signature = route.map((wp) => `${wp.lat.toFixed(6)},${wp.lon.toFixed(6)},${wp.geometryType || ""}`).join(";");
       let rawRouteVisible = false;
       map.eachLayer((layer: any) => {
         const color = String(layer?.options?.color || "").toLowerCase();
