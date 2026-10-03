@@ -55,12 +55,10 @@ export function BridgeQuickAccess() {
     ? "bc-header-nav inline-flex flex-none items-center justify-center whitespace-nowrap border border-slate-400 bg-white font-black text-slate-950 shadow-sm hover:bg-slate-50"
     : "bc-header-nav inline-flex flex-none items-center justify-center whitespace-nowrap border border-white/10 bg-white/10 font-black text-slate-100 hover:bg-white/15";
 
-  const weatherHref = `https://wx.wardlab.dev?theme=${dayMode ? "day" : "bridge-night"}`;
-
   return createPortal(
     <>
       <Link href="/celestial" className={buttonClass}>Star Finder</Link>
-      <a href={weatherHref} className={buttonClass}>Weather</a>
+      <Link href="/route-weather-lab" className={buttonClass}>Weather</Link>
       <Link href="/tides" className={buttonClass}>Tides</Link>
       <Link href="/position-report" className={buttonClass}>Position Report</Link>
       <Link href="/nav-brief" className={buttonClass}>Nav Brief</Link>
