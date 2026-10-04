@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { getAisWebSocketUrl } from '../../lib/aisWebSocket';
 import { useBridgeTheme } from '../../lib/useBridgeTheme';
 import { useOwnShipAis } from '../../lib/useOwnShipAis';
 import { normalizeLegGeometry, routeRemainingDistanceNm, type LegGeometry } from '../../lib/routeNavigation';
@@ -230,7 +229,7 @@ export default function PositionReportPage() {
   const ownShip: OwnShip = liveOwnShip ?? historyOwnShip;
   const [route, setRoute] = useState<RouteState>({});
   const [positionLog, setPositionLog] = useState<PositionLogEntry[]>([]);
-  const [positionLogStatus, setPositionLogStatus] = useState('Waiting for wheelhouse history');
+  const [positionLogStatus, setPositionLogStatus] = useState('Loading hourly position history');
   const [reportTimeUtc, setReportTimeUtc] = useState('1800');
   const [copyStatus, setCopyStatus] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -279,56 +278,37 @@ export default function PositionReportPage() {
   }
 
   useEffect(() => {
-    const wsUrl = getAisWebSocketUrl();
-    const ws = new WebSocket(wsUrl);
-
-    const requestHistory = () => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'position-history-request' }));
-    };
-
-    ws.onopen = () => {
-      setPositionLogStatus('Requesting wheelhouse history');
-      requestHistory();
-    };
-
-    ws.onmessage = event => {
+    let disposed = false;
+    const loadHistory = async () => {
       try {
-        const msg = JSON.parse(event.data);
-
-        if (msg.type === 'position-history') {
-          const entries = normalizePositionHistory(msg.entries ?? msg);
-          setPositionLog(entries);
-          setPositionLogStatus(entries.length ? `${entries.length} wheelhouse samples` : 'Collecting wheelhouse samples');
-          const latest = entries[entries.length - 1];
-          if (latest) setHistoryOwnShip({
-            lat: latest.lat,
-            lon: latest.lon,
-            sog: latest.sog ?? undefined,
-            cog: latest.cog ?? undefined,
-            heading: latest.heading ?? null,
-          });
-        }
-
-        if (msg.type === 'route-state') {
-          const normalizedRoute = normalizeRouteState(msg);
-          if (normalizedRoute) setRoute(normalizedRoute);
-        }
-      } catch {}
+        const response = await fetch('/api/position-history', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Position history unavailable');
+        const data = await response.json();
+        if (disposed) return;
+        const entries = normalizePositionHistory(data);
+        setPositionLog(entries);
+        setPositionLogStatus(entries.length >= 25 ? `${entries.length} hourly samples` : entries.length ? `${entries.length}/25 hourly samples · 24h history collecting` : '24h history collecting');
+        const latest = entries[entries.length - 1];
+        if (latest) setHistoryOwnShip({
+          lat: latest.lat,
+          lon: latest.lon,
+          sog: latest.sog ?? undefined,
+          cog: latest.cog ?? undefined,
+          heading: latest.heading ?? null,
+        });
+      } catch {
+        if (!disposed) setPositionLogStatus('Position history unavailable');
+      }
     };
-
-    ws.onerror = () => setPositionLogStatus('Wheelhouse history unavailable');
-    ws.onclose = () => setPositionLogStatus(prev => positionLog.length ? prev : 'Wheelhouse AIS disconnected');
-
-    const interval = window.setInterval(requestHistory, 60 * 1000);
-    const onFocus = () => requestHistory();
-    window.addEventListener('focus', onFocus);
-    window.addEventListener('pageshow', onFocus);
-
+    loadHistory();
+    const interval = window.setInterval(loadHistory, 60 * 60 * 1000);
+    window.addEventListener('focus', loadHistory);
+    window.addEventListener('pageshow', loadHistory);
     return () => {
+      disposed = true;
       window.clearInterval(interval);
-      window.removeEventListener('focus', onFocus);
-      window.removeEventListener('pageshow', onFocus);
-      ws.close();
+      window.removeEventListener('focus', loadHistory);
+      window.removeEventListener('pageshow', loadHistory);
     };
   }, []);
 
