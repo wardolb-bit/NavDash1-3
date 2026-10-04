@@ -102,7 +102,7 @@ function moonEvents(lat:number,lon:number,date:Date,offset:number):MoonEvents{
 
 export function CelestialSunMoon(){
  const pathname=usePathname();
- const [pos,setPos]=useState<Pos>({lat:13.4443,lon:144.7937});
+ const [pos,setPos]=useState<Pos|null>(null);
  const [now,setNow]=useState(new Date());
  const [bannerTarget,setBannerTarget]=useState<HTMLElement|null>(null);
  const [plannerTarget,setPlannerTarget]=useState<HTMLElement|null>(null);
@@ -110,7 +110,7 @@ export function CelestialSunMoon(){
  const [plannerDate,setPlannerDate]=useState<Date|null>(null);
 
  useEffect(()=>{if(!pathname.startsWith("/celestial"))return;const id=window.setInterval(()=>setNow(new Date()),30000);return()=>window.clearInterval(id)},[pathname]);
- useEffect(()=>{if(!pathname.startsWith("/celestial"))return;let ws:WebSocket|null=null,retry:number|undefined,done=false;const connect=()=>{try{ws=new WebSocket(getAisWebSocketUrl());ws.onmessage=e=>{try{const m=JSON.parse(String(e.data));if(m?.type!=="nmea"||typeof m.line!=="string")return;const d=decode(m.line);if(d?.lat!==undefined&&d.lon!==undefined)setPos({lat:d.lat,lon:d.lon})}catch{}};ws.onclose=()=>{if(!done)retry=window.setTimeout(connect,3000)}}catch{retry=window.setTimeout(connect,3000)}};connect();return()=>{done=true;if(retry)clearTimeout(retry);ws?.close()}},[pathname]);
+ useEffect(()=>{if(!pathname.startsWith("/celestial"))return;let ws:WebSocket|null=null,retry:number|undefined,done=false;const connect=()=>{try{ws=new WebSocket(getAisWebSocketUrl());ws.onmessage=e=>{let m:any=e.data;try{m=JSON.parse(String(e.data))}catch{}const values=[m?.line,m?.sentence,m?.nmea,m?.raw,m?.data,m?.payload,m];const line=values.find(value=>typeof value==="string"&&/^[!$]/.test(value.trim()))?.trim()||"";if(!line)return;const d=decode(line);if(d?.lat!==undefined&&d.lon!==undefined)setPos({lat:d.lat,lon:d.lon})};ws.onclose=()=>{setPos(null);if(!done)retry=window.setTimeout(connect,3000)}}catch{setPos(null);retry=window.setTimeout(connect,3000)}};connect();return()=>{done=true;if(retry)clearTimeout(retry);ws?.close()}},[pathname]);
  useEffect(()=>{
   if(!pathname.startsWith("/celestial")){setBannerTarget(null);setPlannerTarget(null);return}
   let stop=false,timer=0;
@@ -143,16 +143,16 @@ export function CelestialSunMoon(){
   return()=>{stop=true;window.clearTimeout(timer)};
  },[pathname]);
 
- const offset=shipOffsetHours(pos.lon),solar=useMemo(()=>solarEvents(pos.lat,pos.lon,now,offset),[pos.lat,pos.lon,now,offset]),moon=useMemo(()=>moonEvents(pos.lat,pos.lon,now,offset),[pos.lat,pos.lon,now,offset]);
- const sunAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,now,sunRaDec(now)),[pos.lat,pos.lon,now]),moonAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,now,moonRaDec(now)),[pos.lat,pos.lon,now]);
- const pDate=plannerDate??now,pOffset=shipOffsetHours(pos.lon),pSolar=useMemo(()=>solarEvents(pos.lat,pos.lon,pDate,pOffset),[pos.lat,pos.lon,pDate,pOffset]),pMoon=useMemo(()=>moonEvents(pos.lat,pos.lon,pDate,pOffset),[pos.lat,pos.lon,pDate,pOffset]);
- const pSunAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,pDate,sunRaDec(pDate)),[pos.lat,pos.lon,pDate]),pMoonAz=useMemo(()=>bodyAzimuth(pos.lat,pos.lon,pDate,moonRaDec(pDate)),[pos.lat,pos.lon,pDate]);
+ const lat=pos?.lat??0,lon=pos?.lon??0,offset=shipOffsetHours(lon),solar=useMemo(()=>solarEvents(lat,lon,now,offset),[lat,lon,now,offset]),moon=useMemo(()=>moonEvents(lat,lon,now,offset),[lat,lon,now,offset]);
+ const sunAz=useMemo(()=>bodyAzimuth(lat,lon,now,sunRaDec(now)),[lat,lon,now]),moonAz=useMemo(()=>bodyAzimuth(lat,lon,now,moonRaDec(now)),[lat,lon,now]);
+ const pDate=plannerDate??now,pOffset=shipOffsetHours(lon),pSolar=useMemo(()=>solarEvents(lat,lon,pDate,pOffset),[lat,lon,pDate,pOffset]),pMoon=useMemo(()=>moonEvents(lat,lon,pDate,pOffset),[lat,lon,pDate,pOffset]);
+ const pSunAz=useMemo(()=>bodyAzimuth(lat,lon,pDate,sunRaDec(pDate)),[lat,lon,pDate]),pMoonAz=useMemo(()=>bodyAzimuth(lat,lon,pDate,moonRaDec(pDate)),[lat,lon,pDate]);
  if(!pathname.startsWith("/celestial"))return null;
  const cell="border-r border-[#263442] px-3 py-2 last:border-r-0";
  const lab="text-[8px] font-black tracking-[.15em] text-[#708496]";
  const val="mt-1 text-[13px] font-black text-[#dbe5ee]";
  return <>
-  {bannerTarget&&createPortal(<div className="mb-[5px] grid grid-cols-2 border border-[#263442] bg-[#071019] sm:grid-cols-4 xl:grid-cols-8">
+  {bannerTarget&&createPortal(pos?<div className="mb-[5px] grid grid-cols-2 border border-[#263442] bg-[#071019] sm:grid-cols-4 xl:grid-cols-8">
    <div className={cell}><div className={lab}>SHIP LT</div><div className={`${val} text-[#e7c95c]`}>{new Date(now.getTime()+offset*3600000).toISOString().slice(11,16)} · {offsetLabel(offset)}</div></div>
    <div className={cell}><div className={lab}>SUNRISE</div><div className={val}>{minutesToLocalText(solar.sunrise)}</div></div>
    <div className={cell}><div className={lab}>SUNSET</div><div className={val}>{minutesToLocalText(solar.sunset)}</div></div>
@@ -161,13 +161,13 @@ export function CelestialSunMoon(){
    <div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(moon.moonset)}</div></div>
    <div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#42d3c8]`}>{azText(moonAz)}</div></div>
    <div className={cell}><div className={lab}>MOON</div><div className={`${val} text-[#42d3c8]`}>{moon.illumination.toFixed(0)}% ILLUM</div></div>
-  </div>,bannerTarget)}
-  {plannerActive&&plannerTarget&&createPortal(<section className="mb-[5px] border border-[#263442] bg-[#071019]">
+  </div>:<div className="mb-[5px] border border-[#263442] bg-[#071019] px-3 py-3"><div className={lab}>POSITION</div><div className="mt-1 text-[13px] font-black text-[#f87171]">NO LIVE POSITION</div></div>,bannerTarget)}
+  {plannerActive&&plannerTarget&&createPortal(pos?<section className="mb-[5px] border border-[#263442] bg-[#071019]">
    <div className="border-b border-[#263442] px-3 py-2"><span className={lab}>LIGHT CONDITIONS · VESSEL POSITION · SHIP LOCAL TIME {offsetLabel(pOffset)}</span></div>
    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8">
     {[["ASTRO DAWN",pSolar.astroDawn],["NAUT DAWN",pSolar.nauticalDawn],["CIVIL DAWN",pSolar.civilDawn],["SUNRISE",pSolar.sunrise],["LAN",pSolar.lan],["SUNSET",pSolar.sunset],["NAUT DUSK",pSolar.nauticalDusk],["ASTRO DUSK",pSolar.astroDusk]].map(([a,b])=><div key={String(a)} className={cell}><div className={lab}>{a}</div><div className={a==="NAUT DAWN"||a==="NAUT DUSK"||a==="LAN"?`${val} text-[#e7c95c]`:val}>{minutesToLocalText(b as EventValue)}</div></div>)}
    </div>
    <div className="grid grid-cols-2 border-t border-[#263442] md:grid-cols-5"><div className={cell}><div className={lab}>SUN AZ</div><div className={`${val} text-[#e7c95c]`}>{azText(pSunAz)}</div></div><div className={cell}><div className={lab}>MOONRISE</div><div className={val}>{minutesToLocalText(pMoon.moonrise)}</div></div><div className={cell}><div className={lab}>MOONSET</div><div className={val}>{minutesToLocalText(pMoon.moonset)}</div></div><div className={cell}><div className={lab}>MOON AZ</div><div className={`${val} text-[#42d3c8]`}>{azText(pMoonAz)}</div></div><div className={cell}><div className={lab}>MOON ILLUMINATION</div><div className={`${val} text-[#42d3c8]`}>{pMoon.illumination.toFixed(0)}%</div></div></div>
-  </section>,plannerTarget)}
+  </section>:<section className="mb-[5px] border border-[#263442] bg-[#071019] px-3 py-3"><div className={lab}>LIGHT CONDITIONS</div><div className="mt-1 text-[13px] font-black text-[#f87171]">NO LIVE POSITION</div></section>,plannerTarget)}
  </>;
 }
