@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { getAisWebSocketUrl } from "../lib/aisWebSocket";
+import { decodeOwnShip, ownShipMessageText } from "../lib/useOwnShipAis";
 
 type Subscriber = {
   emitOpen: () => void;
@@ -17,6 +18,8 @@ declare global {
     __navdashSharedAisShimInstalled?: boolean;
   }
 }
+
+const POSITION_HISTORY_HOUR_KEY = "navdash-position-history-hour-v1";
 
 function isSharedAisUrl(url: string) {
   try {
@@ -53,9 +56,35 @@ export function SharedAisConnection() {
     let disposed = false;
     let reconnectTimer = 0;
     let lastRealOwnshipAt = 0;
+    let lastHistoryAttemptBucket = "";
     const BaseWebSocket = window.WebSocket;
     const subscribers = window.__navdashSharedAisSubscribers ?? new Set<Subscriber>();
     window.__navdashSharedAisSubscribers = subscribers;
+
+    const recordHourlyPosition = (data: unknown) => {
+      for (const line of ownShipMessageText(data).split(/\r?\n/)) {
+        const ownShip = decodeOwnShip(line.trim());
+        if (!ownShip) continue;
+        const now = new Date();
+        const hourBucket = new Date(Date.UTC(
+          now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), 0, 0, 0,
+        )).toISOString();
+        let storedBucket = "";
+        try { storedBucket = window.localStorage.getItem(POSITION_HISTORY_HOUR_KEY) || ""; } catch {}
+        if (storedBucket === hourBucket || lastHistoryAttemptBucket === hourBucket) return;
+        lastHistoryAttemptBucket = hourBucket;
+        fetch("/api/position-history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(ownShip),
+          keepalive: true,
+        }).then((response) => {
+          if (!response.ok) return;
+          try { window.localStorage.setItem(POSITION_HISTORY_HOUR_KEY, hourBucket); } catch {}
+        }).catch(() => {});
+        return;
+      }
+    };
 
     const connect = () => {
       if (disposed) return;
@@ -76,6 +105,7 @@ export function SharedAisConnection() {
           if (mmsi > 0) lastRealOwnshipAt = Date.now();
           else if (Date.now() - lastRealOwnshipAt < 5000) return;
         }
+        recordHourlyPosition(event.data);
         subscribers.forEach((subscriber) => subscriber.emitMessage(event.data));
       };
 
