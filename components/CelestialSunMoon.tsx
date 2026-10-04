@@ -74,11 +74,16 @@ function moonRaDec(date:Date){
  const N=norm(125.1228-0.0529538083*d),i=5.1454,w=norm(318.0634+0.1643573223*d),a=60.2666,e=0.0549,M=norm(115.3654+13.0649929509*d);
  let E=rad(M)+e*Math.sin(rad(M))*(1+e*Math.cos(rad(M)));
  for(let k=0;k<3;k++)E=E-(E-e*Math.sin(E)-rad(M))/(1-e*Math.cos(E));
- const xv=a*(Math.cos(E)-e),yv=a*Math.sqrt(1-e*e)*Math.sin(E),v=deg(Math.atan2(yv,xv)),r=Math.sqrt(xv*xv+yv*yv);
+ const xv=a*(Math.cos(E)-e),yv=a*Math.sqrt(1-e*e)*Math.sin(E),v=deg(Math.atan2(yv,xv));
+ let r=Math.sqrt(xv*xv+yv*yv);
  const xh=r*(Math.cos(rad(N))*Math.cos(rad(v+w))-Math.sin(rad(N))*Math.sin(rad(v+w))*Math.cos(rad(i)));
  const yh=r*(Math.sin(rad(N))*Math.cos(rad(v+w))+Math.cos(rad(N))*Math.sin(rad(v+w))*Math.cos(rad(i)));
  const zh=r*Math.sin(rad(v+w))*Math.sin(rad(i));
- const lon=deg(Math.atan2(yh,xh)),lat=deg(Math.atan2(zh,Math.sqrt(xh*xh+yh*yh)));
+ let lon=norm(deg(Math.atan2(yh,xh))),lat=deg(Math.atan2(zh,Math.sqrt(xh*xh+yh*yh)));
+ const sun=solarParams(date),Ms=norm(357.52911+0.98560028*d),Lm=norm(N+w+M),Ls=norm(sun.lambda),D=norm(Lm-Ls),F=norm(Lm-N);
+ lon+=-1.274*Math.sin(rad(M-2*D))+0.658*Math.sin(rad(2*D))-0.186*Math.sin(rad(Ms))-0.059*Math.sin(rad(2*M-2*D))-0.057*Math.sin(rad(M-2*D+Ms))+0.053*Math.sin(rad(M+2*D))+0.046*Math.sin(rad(2*D-Ms))+0.041*Math.sin(rad(M-Ms))-0.035*Math.sin(rad(D))-0.031*Math.sin(rad(M+Ms))-0.015*Math.sin(rad(2*F-2*D))+0.011*Math.sin(rad(M-4*D));
+ lat+=-0.173*Math.sin(rad(F-2*D))-0.055*Math.sin(rad(M-F-2*D))-0.046*Math.sin(rad(M+F-2*D))+0.033*Math.sin(rad(F+2*D))+0.017*Math.sin(rad(2*M+F));
+ r+=-0.58*Math.cos(rad(M-2*D))-0.46*Math.cos(rad(2*D));
  const ecl=rad(23.4393-3.563e-7*d),xe=r*Math.cos(rad(lon))*Math.cos(rad(lat)),ye=r*Math.sin(rad(lon))*Math.cos(rad(lat)),ze=r*Math.sin(rad(lat));
  const xeq=xe,yeq=ye*Math.cos(ecl)-ze*Math.sin(ecl),zeq=ye*Math.sin(ecl)+ze*Math.cos(ecl);
  return{ra:norm(deg(Math.atan2(yeq,xeq))),dec:deg(Math.atan2(zeq,Math.sqrt(xeq*xeq+yeq*yeq)))};
