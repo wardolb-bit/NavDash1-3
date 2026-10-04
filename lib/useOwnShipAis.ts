@@ -35,7 +35,7 @@ function signed(bits: string, start: number, length: number) {
   return value >= signBit ? value - 2 ** length : value;
 }
 
-function decodeOwnShip(line: string): Omit<LiveOwnShipPosition, "receivedAtMs"> | null {
+export function decodeOwnShip(line: string): Omit<LiveOwnShipPosition, "receivedAtMs"> | null {
   try {
     if (!line.startsWith("!AIVDO")) return null;
     const parts = line.split(",");
@@ -64,7 +64,7 @@ function decodeOwnShip(line: string): Omit<LiveOwnShipPosition, "receivedAtMs"> 
   }
 }
 
-function messageText(data: unknown) {
+export function ownShipMessageText(data: unknown) {
   let raw = String(data ?? "");
   try {
     const parsed = JSON.parse(raw);
@@ -89,7 +89,7 @@ export function useOwnShipAis() {
       try {
         socket = new WebSocket(getAisWebSocketUrl());
         socket.onmessage = (event) => {
-          for (const line of messageText(event.data).split(/\r?\n/)) {
+          for (const line of ownShipMessageText(event.data).split(/\r?\n/)) {
             const decoded = decodeOwnShip(line.trim());
             if (decoded) setOwnShip({ ...decoded, receivedAtMs: Date.now() });
           }
