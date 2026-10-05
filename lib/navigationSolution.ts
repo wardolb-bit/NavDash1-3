@@ -1,5 +1,6 @@
 import {
   geodesicDistanceNm,
+  interpolateRouteLeg,
   normalizeLongitudeDelta,
   routeDistanceNm,
   routeLegDistanceNm,
@@ -34,6 +35,8 @@ export type NavigationSolution<TWaypoint extends RouteWaypoint = RouteWaypoint> 
   bearing: number;
 };
 
+const SPHERICAL_RADIUS_NM = 3440.065;
+
 function rad(value: number) {
   return value * Math.PI / 180;
 }
@@ -51,6 +54,26 @@ function mercatorY(lat: number) {
   return Math.log(Math.tan(Math.PI / 4 + rad(clampedLat) / 2));
 }
 
+function sphericalAngularDistance(a: RoutePoint, b: RoutePoint) {
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dp = rad(b.lat - a.lat);
+  const dl = rad(normalizeLongitudeDelta(b.lon - a.lon));
+  const h = Math.sin(dp / 2) ** 2
+    + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * Math.atan2(Math.sqrt(h), Math.sqrt(Math.max(0, 1 - h)));
+}
+
+function sphericalInitialBearingRad(a: RoutePoint, b: RoutePoint) {
+  const p1 = rad(a.lat);
+  const p2 = rad(b.lat);
+  const dl = rad(normalizeLongitudeDelta(b.lon - a.lon));
+  return Math.atan2(
+    Math.sin(dl) * Math.cos(p2),
+    Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl),
+  );
+}
+
 export function navigationBearing(
   start: RoutePoint,
   end: RoutePoint,
@@ -64,10 +87,10 @@ export function navigationBearing(
   )));
 }
 
-export function navigationLegMetrics(
+function rhumbLegMetrics(
   ship: RoutePoint,
   start: RoutePoint,
-  end: RoutePoint,
+  end: RouteWaypoint,
 ): LegMetrics {
   const startX = rad(start.lon);
   const startY = mercatorY(start.lat);
@@ -100,6 +123,50 @@ export function navigationLegMetrics(
     xte: geodesicDistanceNm(ship, { lat: closestLat, lon: closestLon }),
     side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--",
   };
+}
+
+function greatCircleLegMetrics(
+  ship: RoutePoint,
+  start: RoutePoint,
+  end: RouteWaypoint,
+): LegMetrics {
+  const legAngle = sphericalAngularDistance(start, end);
+  if (legAngle <= 1e-12) {
+    return { ratio: 0, projectionRatio: 0, xte: 0, side: "--" };
+  }
+
+  const shipAngle = sphericalAngularDistance(start, ship);
+  const legBearing = sphericalInitialBearingRad(start, end);
+  const shipBearing = sphericalInitialBearingRad(start, ship);
+  const bearingDelta = shipBearing - legBearing;
+  const crossTrackAngle = Math.asin(
+    Math.max(-1, Math.min(1, Math.sin(shipAngle) * Math.sin(bearingDelta))),
+  );
+  const alongTrackAngle = Math.atan2(
+    Math.sin(shipAngle) * Math.cos(bearingDelta),
+    Math.cos(shipAngle),
+  );
+  const ratio = alongTrackAngle / legAngle;
+  const projectionRatio = Math.max(0, Math.min(1, ratio));
+  const closestPoint = interpolateRouteLeg(start, end, projectionRatio);
+  const xte = geodesicDistanceNm(ship, closestPoint);
+
+  return {
+    ratio,
+    projectionRatio,
+    xte: Number.isFinite(xte) ? xte : Math.abs(crossTrackAngle) * SPHERICAL_RADIUS_NM,
+    side: crossTrackAngle > 0 ? "STBD" : crossTrackAngle < 0 ? "PORT" : "--",
+  };
+}
+
+export function navigationLegMetrics(
+  ship: RoutePoint,
+  start: RoutePoint,
+  end: RouteWaypoint,
+): LegMetrics {
+  return end.geometryType === "Loxodrome"
+    ? rhumbLegMetrics(ship, start, end)
+    : greatCircleLegMetrics(ship, start, end);
 }
 
 export function logicalRouteLegIndex<TWaypoint extends RouteWaypoint>(
