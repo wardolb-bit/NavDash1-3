@@ -76,15 +76,15 @@ function sphericalInitialBearingRad(a: RoutePoint, b: RoutePoint) {
 
 export function navigationBearing(
   start: RoutePoint,
-  end: RoutePoint,
+  end: RouteWaypoint,
 ) {
-  const p1 = rad(start.lat);
-  const p2 = rad(end.lat);
-  const dl = rad(normalizeLongitudeDelta(end.lon - start.lon));
-  return normalize360(deg(Math.atan2(
-    Math.sin(dl) * Math.cos(p2),
-    Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl),
-  )));
+  if (end.geometryType === "Loxodrome") {
+    const dLon = rad(normalizeLongitudeDelta(end.lon - start.lon));
+    const dPsi = mercatorY(end.lat) - mercatorY(start.lat);
+    return normalize360(deg(Math.atan2(dLon, dPsi)));
+  }
+
+  return normalize360(deg(sphericalInitialBearingRad(start, end)));
 }
 
 function rhumbLegMetrics(
@@ -121,7 +121,7 @@ function rhumbLegMetrics(
     ratio,
     projectionRatio,
     xte: geodesicDistanceNm(ship, { lat: closestLat, lon: closestLon }),
-    side: cross > 0 ? "STBD" : cross < 0 ? "PORT" : "--",
+    side: cross > 0 ? "PORT" : cross < 0 ? "STBD" : "--",
   };
 }
 
