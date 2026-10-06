@@ -294,6 +294,7 @@ export default function RouteWeatherLabPage() {
     let encLayer: any = null;
     let dayBaseLayer: any = null;
     let daySeamarkLayer: any = null;
+    let nightBaseLayer: any = null;
 
     async function init() {
       if (!mapEl.current || mapRef.current) return;
@@ -345,15 +346,22 @@ export default function RouteWeatherLabPage() {
         removeLayer(encLayer);
         removeLayer(dayBaseLayer);
         removeLayer(daySeamarkLayer);
+        removeLayer(nightBaseLayer);
         encLayer = null;
         dayBaseLayer = null;
         daySeamarkLayer = null;
+        nightBaseLayer = null;
 
         if (mapEl.current) mapEl.current.style.background = night ? "#071019" : "#dbe5e8";
 
         if (!night) {
           dayBaseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
           daySeamarkLayer = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
+        } else {
+          nightBaseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+            subdomains: "abcd",
+            maxZoom: 20,
+          }).addTo(map);
         }
 
         encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
