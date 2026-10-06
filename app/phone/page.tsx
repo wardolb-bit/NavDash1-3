@@ -83,6 +83,7 @@ function extractLine(message: any) { if (typeof message === "string") return mes
 export default function CrewViewPage() {
   const { nightMode, toggleTheme, setTheme } = useBridgeTheme();
   const [route, setRoute] = useState<RouteState | null>(null); const [connection, setConnection] = useState("CONNECTING"); const [targets, setTargets] = useState<Record<number, AisTarget>>({}); const [wx, setWx] = useState<CrewWeather | null>(null); const [tides, setTides] = useState<TideData | null>(null); const fragments = useRef<Map<string, FragmentBuffer>>(new Map());
+  const tideRequestedRef = useRef(false);
   const targetList = useMemo(() => Object.values(targets).filter((t) => Date.now() - t.lastSeen < TARGET_STALE_MS), [targets]);
   const ownShip = useMemo(() => targetList.filter((t) => t.source === "AIVDO" && t.lat !== undefined && t.lon !== undefined).sort((a, b) => b.lastSeen - a.lastSeen)[0] || null, [targetList]);
   const nav = useMemo(() => {
@@ -114,10 +115,21 @@ export default function CrewViewPage() {
           if (weatherResponse.ok && !cancelled) setWx(await weatherResponse.json()); else if (!cancelled) setWx(null);
         } catch { if (!cancelled) setWx(null); }
       } else if (!cancelled) setWx(null);
-      try { const r = await fetch(`/api/tides?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&hours=48`, { cache: "no-store" }); if (r.ok && !cancelled) setTides(await r.json()); } catch {}
     };
     void load(); const id = window.setInterval(load, 10 * 60 * 1000); return () => { cancelled = true; window.clearInterval(id); };
   }, [route, ownShip?.lat === undefined ? "none" : `${ownShip.lat.toFixed(2)},${ownShip.lon?.toFixed(2)}`]);
+  useEffect(() => {
+    if (ownShip?.lat === undefined || ownShip?.lon === undefined || tideRequestedRef.current) return;
+    tideRequestedRef.current = true;
+    let cancelled = false;
+    const lat = ownShip.lat, lon = ownShip.lon;
+    const loadTides = async () => {
+      try { const r = await fetch(`/api/tides?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&hours=48`, { cache: "no-store" }); if (r.ok && !cancelled) setTides(await r.json()); } catch {}
+    };
+    void loadTides();
+    return () => { cancelled = true; };
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [ownShip?.mmsi]);
 
   const day = !nightMode; const page = day ? "bg-[#eef2f5] text-[#17212b]" : "bg-[#05090e] text-[#dbe5ee]"; const panel = day ? "border-slate-300 bg-white" : "border-white/10 bg-[#08111a]"; const inset = day ? "border-slate-300 bg-[#f5f7f9]" : "border-white/10 bg-[#050a0f]"; const muted = day ? "text-slate-600" : "text-[#8294a5]"; const ctl = day ? "border-slate-300 bg-white text-slate-900" : "border-white/15 bg-[#101820] text-[#dbe5ee]"; const nextTides = tides?.highLow?.slice(0, 2) || []; const wxWind = wx?.ndbc?.windKt; const wxSeas = wx?.ndbc?.waveFt;
 
