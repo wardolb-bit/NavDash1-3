@@ -358,10 +358,18 @@ export default function RouteWeatherLabPage() {
           dayBaseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
           daySeamarkLayer = L.tileLayer("https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png", { maxZoom: 18 }).addTo(map);
         } else {
-          nightBaseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-            subdomains: "abcd",
-            maxZoom: 20,
+          nightBaseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            className: "navdash-night-basemap",
           }).addTo(map);
+          const applyNightBasemapFilter = () => {
+            const container = nightBaseLayer?.getContainer?.();
+            if (container) {
+              container.style.filter = "grayscale(1) invert(1) brightness(0.48) contrast(0.9)";
+            }
+          };
+          nightBaseLayer.on?.("load", applyNightBasemapFilter);
+          applyNightBasemapFilter();
         }
 
         encLayer = L.tileLayer.wms("/api/noaa-charts/wms", {
