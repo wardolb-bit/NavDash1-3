@@ -51,6 +51,7 @@ export function EncScaleAwareLayer() {
     let cancelled = false;
     let timer = 0;
     let chartLayer: any = null;
+    let nightBaseLayer: any = null;
     let mapRef: any = null;
     let previousBackground = "";
     const baseLayers: Array<{ layer: any; opacity: number }> = [];
@@ -103,7 +104,16 @@ export function EncScaleAwareLayer() {
       }
 
       if (nightMode) {
+        for (const item of baseLayers) {
+          try { item.layer.setOpacity?.(0); } catch {}
+        }
         try { map.getContainer().style.background = "#071019"; } catch {}
+
+        nightBaseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+          subdomains: "abcd",
+          maxZoom: 20,
+          attribution: "© OpenStreetMap contributors © CARTO",
+        }).addTo(map);
 
         chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
           layers: "1,2,3,4,5,6,7",
@@ -144,6 +154,9 @@ export function EncScaleAwareLayer() {
       window.removeEventListener(BRIGHTNESS_EVENT, onBrightnessChange);
       if (chartLayer && mapRef) {
         try { mapRef.removeLayer(chartLayer); } catch {}
+      }
+      if (nightBaseLayer && mapRef) {
+        try { mapRef.removeLayer(nightBaseLayer); } catch {}
       }
       restoreBaseLayers();
     };
