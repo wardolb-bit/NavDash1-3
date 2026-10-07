@@ -6,7 +6,7 @@ import { getAisWebSocketUrl } from "../lib/aisWebSocket";
 import type { AmiForecastPoint, AmiRouteForecast } from "../lib/amiRouteForecast";
 
 type OwnShip = { lat: number; lon: number; sog: number; cog: number; heading: number | null };
-type Waypoint = { id?: string; name?: string; lat: number; lon: number };
+type Waypoint = { id?: string; name?: string; lat: number; lon: number; geometryType?: "Orthodrome" | "Loxodrome" };
 type UserMark = { id: string; name: string; lat: number; lon: number };
 type MeasurePoint = { lat: number; lon: number };
 type ToolMode = "pan" | "mark" | "measure";
@@ -102,6 +102,7 @@ function normalizeRoutePayload(payload: any): Waypoint[] {
     name: typeof wp?.name === "string" ? wp.name : undefined,
     lat: Number(wp?.lat ?? wp?.latitude),
     lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
+    geometryType: wp?.geometryType === "Orthodrome" || wp?.geometryType === "Loxodrome" ? wp.geometryType : undefined,
   })).filter((wp: Waypoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
 }
 
@@ -114,7 +115,7 @@ function readSavedRoute() {
 }
 
 function routeSignature(route: Waypoint[]) {
-  return route.map((wp) => `${wp.id || ""}|${wp.name || ""}|${wp.lat.toFixed(6)}|${wp.lon.toFixed(6)}`).join(";");
+  return route.map((wp) => `${wp.id || ""}|${wp.name || ""}|${wp.lat.toFixed(6)}|${wp.lon.toFixed(6)}|${wp.geometryType || ""}`).join(";");
 }
 
 
@@ -149,8 +150,43 @@ function cAltitude(lat: number, lon: number, date: Date, body: { ra: number; dec
   return cDeg(Math.asin(Math.sin(cRad(lat)) * Math.sin(cRad(body.dec)) + Math.cos(cRad(lat)) * Math.cos(cRad(body.dec)) * Math.cos(h)));
 }
 
+function cGreatCirclePoint(start: Waypoint, end: Waypoint, fraction: number) {
+  const lat1 = cRad(start.lat), lon1 = cRad(start.lon);
+  const lat2 = cRad(end.lat), lon2 = cRad(end.lon);
+  const v1 = [Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)];
+  const v2 = [Math.cos(lat2) * Math.cos(lon2), Math.cos(lat2) * Math.sin(lon2), Math.sin(lat2)];
+  const dot = Math.max(-1, Math.min(1, v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]));
+  const omega = Math.acos(dot);
+  if (omega < 1e-12) return { lat: start.lat, lon: start.lon };
+  const sinOmega = Math.sin(omega);
+  const startWeight = Math.sin((1 - fraction) * omega) / sinOmega;
+  const endWeight = Math.sin(fraction * omega) / sinOmega;
+  const x = startWeight * v1[0] + endWeight * v2[0];
+  const y = startWeight * v1[1] + endWeight * v2[1];
+  const z = startWeight * v1[2] + endWeight * v2[2];
+  return { lat: cDeg(Math.atan2(z, Math.hypot(x, y))), lon: cDeg(Math.atan2(y, x)) };
+}
+
 function cRouteGeometry(route: Waypoint[], referenceLon: number) {
-  const points = unwrapRouteNear(route, referenceLon);
+  if (!route.length) return { points: [] as Array<[number, number]>, cumulative: [0] };
+  const points: Array<[number, number]> = [];
+  let previousLon = longitudeNearReference(route[0].lon, referenceLon);
+  points.push([route[0].lat, previousLon]);
+
+  for (let i = 1; i < route.length; i += 1) {
+    const start = route[i - 1];
+    const end = route[i];
+    const legNm = distanceAndBearing(start, end).distanceNm;
+    const isOrthodrome = end.geometryType === "Orthodrome";
+    const segments = isOrthodrome && legNm >= 250 ? Math.max(2, Math.ceil(legNm / 50)) : 1;
+    for (let step = 1; step <= segments; step += 1) {
+      const point = segments === 1 ? end : cGreatCirclePoint(start, end, step / segments);
+      const lon = longitudeNearReference(point.lon, previousLon);
+      points.push([point.lat, lon]);
+      previousLon = lon;
+    }
+  }
+
   const cumulative = [0];
   for (let i = 1; i < points.length; i += 1) {
     cumulative.push(cumulative[i - 1] + distanceAndBearing({ lat: points[i - 1][0], lon: points[i - 1][1] }, { lat: points[i][0], lon: points[i][1] }).distanceNm);
