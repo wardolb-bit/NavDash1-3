@@ -109,11 +109,19 @@ export function EncScaleAwareLayer() {
         }
         try { map.getContainer().style.background = "#071019"; } catch {}
 
-        nightBaseLayer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-          subdomains: "abcd",
-          maxZoom: 20,
-          attribution: "© OpenStreetMap contributors © CARTO",
+        nightBaseLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 19,
+          className: "navdash-night-basemap",
+          attribution: "© OpenStreetMap contributors",
         }).addTo(map);
+        const applyNightBasemapFilter = () => {
+          const container = nightBaseLayer?.getContainer?.();
+          if (container instanceof HTMLElement) {
+            container.style.filter = "grayscale(1) invert(1) brightness(0.48) contrast(0.9)";
+          }
+        };
+        nightBaseLayer.on?.("load", applyNightBasemapFilter);
+        applyNightBasemapFilter();
 
         chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
           layers: "1,2,3,4,5,6,7",
