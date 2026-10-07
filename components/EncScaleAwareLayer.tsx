@@ -103,9 +103,6 @@ export function EncScaleAwareLayer() {
       }
 
       if (nightMode) {
-        for (const item of baseLayers) {
-          try { item.layer.setOpacity?.(0); } catch {}
-        }
         try { map.getContainer().style.background = "#071019"; } catch {}
 
         chartLayer = L.tileLayer.wms(NAVDASH_ENC_FRAGMENT, {
