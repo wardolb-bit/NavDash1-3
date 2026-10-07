@@ -112,16 +112,18 @@ function routeDisplayPoints(route: Waypoint[]) {
   return result;
 }
 
-function pointAtDistance(route: Waypoint[], targetNm: number) {
+function pointAtDistance(route: Waypoint[], targetNm: number, referenceLon?: number) {
   const point = pointAtRouteDistanceNm(route, targetNm, ROUTE_GEOMETRY_STEP_NM);
-  return point ? { name: "Expected vessel position", lat: point.lat, lon: point.lon } : null;
+  if (!point) return null;
+  const lon = referenceLon === undefined ? point.lon : longitudeNearReference(point.lon, referenceLon);
+  return { name: "Expected vessel position", lat: point.lat, lon };
 }
 
-function routeSliceBetweenDistances(route: Waypoint[], startNm: number, endNm: number) {
+function routeSliceBetweenDistances(route: Waypoint[], startNm: number, endNm: number, referenceLon?: number) {
   const geometry = canonicalRouteSliceBetweenDistances(route, startNm, endNm, ROUTE_GEOMETRY_STEP_NM);
   if (!geometry.length) return [] as Array<[number, number]>;
   const points: Array<[number, number]> = [];
-  let previousLon = geometry[0].lon;
+  let previousLon = referenceLon === undefined ? geometry[0].lon : longitudeNearReference(geometry[0].lon, referenceLon);
   points.push([geometry[0].lat, previousLon]);
   for (let index = 1; index < geometry.length; index += 1) {
     const point = geometry[index];
@@ -667,12 +669,13 @@ export default function RouteWeatherLabPage() {
       const L = await import("leaflet");
       layer.clearLayers();
       if (!displayedPoints.length) return;
+      const displayReferenceLon = mapRef.current.getCenter().lng;
 
       if (showSeas) {
         for (let i = 0; i < displayedPoints.length - 1; i += 1) {
           const a = displayedPoints[i];
           const b = displayedPoints[i + 1];
-          const routeSlice = routeSliceBetweenDistances(route, a.distanceNm, b.distanceNm);
+          const routeSlice = routeSliceBetweenDistances(route, a.distanceNm, b.distanceNm, displayReferenceLon);
           if (routeSlice.length < 2) continue;
           const enc = mode === "encounter" ? (a as EncounterPoint) : null;
           const wave = a.waveHeightFt;
@@ -695,7 +698,7 @@ export default function RouteWeatherLabPage() {
         const enc = mode === "encounter" ? (p as EncounterPoint) : null;
         const wave = p.waveHeightFt;
         const wind = p.windKt;
-        const routePoint = pointAtDistance(route, p.distanceNm) || p;
+        const routePoint = pointAtDistance(route, p.distanceNm, displayReferenceLon) || { ...p, lon: longitudeNearReference(p.lon, displayReferenceLon) };
         const pointColor = enc?.beyondHorizon ? "#64748b" : seaColor(wave);
         const details = [
           enc ? `<b>Confidence:</b> ${enc.confidenceLabel}` : "",
@@ -718,7 +721,7 @@ export default function RouteWeatherLabPage() {
       });
 
       if (liveRouteAnchor && ownShip) {
-        L.circleMarker([ownShip.lat, ownShip.lon], {
+        L.circleMarker([ownShip.lat, longitudeNearReference(ownShip.lon, displayReferenceLon)], {
           radius: 7,
           color: "#071019",
           weight: 2,
@@ -731,7 +734,7 @@ export default function RouteWeatherLabPage() {
       }
 
       if (expectedVesselNm !== null) {
-        const position = pointAtDistance(route, expectedVesselNm);
+        const position = pointAtDistance(route, expectedVesselNm, displayReferenceLon);
         if (position && selectedFrame) {
           const label = liveRouteAnchor ? "AIS-ANCHORED EXPECTED POSITION" : "EXPECTED VESSEL POSITION";
           L.circleMarker([position.lat, position.lon], { radius: 9, color: "#f8fafc", weight: 2, fillColor: "#22d3ee", fillOpacity: 0.95 })
