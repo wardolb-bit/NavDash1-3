@@ -386,6 +386,7 @@ function IsolatedMainMap() {
   const measureStartRef = useRef<MeasurePoint | null>(null);
   const ownShipRef = useRef<OwnShip | null>(null);
   const [ownShip, setOwnShip] = useState<OwnShip | null>(null);
+  const [mapReady, setMapReady] = useState(false);
   const [route, setRoute] = useState<Waypoint[]>([]);
   const [toolMode, setToolMode] = useState<ToolMode>("pan");
   const [measureMode, setMeasureMode] = useState<MeasureMode>("ship");
@@ -479,6 +480,7 @@ function IsolatedMainMap() {
       celestialLayerRef.current = L.layerGroup([], { pane: "navmap-main-celestial-v1" } as any).addTo(map);
       amiLayerRef.current = L.layerGroup([], { pane: "navmap-main-ami-v1" } as any).addTo(map);
       mapRef.current = map;
+      setMapReady(true);
       (element as any).__navdashLeafletMap = map;
       window.dispatchEvent(new CustomEvent("navdash-leaflet-map-ready"));
 
@@ -704,11 +706,14 @@ function IsolatedMainMap() {
   }, [userMarks]);
 
   useEffect(() => {
+    let cancelled = false;
+    const map = mapRef.current;
     async function updateOwnShip() {
       const map = mapRef.current;
       const layer = ownLayerRef.current;
-      if (!map || !layer || !ownShip) return;
+      if (!map || !layer || !ownShip || cancelled) return;
       const L = await import("leaflet");
+      if (cancelled) return;
       const displayLon = longitudeNearReference(ownShip.lon, map.getCenter().lng);
       const position: [number, number] = [ownShip.lat, displayLon];
       if (!didInitialOwnShipCenterRef.current) { didInitialOwnShipCenterRef.current = true; map.setView(position, Math.max(map.getZoom(), 7), { animate: false }); }
@@ -729,8 +734,13 @@ function IsolatedMainMap() {
         cogVectorRef.current = L.polyline([position, [end.lat, longitudeNearReference(end.lon, displayLon)]], { pane: "navmap-main-ownship-v2", color: "#22d3ee", weight: 2.5, opacity: 0.95, dashArray: "8 6" }).addTo(layer);
       }
     }
-    updateOwnShip();
-  }, [ownShip]);
+    map?.on("moveend", updateOwnShip);
+    void updateOwnShip();
+    return () => {
+      cancelled = true;
+      map?.off("moveend", updateOwnShip);
+    };
+  }, [ownShip, mapReady]);
 
   const clearMeasurement = () => { measureStartRef.current = null; setMeasurement(null); measurementLayerRef.current?.clearLayers(); };
   const setRangeBearingMode = (mode: MeasureMode) => { setToolMode("measure"); setMeasureMode(mode); measureStartRef.current = null; setMeasurement(null); measurementLayerRef.current?.clearLayers(); };

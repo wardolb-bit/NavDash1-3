@@ -203,6 +203,12 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
 
   useEffect(() => {
     let cancelled = false;
+    let boundMap: any = null;
+    const repositionShip = () => {
+      if (ship?.lat === undefined || ship?.lon === undefined || !boundMap) return;
+      const position: [number, number] = [ship.lat, nearLon(ship.lon, boundMap.getCenter().lng)];
+      shipLayerRef.current?.eachLayer((marker: any) => marker.setLatLng(position));
+    };
 
     async function redraw() {
       const map = mapRef.current;
@@ -259,13 +265,16 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
           iconAnchor: [15, 15],
         });
 
-        L.marker([ship.lat, ship.lon], { icon, interactive: false })
+        L.marker([ship.lat, nearLon(ship.lon, referenceLon)], { icon, interactive: false })
           .bindTooltip("M/V MB480", { permanent: false, direction: "top" })
           .addTo(shipGroup);
 
         shipGroup.addTo(map);
         shipLayerRef.current = shipGroup;
       }
+
+      boundMap = map;
+      map.on("moveend", repositionShip);
 
       if (!fittedRef.current) {
         const fitPoints = [...routePoints];
@@ -283,7 +292,10 @@ export function CrewNoaaMap({ route, ship, nightMode: _nightMode }: { route: Rou
     }
 
     void redraw();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      boundMap?.off("moveend", repositionShip);
+    };
   }, [route, ship?.lat, ship?.lon, ship?.cog, ship?.heading]);
 
   useEffect(() => {
