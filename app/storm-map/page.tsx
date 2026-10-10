@@ -43,7 +43,7 @@ type StormRecord = {
   points: StormPoint[];
 };
 
-type RoutePoint = { lat: number; lon: number; name?: string; id?: string };
+type RoutePoint = { lat: number; lon: number; name?: string; id?: string; geometryType?: "Orthodrome" | "Loxodrome" };
 type ShipPosition = { lat: number; lon: number; sog: number; at: number };
 type Comparison = { storm: StormPoint; ship: RoutePoint; distanceNm: number; time: number };
 
@@ -92,6 +92,24 @@ function interpolateLeg(a: RoutePoint, b: RoutePoint, fraction: number): RoutePo
   const z = A * Math.sin(radians(a.lat)) + B * Math.sin(radians(b.lat));
   return { lat: degrees(Math.atan2(z, Math.hypot(x, y))), lon: degrees(Math.atan2(y, x)) };
 }
+function interpolateRouteLeg(a: RoutePoint, b: RoutePoint, fraction: number): RoutePoint {
+  if (b.geometryType !== "Loxodrome") return interpolateLeg(a, b, fraction);
+  // Mercator interpolation follows a constant-bearing rhumb line.
+  const f = Math.max(0, Math.min(1, fraction));
+  const lat1 = radians(Math.max(-89.999, Math.min(89.999, a.lat)));
+  const lat2 = radians(Math.max(-89.999, Math.min(89.999, b.lat)));
+  const psi = (lat: number) => Math.log(Math.tan(Math.PI / 4 + lat / 2));
+  const y = psi(lat1) + f * (psi(lat2) - psi(lat1));
+  return { lat: degrees(2 * Math.atan(Math.exp(y)) - Math.PI / 2), lon: unwrapLon(b.lon, a.lon) * f + a.lon * (1 - f) };
+}
+function routeLegDistanceNm(a: RoutePoint, b: RoutePoint) {
+  if (b.geometryType !== "Loxodrome") return distanceNm(a, b);
+  const phi1 = radians(a.lat), phi2 = radians(b.lat);
+  const dPhi = phi2 - phi1, dLambda = radians(unwrapLon(b.lon, a.lon) - a.lon);
+  const dPsi = Math.log(Math.tan(Math.PI / 4 + phi2 / 2) / Math.tan(Math.PI / 4 + phi1 / 2));
+  const q = Math.abs(dPsi) > 1e-12 ? dPhi / dPsi : Math.cos(phi1);
+  return 3440.065 * Math.hypot(dPhi, q * dLambda);
+}
 function projectRoute(route: RoutePoint[], ship: ShipPosition, speedKt: number, time: number): RoutePoint | null {
   if (route.length < 2 || speedKt <= 0 || time < ship.at) return null;
   // Find the nearest forward point on the loaded route; never backtrack along previous legs.
@@ -103,18 +121,18 @@ function projectRoute(route: RoutePoint[], ship: ShipPosition, speedKt: number, 
     const dx = (unwrapLon(b.lon, a.lon) - a.lon) * Math.cos(radians(ship.lat));
     const dy = b.lat - a.lat;
     const fraction = Math.max(0, Math.min(1, (x * dx + y * dy) / (dx * dx + dy * dy || 1)));
-    const candidate = interpolateLeg(a, b, fraction);
+    const candidate = interpolateRouteLeg(a, b, fraction);
     const error = distanceNm(ship, candidate);
     if (error < nearestNm) { nearestNm = error; nearestIndex = i; nearestFraction = fraction; }
   }
   // If ship is far from route, refuse to invent an on-route projection.
   if (nearestIndex < 0 || nearestNm > 30) return null;
   let remaining = speedKt * (time - ship.at) / 3600000;
-  let from = interpolateLeg(route[nearestIndex], route[nearestIndex + 1], nearestFraction);
+  let from = interpolateRouteLeg(route[nearestIndex], route[nearestIndex + 1], nearestFraction);
   for (let i = nearestIndex; i < route.length - 1; i++) {
     const to = route[i + 1];
-    const legNm = distanceNm(from, to);
-    if (remaining <= legNm) return interpolateLeg(from, to, legNm ? remaining / legNm : 1);
+    const legNm = routeLegDistanceNm({ ...from, geometryType: to.geometryType }, to);
+    if (remaining <= legNm) return interpolateRouteLeg(from, to, legNm ? remaining / legNm : 1);
     remaining -= legNm;
     from = to;
   }
@@ -247,7 +265,7 @@ function readSavedRoute(): RoutePoint[] {
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     const source = Array.isArray(parsed?.waypoints) ? parsed.waypoints : [];
-    return source.map((wp: any) => ({ lat: Number(wp.lat ?? wp.latitude), lon: Number(wp.lon ?? wp.lng ?? wp.longitude), name: wp.name, id: wp.id }))
+    return source.map((wp: any) => ({ lat: Number(wp.lat ?? wp.latitude), lon: Number(wp.lon ?? wp.lng ?? wp.longitude), name: wp.name, id: wp.id, geometryType: wp.geometryType }))
       .filter((wp: RoutePoint) => Number.isFinite(wp.lat) && Number.isFinite(wp.lon));
   } catch { return []; }
 }
@@ -408,7 +426,15 @@ export default function StormMapPage() {
         const routePts: [number, number][] = [];
         let previous = unwrapLon(route[0].lon, refLon);
         routePts.push([route[0].lat, previous]);
-        for (let i = 1; i < route.length; i += 1) { previous = unwrapLon(route[i].lon, previous); routePts.push([route[i].lat, previous]); }
+        for (let i = 1; i < route.length; i += 1) {
+          const from = route[i - 1], to = route[i];
+          const steps = to.geometryType === "Loxodrome" ? 1 : Math.max(12, Math.ceil(distanceNm(from, to) / 60));
+          for (let j = 1; j <= steps; j++) {
+            const position = interpolateRouteLeg(from, to, j / steps);
+            previous = unwrapLon(position.lon, previous);
+            routePts.push([position.lat, previous]);
+          }
+        }
         add(L.polyline(routePts, { color: "#c9a227", weight: 3, opacity: 0.85 }));
         routePts.forEach(point => allBounds.push(point));
       }
