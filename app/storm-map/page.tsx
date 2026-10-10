@@ -231,14 +231,26 @@ function parseStormMessage(message: EgcMessage): StormRecord | null {
   if (!TC_RE.test(body)) return null;
   const name = extractStormName(body);
   // EGC messages can contain the entire forecast on one line.
-  const matches = [...body.matchAll(/(\d{1,2}(?:\.\d+)?)\s*[°º]?\s*([NS])\b\s*[,;/ -]*\s*(\d{1,3}(?:\.\d+)?)\s*[°º]?\s*([EW])\b/gi)];
+  const coordinatePatterns = [
+    /\b(\d{1,2}(?:\.\d+)?)\s*[°º]?\s*([NS])\s*[,;/ -]*\s*(\d{1,3}(?:\.\d+)?)\s*[°º]?\s*([EW])\b/gi,
+    /\b([NS])\s*(\d{1,2}(?:\.\d+)?)\s*[,;/ -]*\s*([EW])\s*(\d{1,3}(?:\.\d+)?)\b/gi,
+    /\b(\d{1,2})[-° ](\d{1,2}(?:\.\d+)?)\s*([NS])\s*[,;/ ]*\s*(\d{1,3})[-° ](\d{1,2}(?:\.\d+)?)\s*([EW])\b/gi,
+  ];
+  const matches = coordinatePatterns.flatMap((pattern, style) =>
+    [...body.matchAll(pattern)].map(match => ({
+      index: match.index ?? 0, text: match[0],
+      lat: style === 1 ? normalizeLat(Number(match[2]), match[1]) : style === 2 ? normalizeLat(Number(match[1]) + Number(match[2]) / 60, match[3]) : normalizeLat(Number(match[1]), match[2]),
+      lon: style === 1 ? normalizeLon(Number(match[4]), match[3]) : style === 2 ? normalizeLon(Number(match[4]) + Number(match[5]) / 60, match[6]) : normalizeLon(Number(match[3]), match[4]),
+    }))
+  ).filter(match => Math.abs(match.lat) <= 90 && Math.abs(match.lon) <= 180)
+    .sort((a, b) => a.index - b.index || b.text.length - a.text.length)
+    .filter((match, index, all) => !all.slice(0, index).some(prev => match.index < prev.index + prev.text.length));
   const points: StormPoint[] = [];
   for (let i = 0; i < matches.length; i += 1) {
     const hit = matches[i];
-    const coord = parseCoordFromText(hit[0]);
-    if (!coord) continue;
-    const before = body.slice(i ? (matches[i - 1].index ?? 0) + matches[i - 1][0].length : 0, hit.index ?? 0);
-    const after = body.slice((hit.index ?? 0) + hit[0].length, i + 1 < matches.length ? matches[i + 1].index : body.length);
+    const coord = { lat: hit.lat, lon: hit.lon };
+    const before = body.slice(i ? (matches[i - 1].index ?? 0) + matches[i - 1].text.length : 0, hit.index ?? 0);
+    const after = body.slice((hit.index ?? 0) + hit.text.length, i + 1 < matches.length ? matches[i + 1].index : body.length);
     const forecast = /\b(?:FORECAST\s+POSITION|FCST\s+POSITION)\b/i.test(before);
     const times = [...before.matchAll(/\b(\d{6})(?:UTC|Z)?\b/gi)];
     const valid = times.length ? times[times.length - 1][1] + "Z" : "";
@@ -369,19 +381,21 @@ export default function StormMapPage() {
     return points;
   }, [selectedRecords]);
 
-  const forecast = useMemo(() => (latest?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid)), [latest]);
+  const forecastSource = [...selectedRecords].reverse().find(record => record.points.some(point => point.kind === "FCST")) ?? null;
+  const forecastIsOlder = Boolean(forecastSource && latest && forecastSource.message.id !== latest.message.id);
+  const forecast = useMemo(() => (forecastSource?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid)), [forecastSource]);
 
   const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
   const comparisons = useMemo(() => {
     if (!ship || !showProjection || !Number.isFinite(speedKt) || speedKt <= 0 || Date.now() - ship.at > 120000) return [] as Comparison[];
-    const reference = latest?.message.receivedAt || latest?.message.modifiedAt || null;
+    const reference = forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null;
     return forecast.flatMap(storm => {
       const time = forecastTimestamp(storm.valid, reference);
       if (time === null) return [];
       const position = projectRoute(route, ship, speedKt, time);
       return position ? [{ storm, ship: position, time, distanceNm: distanceNm(storm, position) }] : [];
     });
-  }, [ship, showProjection, speedKt, forecast, route, latest]);
+  }, [ship, showProjection, speedKt, forecast, route, forecastSource]);
   const closest = comparisons.length ? comparisons.reduce((a, b) => a.distanceNm <= b.distanceNm ? a : b) : null;
 
   useEffect(() => {
@@ -573,6 +587,7 @@ export default function StormMapPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
               <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">FORECAST POSITIONS</div>
+              {forecastIsOlder ? <p className="mt-2 text-xs font-bold text-amber-300">Previous warning forecast displayed. Latest EGC forecast positions were not parsed. Verify against the newest raw warning.</p> : null}
               <div className="mt-3 max-h-[390px] space-y-2 overflow-auto">
                 {forecast.map((point, index) => (
                   <div key={`${point.lat}-${point.lon}-${index}`} className="rounded-xl border border-sky-400/20 bg-sky-400/[0.06] p-3 text-sm">
