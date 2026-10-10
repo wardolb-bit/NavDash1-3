@@ -35,6 +35,8 @@ type StormPoint = {
   radius34Nm: number | null;
   uncertaintyNm: number | null;
   sourceId: string;
+  carriedForward?: boolean;
+  bulletinReceived?: string;
 };
 
 type StormRecord = {
@@ -300,7 +302,7 @@ export default function StormMapPage() {
   const [ship, setShip] = useState<ShipPosition | null>(null);
   const [planningSpeed, setPlanningSpeed] = useState<string>("");
   const [showProjection, setShowProjection] = useState(true);
-  const [showPreviousForecast, setShowPreviousForecast] = useState(true);
+  const [showPreviousForecast, setShowPreviousForecast] = useState(false);
 
   useEffect(() => {
     setRoute(readSavedRoute());
@@ -384,20 +386,40 @@ export default function StormMapPage() {
 
   const forecastSource = [...selectedRecords].reverse().find(record => record.points.some(point => point.kind === "FCST")) ?? null;
   const forecastIsOlder = Boolean(forecastSource && latest && forecastSource.message.id !== latest.message.id);
-  const forecast = useMemo(() => (forecastSource?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid)), [forecastSource]);
-  // Previous longer-range outlook is historical guidance, never merged with the current warning.
+  // Preserve future forecast valid times missing from short update bulletins.
+  // An older position is clearly labeled as carried forward, not verified by the latest EGC.
+  const forecast = useMemo(() => {
+    const byTime = new Map<string, StormPoint>();
+    const newestIssue = latest?.message.receivedAt || latest?.message.modifiedAt || null;
+    const newestIssueMs = newestIssue ? Date.parse(newestIssue) : NaN;
+    for (const record of [...selectedRecords].reverse()) {
+      for (const point of record.points.filter(p => p.kind === "FCST")) {
+        const validTime = forecastTimestamp(point.valid, record.message.receivedAt || record.message.modifiedAt);
+        if (validTime === null || validTime <= Date.now()) continue;
+        if (Number.isFinite(newestIssueMs) && validTime <= newestIssueMs && record.message.id !== latest?.message.id) continue;
+        const key = new Date(validTime).toISOString();
+        if (byTime.has(key)) continue;
+        byTime.set(key, {
+          ...point,
+          carriedForward: record.message.id !== latest?.message.id,
+          bulletinReceived: record.message.receivedAt || record.message.modifiedAt,
+        });
+      }
+    }
+    return [...byTime.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, point]) => point);
+  }, [selectedRecords, latest]);
+  const carriedCount = forecast.filter(point => point.carriedForward).length;
   const previousForecastSource = forecastSource
     ? [...selectedRecords].reverse().find(record =>
         record.message.id !== forecastSource.message.id &&
-        record.points.filter(point => point.kind === "FCST").length > 0
-      ) ?? null
-    : null;
+        record.points.some(point => point.kind === "FCST")
+      ) ?? null : null;
   const previousForecast = (previousForecastSource?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid));
 
-  const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
+    const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
   const comparisons = useMemo(() => {
     if (!ship || !showProjection || !Number.isFinite(speedKt) || speedKt <= 0 || Date.now() - ship.at > 120000) return [] as Comparison[];
-    const reference = forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null;
+    const reference = storm.bulletinReceived || forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null;
     return forecast.flatMap(storm => {
       const time = forecastTimestamp(storm.valid, reference);
       if (time === null) return [];
@@ -498,7 +520,7 @@ export default function StormMapPage() {
       forecast.forEach((point, index) => {
         const lon = fcPts[index + (current ? 1 : 0)]?.[1] ?? unwrapLon(point.lon, refLon);
         const marker = add(L.circleMarker([point.lat, lon], { radius: 7, color: "#7dd3fc", fillColor: "#071019", fillOpacity: 0.92, weight: 3 }));
-        marker.bindTooltip(`<b>${selectedName} ${point.label}</b><br>${point.valid || "Valid time not parsed"}${point.windKt ? `<br>${point.windKt} KT` : ""}${point.radius34Nm ? `<br>34 KT radius up to ${point.radius34Nm} NM` : ""}`);
+        marker.bindTooltip(`<b>${selectedName} ${point.label}</b><br>${point.valid || "Valid time not parsed"}${point.carriedForward ? `<br>Carried forward from EGC received ${formatUtc(point.bulletinReceived)}; not reconfirmed in latest bulletin` : "<br>Latest EGC bulletin"}${point.windKt ? `<br>${point.windKt} KT` : ""}${point.radius34Nm ? `<br>34 KT radius up to ${point.radius34Nm} NM` : ""}`);
         if (point.radius34Nm) add(L.circle([point.lat, lon], { radius: point.radius34Nm * 1852, color: "#38bdf8", weight: 1, opacity: 0.65, fillColor: "#38bdf8", fillOpacity: 0.045 }));
         if (point.uncertaintyNm) add(L.circle([point.lat, lon], { radius: point.uncertaintyNm * 1852, color: "#7dd3fc", dashArray: "4 5", weight: 1, opacity: 0.7, fillOpacity: 0 }));
         allBounds.push([point.lat, lon]);
@@ -587,7 +609,7 @@ export default function StormMapPage() {
               Show previous storm forecast
             </label>
             <p className="mt-2 text-xs text-slate-400">{previousForecastSource
-              ? `Previous EGC received ${formatUtc(previousForecastSource.message.receivedAt || previousForecastSource.message.modifiedAt)}. Gray dashed track is superseded guidance.`
+              ? `Optional full prior-bulletin track received ${formatUtc(previousForecastSource.message.receivedAt || previousForecastSource.message.modifiedAt)}. Gray dashed track is historical; carried-forward future positions stay on cyan comparison track.`
               : "No earlier forecast bulletin available for this storm."}</p>
           </section>
 
@@ -624,11 +646,12 @@ export default function StormMapPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
               <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">FORECAST POSITIONS</div>
+              {carriedCount > 0 ? <p className="mt-2 text-xs font-bold text-amber-300">{carriedCount} future forecast point(s) carried forward from earlier EGC bulletins. Not reconfirmed by latest EGC.</p> : null}
               {forecastIsOlder ? <p className="mt-2 text-xs font-bold text-amber-300">Previous warning forecast displayed. Latest EGC forecast positions were not parsed. Verify against the newest raw warning.</p> : null}
               <div className="mt-3 max-h-[390px] space-y-2 overflow-auto">
                 {forecast.map((point, index) => (
                   <div key={`${point.lat}-${point.lon}-${index}`} className="rounded-xl border border-sky-400/20 bg-sky-400/[0.06] p-3 text-sm">
-                    <div className="font-black text-sky-200">{point.label} {point.valid}</div>
+                    <div className="font-black text-sky-200">{point.label} {point.valid}{point.carriedForward ? " · CARRIED FORWARD" : ""}</div>
                     <div className="mt-1 font-bold text-slate-300">{Math.abs(point.lat).toFixed(2)}°{point.lat < 0 ? "S" : "N"} / {Math.abs(point.lon).toFixed(2)}°{point.lon < 0 ? "W" : "E"}</div>
                     <div className="mt-1 text-xs font-semibold text-slate-500">{point.windKt ? `${point.windKt} KT` : "Wind not parsed"}{point.radius34Nm ? ` · 34 KT radius ${point.radius34Nm} NM max` : ""}</div>
                   </div>
