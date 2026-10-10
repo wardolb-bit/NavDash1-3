@@ -302,6 +302,9 @@ export default function StormMapPage() {
   const [ship, setShip] = useState<ShipPosition | null>(null);
   const [planningSpeed, setPlanningSpeed] = useState<string>("");
   const [showProjection, setShowProjection] = useState(true);
+  const [displayMode, setDisplayMode] = useState<"clean" | "analysis">("clean");
+  const [showUncertainty, setShowUncertainty] = useState(false);
+  const [selectedForecastTime, setSelectedForecastTime] = useState<number | null>(null);
 
   useEffect(() => {
     setRoute(readSavedRoute());
@@ -420,6 +423,7 @@ export default function StormMapPage() {
     });
   }, [ship, showProjection, speedKt, forecast, route, forecastSource]);
   const closest = comparisons.length ? comparisons.reduce((a, b) => a.distanceNm <= b.distanceNm ? a : b) : null;
+  const activeComparison = comparisons.find(item => item.time === selectedForecastTime) ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -494,10 +498,11 @@ export default function StormMapPage() {
 
       forecast.forEach((point, index) => {
         const lon = fcPts[index + (current ? 1 : 0)]?.[1] ?? unwrapLon(point.lon, refLon);
-        const marker = add(L.circleMarker([point.lat, lon], { radius: 7, color: "#7dd3fc", fillColor: "#071019", fillOpacity: 0.92, weight: 3 }));
+        const marker = add(L.circleMarker([point.lat, lon], { radius: displayMode === "clean" ? 5 : 7, color: "#7dd3fc", fillColor: "#071019", fillOpacity: 0.92, weight: 2 }));
+        marker.on("click", () => setSelectedForecastTime(forecastTimestamp(point.valid, point.bulletinReceived || forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null)));
         marker.bindTooltip(`<b>${selectedName} ${point.label}</b><br>${point.valid || "Valid time not parsed"}${point.carriedForward ? `<br>Carried forward from EGC received ${formatUtc(point.bulletinReceived)}; not reconfirmed in latest bulletin` : "<br>Latest EGC bulletin"}${point.windKt ? `<br>${point.windKt} KT` : ""}${point.radius34Nm ? `<br>34 KT radius up to ${point.radius34Nm} NM` : ""}`);
-        if (point.radius34Nm) add(L.circle([point.lat, lon], { radius: point.radius34Nm * 1852, color: "#38bdf8", weight: 1, opacity: 0.65, fillColor: "#38bdf8", fillOpacity: 0.045 }));
-        if (point.uncertaintyNm) add(L.circle([point.lat, lon], { radius: point.uncertaintyNm * 1852, color: "#7dd3fc", dashArray: "4 5", weight: 1, opacity: 0.7, fillOpacity: 0 }));
+        if (displayMode === "analysis" && point.radius34Nm) add(L.circle([point.lat, lon], { radius: point.radius34Nm * 1852, color: "#38bdf8", weight: 1, opacity: 0.65, fillColor: "#38bdf8", fillOpacity: 0.045 }));
+        if (showUncertainty && point.uncertaintyNm) add(L.circle([point.lat, lon], { radius: point.uncertaintyNm * 1852, color: "#7dd3fc", dashArray: "4 5", weight: 1, opacity: 0.7, fillOpacity: 0 }));
         allBounds.push([point.lat, lon]);
       });
 
@@ -508,18 +513,29 @@ export default function StormMapPage() {
       }
       if (showProjection) {
         comparisons.forEach(item => {
+          const selected = item.time === activeComparison?.time;
           const shipLon = unwrapLon(item.ship.lon, refLon);
           const stormLon = unwrapLon(item.storm.lon, shipLon);
-          add(L.polyline([[item.ship.lat, shipLon], [item.storm.lat, stormLon]], { color: "#cbd5e1", weight: 1.5, opacity: 0.75, dashArray: "4 6" }));
-          const marker = add(L.circleMarker([item.ship.lat, shipLon], { radius: 6, color: "#fde68a", fillColor: "#ca8a04", fillOpacity: 0.9, weight: 2 }));
+          if (displayMode === "analysis" || selected) {
+            add(L.polyline([[item.ship.lat, shipLon], [item.storm.lat, stormLon]], {
+              color: selected ? "#fbbf24" : "#cbd5e1", weight: selected ? 2.5 : 1.25,
+              opacity: selected ? 0.95 : 0.55, dashArray: "4 6",
+            }));
+          }
+          const marker = add(L.circleMarker([item.ship.lat, shipLon], {
+            radius: selected ? 8 : displayMode === "clean" ? 4 : 6,
+            color: selected ? "#fef08a" : "#fde68a", fillColor: "#ca8a04", fillOpacity: 0.9, weight: selected ? 3 : 2,
+          }));
+          marker.on("click", () => setSelectedForecastTime(item.time));
           marker.bindTooltip(`PROJECTED SHIP · ${formatUtc(new Date(item.time).toISOString())}<br>${item.distanceNm.toFixed(0)} NM from ${selectedName} forecast center`);
         });
       }
+
       if (allBounds.length >= 2) map.fitBounds(allBounds, { padding: [45, 45], maxZoom: 7, animate: false });
       else if (allBounds.length === 1) map.setView(allBounds[0], 6, { animate: false });
     };
     void draw();
-  }, [observed, forecast, route, selectedName, latest, selectedRecords, ship, comparisons, showProjection]);
+  }, [observed, forecast, route, selectedName, latest, selectedRecords, ship, comparisons, showProjection, displayMode, showUncertainty, activeComparison, forecastSource]);
 
   return (
     <main className="min-h-screen bg-[#071019] text-slate-100">
@@ -562,6 +578,23 @@ export default function StormMapPage() {
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+            <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">MAP DISPLAY</div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {(["clean", "analysis"] as const).map(mode => (
+                <button key={mode} type="button" onClick={() => setDisplayMode(mode)}
+                  className={`rounded-lg border px-3 py-2 text-xs font-black uppercase ${displayMode === mode ? "border-sky-400/60 bg-sky-400/15 text-sky-200" : "border-white/10 bg-black/20 text-slate-400"}`}>
+                  {mode}
+                </button>
+              ))}
+            </div>
+            <label className="mt-3 flex items-center gap-2 text-xs font-bold text-slate-300">
+              <input type="checkbox" checked={showUncertainty} onChange={event => setShowUncertainty(event.target.checked)} />
+              Show forecast uncertainty circles
+            </label>
+            <p className="mt-2 text-xs text-slate-500">Clean: only the selected time's separation line. Analysis: all separation lines and wind-radius circles.</p>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
             <div className="text-xs font-black uppercase tracking-[0.15em] text-[#c9a227]">VESSEL PROJECTION</div>
             <label className="mt-3 flex items-center gap-2 text-sm font-bold">
               <input type="checkbox" checked={showProjection} onChange={event => setShowProjection(event.target.checked)} />
@@ -593,6 +626,27 @@ export default function StormMapPage() {
         <div className="space-y-4">
           <section className="overflow-hidden rounded-2xl border border-white/10 bg-black/20">
             <div ref={mapHostRef} className="h-[64vh] min-h-[520px] w-full" />
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-3">
+            <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">FORECAST TIME · SELECT TO COMPARE</div>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+              {forecast.map((point, index) => {
+                const time = forecastTimestamp(point.valid, point.bulletinReceived || forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null);
+                const selected = time !== null && time === selectedForecastTime;
+                return <button key={`${point.sourceId}-${point.valid}-${index}`} type="button" disabled={time === null}
+                  onClick={() => setSelectedForecastTime(selected ? null : time)}
+                  className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-black ${selected ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-white/10 bg-black/20 text-sky-200"}`}>
+                  {point.valid || "UNKNOWN"}{point.carriedForward ? " *" : ""}
+                </button>;
+              })}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs font-bold text-slate-300">
+              <span>{activeComparison ? `Ship-to-center: ${activeComparison.distanceNm.toFixed(0)} NM` : "Select a forecast time for ship-to-center separation"}</span>
+              <span>{activeComparison ? formatUtc(new Date(activeComparison.time).toISOString()) : ""}</span>
+              <span>{speedKt > 0 ? `Planning speed: ${speedKt.toFixed(1)} KT` : "Speed unavailable"}</span>
+            </div>
+            {carriedCount > 0 ? <div className="mt-2 text-xs text-amber-300">* Carried-forward forecast from an earlier EGC bulletin</div> : null}
           </section>
 
           <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
