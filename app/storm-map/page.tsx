@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getEgcWebSocketUrl } from "../../lib/aisWebSocket";
+import { getAisWebSocketUrl, getEgcWebSocketUrl } from "../../lib/aisWebSocket";
 
 type EgcMessage = {
   id: string;
@@ -44,6 +44,95 @@ type StormRecord = {
 };
 
 type RoutePoint = { lat: number; lon: number; name?: string; id?: string };
+type ShipPosition = { lat: number; lon: number; sog: number; at: number };
+type Comparison = { storm: StormPoint; ship: RoutePoint; distanceNm: number; time: number };
+
+function decodeShipSentence(sentence: string): ShipPosition | null {
+  if (!sentence.startsWith("!AIVDO")) return null;
+  try {
+    const p = sentence.split(",");
+    if (Number(p[1]) !== 1 || !p[5]) return null;
+    const bits = p[5].split("").map(ch => {
+      let v = ch.charCodeAt(0) - 48;
+      if (v > 40) v -= 8;
+      return v.toString(2).padStart(6, "0");
+    }).join("");
+    const uint = (start: number, length: number) => parseInt(bits.slice(start, start + length), 2);
+    const sint = (start: number, length: number) => {
+      const value = uint(start, length);
+      return value >= 2 ** (length - 1) ? value - 2 ** length : value;
+    };
+    const type = uint(0, 6);
+    if (![1, 2, 3, 18, 19].includes(type)) return null;
+    const clsB = type === 18 || type === 19;
+    const lat = sint(clsB ? 85 : 89, 27) / 600000;
+    const lon = sint(clsB ? 57 : 61, 28) / 600000;
+    const rawSog = uint(clsB ? 46 : 50, 10);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon, sog: rawSog === 1023 ? 0 : rawSog / 10, at: Date.now() };
+  } catch { return null; }
+}
+
+function radians(value: number) { return value * Math.PI / 180; }
+function degrees(value: number) { return value * 180 / Math.PI; }
+function distanceNm(a: RoutePoint, b: RoutePoint) {
+  const dLat = radians(b.lat - a.lat);
+  const dLon = radians(unwrapLon(b.lon, a.lon) - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(radians(a.lat)) * Math.cos(radians(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 3440.065 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+function interpolateLeg(a: RoutePoint, b: RoutePoint, fraction: number): RoutePoint {
+  const f = Math.max(0, Math.min(1, fraction));
+  const d = distanceNm(a, b) / 3440.065;
+  if (d < 1e-9) return { lat: a.lat, lon: a.lon };
+  const A = Math.sin((1 - f) * d) / Math.sin(d);
+  const B = Math.sin(f * d) / Math.sin(d);
+  const x = A * Math.cos(radians(a.lat)) * Math.cos(radians(a.lon)) + B * Math.cos(radians(b.lat)) * Math.cos(radians(b.lon));
+  const y = A * Math.cos(radians(a.lat)) * Math.sin(radians(a.lon)) + B * Math.cos(radians(b.lat)) * Math.sin(radians(b.lon));
+  const z = A * Math.sin(radians(a.lat)) + B * Math.sin(radians(b.lat));
+  return { lat: degrees(Math.atan2(z, Math.hypot(x, y))), lon: degrees(Math.atan2(y, x)) };
+}
+function projectRoute(route: RoutePoint[], ship: ShipPosition, speedKt: number, time: number): RoutePoint | null {
+  if (route.length < 2 || speedKt <= 0 || time < ship.at) return null;
+  // Find the nearest forward point on the loaded route; never backtrack along previous legs.
+  let nearestIndex = -1, nearestFraction = 0, nearestNm = Infinity;
+  for (let i = 0; i < route.length - 1; i++) {
+    const a = route[i], b = route[i + 1];
+    const x = (unwrapLon(ship.lon, a.lon) - a.lon) * Math.cos(radians(ship.lat));
+    const y = ship.lat - a.lat;
+    const dx = (unwrapLon(b.lon, a.lon) - a.lon) * Math.cos(radians(ship.lat));
+    const dy = b.lat - a.lat;
+    const fraction = Math.max(0, Math.min(1, (x * dx + y * dy) / (dx * dx + dy * dy || 1)));
+    const candidate = interpolateLeg(a, b, fraction);
+    const error = distanceNm(ship, candidate);
+    if (error < nearestNm) { nearestNm = error; nearestIndex = i; nearestFraction = fraction; }
+  }
+  // If ship is far from route, refuse to invent an on-route projection.
+  if (nearestIndex < 0 || nearestNm > 30) return null;
+  let remaining = speedKt * (time - ship.at) / 3600000;
+  let from = interpolateLeg(route[nearestIndex], route[nearestIndex + 1], nearestFraction);
+  for (let i = nearestIndex; i < route.length - 1; i++) {
+    const to = route[i + 1];
+    const legNm = distanceNm(from, to);
+    if (remaining <= legNm) return interpolateLeg(from, to, legNm ? remaining / legNm : 1);
+    remaining -= legNm;
+    from = to;
+  }
+  return null; // Route ends before forecast valid time.
+}
+function forecastTimestamp(valid: string, reference: string | null) {
+  const dtg = valid.match(/^(\d{2})(\d{2})(\d{2})Z$/);
+  if (!dtg || !reference) return null;
+  const base = new Date(reference);
+  if (!Number.isFinite(base.getTime())) return null;
+  const year = base.getUTCFullYear(), month = base.getUTCMonth();
+  const day = Number(dtg[1]), hour = Number(dtg[2]), minute = Number(dtg[3]);
+  if (day < 1 || day > 31 || hour > 23 || minute > 59) return null;
+  const date = Date.UTC(year, month, day, hour, minute);
+  const check = new Date(date);
+  if (check.getUTCMonth() !== month || check.getUTCDate() !== day) return null;
+  return date;
+}
 
 const TC_RE = /\b(TROPICAL\s+(?:STORM|CYCLONE|DEPRESSION)|TYPHOON|HURRICANE|TCFA|TROPICAL CYCLONE WARNING)\b/i;
 
@@ -178,6 +267,9 @@ export default function StormMapPage() {
   const [socketStatus, setSocketStatus] = useState("CONNECTING");
   const [selectedName, setSelectedName] = useState<string>("");
   const [route, setRoute] = useState<RoutePoint[]>([]);
+  const [ship, setShip] = useState<ShipPosition | null>(null);
+  const [planningSpeed, setPlanningSpeed] = useState<string>("");
+  const [showProjection, setShowProjection] = useState(true);
 
   useEffect(() => {
     setRoute(readSavedRoute());
@@ -212,6 +304,27 @@ export default function StormMapPage() {
     return () => { closed = true; if (retry) clearTimeout(retry); ws?.close(); };
   }, []);
 
+  useEffect(() => {
+    let closed = false;
+    let ws: WebSocket | null = null;
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    const connect = () => {
+      ws = new WebSocket(getAisWebSocketUrl());
+      ws.onmessage = event => {
+        let msg: any = event.data;
+        try { msg = JSON.parse(String(event.data)); } catch {}
+        const values = [msg?.line, msg?.sentence, msg?.nmea, msg?.raw, msg?.data, msg?.payload, msg];
+        const sentence = values.find(v => typeof v === "string" && v.trim().startsWith("!AIVDO"));
+        if (!sentence) return;
+        const next = decodeShipSentence(sentence.trim());
+        if (next) setShip(next);
+      };
+      ws.onclose = () => { if (!closed) retry = setTimeout(connect, 5000); };
+    };
+    connect();
+    return () => { closed = true; if (retry) clearTimeout(retry); ws?.close(); };
+  }, []);
+
   const records = useMemo(() => (snapshot?.messages ?? []).map(parseStormMessage).filter((item): item is StormRecord => Boolean(item)), [snapshot]);
   const stormNames = useMemo(() => Array.from(new Set(records.map(record => record.name))).sort(), [records]);
 
@@ -239,6 +352,19 @@ export default function StormMapPage() {
   }, [selectedRecords]);
 
   const forecast = useMemo(() => (latest?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid)), [latest]);
+
+  const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
+  const comparisons = useMemo(() => {
+    if (!ship || !showProjection || !Number.isFinite(speedKt) || speedKt <= 0 || Date.now() - ship.at > 120000) return [] as Comparison[];
+    const reference = latest?.message.receivedAt || latest?.message.modifiedAt || null;
+    return forecast.flatMap(storm => {
+      const time = forecastTimestamp(storm.valid, reference);
+      if (time === null) return [];
+      const position = projectRoute(route, ship, speedKt, time);
+      return position ? [{ storm, ship: position, time, distanceNm: distanceNm(storm, position) }] : [];
+    });
+  }, [ship, showProjection, speedKt, forecast, route, latest]);
+  const closest = comparisons.length ? comparisons.reduce((a, b) => a.distanceNm <= b.distanceNm ? a : b) : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -312,11 +438,25 @@ export default function StormMapPage() {
         allBounds.push([point.lat, lon]);
       });
 
+      if (ship && Date.now() - ship.at <= 120000) {
+        const posLon = unwrapLon(ship.lon, refLon);
+        const icon = add(L.circleMarker([ship.lat, posLon], { radius: 8, color: "#fef3c7", fillColor: "#eab308", fillOpacity: 1, weight: 3 }));
+        icon.bindTooltip("OWN SHIP · CURRENT");
+      }
+      if (showProjection) {
+        comparisons.forEach(item => {
+          const shipLon = unwrapLon(item.ship.lon, refLon);
+          const stormLon = unwrapLon(item.storm.lon, shipLon);
+          add(L.polyline([[item.ship.lat, shipLon], [item.storm.lat, stormLon]], { color: "#cbd5e1", weight: 1.5, opacity: 0.75, dashArray: "4 6" }));
+          const marker = add(L.circleMarker([item.ship.lat, shipLon], { radius: 6, color: "#fde68a", fillColor: "#ca8a04", fillOpacity: 0.9, weight: 2 }));
+          marker.bindTooltip(`PROJECTED SHIP · ${formatUtc(new Date(item.time).toISOString())}<br>${item.distanceNm.toFixed(0)} NM from ${selectedName} forecast center`);
+        });
+      }
       if (allBounds.length >= 2) map.fitBounds(allBounds, { padding: [45, 45], maxZoom: 7, animate: false });
       else if (allBounds.length === 1) map.setView(allBounds[0], 6, { animate: false });
     };
     void draw();
-  }, [observed, forecast, route, selectedName, latest, selectedRecords]);
+  }, [observed, forecast, route, selectedName, latest, selectedRecords, ship, comparisons, showProjection]);
 
   return (
     <main className="min-h-screen bg-[#071019] text-slate-100">
@@ -359,11 +499,29 @@ export default function StormMapPage() {
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
+            <div className="text-xs font-black uppercase tracking-[0.15em] text-[#c9a227]">VESSEL PROJECTION</div>
+            <label className="mt-3 flex items-center gap-2 text-sm font-bold">
+              <input type="checkbox" checked={showProjection} onChange={event => setShowProjection(event.target.checked)} />
+              Show time-matched ship positions
+            </label>
+            <label className="mt-3 block text-xs font-bold text-slate-400">Planning speed (knots, blank uses live SOG)</label>
+            <input type="number" min="0.1" max="50" step="0.1" value={planningSpeed} onChange={event => setPlanningSpeed(event.target.value)}
+              placeholder={ship ? `Live SOG ${ship.sog.toFixed(1)} kt` : "Awaiting GPS"} className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b1722] p-2 text-sm" />
+            <div className="mt-3 text-xs font-bold text-slate-300">
+              {ship && Date.now() - ship.at <= 120000 ? `GPS LIVE · ${ship.lat.toFixed(3)}, ${ship.lon.toFixed(3)}` : "No fresh own-ship position"}
+            </div>
+            <div className="mt-2 text-sm font-black">{closest ? `Closest forecast-point separation: ${closest.distanceNm.toFixed(0)} NM` : "Projection unavailable"}</div>
+            <div className="mt-1 text-xs text-slate-400">{closest ? formatUtc(new Date(closest.time).toISOString()) : "Requires fresh GPS, loaded route, valid forecast times and positive speed."}</div>
+            <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">Planning estimate only. Forecast-point separation is not a continuously calculated CPA or safe-passing distance. Assumes constant speed along route legs.</p>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
             <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">PLOT KEY</div>
             <div className="mt-3 space-y-2 text-sm font-bold">
               <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-rose-500" />Observed positions / solid track</div>
               <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full border-2 border-sky-300" />Forecast positions / dashed track</div>
               <div><span className="mr-2 inline-block h-1 w-8 bg-[#c9a227] align-middle" />NavDash vessel route</div>
+              <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />Live / projected vessel positions</div>
             </div>
             <p className="mt-3 text-xs font-semibold leading-5 text-slate-500">Plotted directly from received FELCOM EGC text. Verify against the raw warning below before operational use.</p>
           </section>
