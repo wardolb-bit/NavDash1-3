@@ -33,6 +33,7 @@ type StormPoint = {
   leadHours: number | null;
   windKt: number | null;
   radius34Nm: number | null;
+  uncertaintyNm: number | null;
   sourceId: string;
 };
 
@@ -58,12 +59,13 @@ function normalizeLat(value: number, hemi: string) {
 
 function extractStormName(body: string) {
   const patterns = [
-    /\b(?:TROPICAL\s+STORM|TROPICAL\s+CYCLONE|TROPICAL\s+DEPRESSION|TYPHOON|HURRICANE)\s+([A-Z][A-Z0-9-]{2,})\b/i,
-    /\bNAME\s*[:=-]?\s*([A-Z][A-Z0-9-]{2,})\b/i,
+    /\b(?:TYPHOON|HURRICANE|TROPICAL\s+STORM|TROPICAL\s+CYCLONE|TROPICAL\s+DEPRESSION)\s+\d{2,4}\s+([A-Z][A-Z-]{2,})\b/i,
+    /\b(?:TYPHOON|HURRICANE|TROPICAL\s+STORM|TROPICAL\s+CYCLONE|TROPICAL\s+DEPRESSION)\s+([A-Z][A-Z-]{2,})\b/i,
+    /\bNAME\s*[:=-]?\s*([A-Z][A-Z-]{2,})\b/i,
   ];
   for (const pattern of patterns) {
     const match = body.match(pattern);
-    if (match?.[1]) return match[1].toUpperCase();
+    if (match?.[1] && !/^(?:WARNING|FORECAST|ADVISORY|CENTRE|CENTER)$/.test(match[1].toUpperCase())) return match[1].toUpperCase();
   }
   return "UNNAMED";
 }
@@ -121,37 +123,26 @@ function parseStormMessage(message: EgcMessage): StormRecord | null {
   const body = message.body || "";
   if (!TC_RE.test(body)) return null;
   const name = extractStormName(body);
-  const lines = body.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  // EGC messages can contain the entire forecast on one line.
+  const matches = [...body.matchAll(/(\d{1,2}(?:\.\d+)?)\s*[°º]?\s*([NS])\b\s*[,;/ -]*\s*(\d{1,3}(?:\.\d+)?)\s*[°º]?\s*([EW])\b/gi)];
   const points: StormPoint[] = [];
-
-  for (let index = 0; index < lines.length; index += 1) {
-    const windowText = [lines[index - 2], lines[index - 1], lines[index], lines[index + 1], lines[index + 2]].filter(Boolean).join(" ");
-    const coord = parseCoordFromText(windowText);
+  for (let i = 0; i < matches.length; i += 1) {
+    const hit = matches[i];
+    const coord = parseCoordFromText(hit[0]);
     if (!coord) continue;
-
-    const forecast = /FORECAST|FCST|\+\s*\d+\s*H|\b\d+\s*(?:HRS?|HOURS?)\b/i.test(windowText);
-    const leadHours = forecast ? extractLead(windowText) : null;
-    const valid = extractValid(windowText);
-    const windKt = extractWind(windowText);
-    const radius34Nm = extract34Radius(windowText);
-    const signature = `${coord.lat.toFixed(3)}:${coord.lon.toFixed(3)}:${forecast ? "F" : "O"}:${leadHours ?? ""}`;
-    if (points.some(point => `${point.lat.toFixed(3)}:${point.lon.toFixed(3)}:${point.kind === "FCST" ? "F" : "O"}:${point.leadHours ?? ""}` === signature)) continue;
-
-    points.push({
-      lat: coord.lat,
-      lon: coord.lon,
-      kind: forecast ? "FCST" : "OBS",
-      label: forecast ? (leadHours !== null ? `FCST +${leadHours}H` : "FCST") : "OBS",
-      valid,
-      leadHours,
-      windKt,
-      radius34Nm,
-      sourceId: message.id,
-    });
+    const before = body.slice(i ? (matches[i - 1].index ?? 0) + matches[i - 1][0].length : 0, hit.index ?? 0);
+    const after = body.slice((hit.index ?? 0) + hit[0].length, i + 1 < matches.length ? matches[i + 1].index : body.length);
+    const forecast = /\b(?:FORECAST\s+POSITION|FCST\s+POSITION)\b/i.test(before);
+    const times = [...before.matchAll(/\b(\d{6})(?:UTC|Z)?\b/gi)];
+    const valid = times.length ? times[times.length - 1][1] + "Z" : "";
+    const windKt = extractWind(after);
+    const radius34Nm = extract34Radius(after);
+    const circle = forecast ? after.match(/(\d{1,3})\s*MILES?\s+RADIUS\s+OF\s+70\s+PERCENT\s+PROBABILITY\s+CIRCLE/i) : null;
+    const uncertaintyNm = circle ? Number(circle[1]) : null;
+    if (points.some(point => point.lat === coord.lat && point.lon === coord.lon && point.kind === (forecast ? "FCST" : "OBS"))) continue;
+    points.push({lat:coord.lat,lon:coord.lon,kind:forecast?"FCST":"OBS",label:forecast?"FCST":"OBS",valid,leadHours:null,windKt,radius34Nm,uncertaintyNm,sourceId:message.id});
   }
-
-  if (!points.length) return null;
-  return { name, message, points };
+  return points.length ? {name,message,points} : null;
 }
 
 function unwrapLon(lon: number, reference: number) {
@@ -247,7 +238,7 @@ export default function StormMapPage() {
     return points;
   }, [selectedRecords]);
 
-  const forecast = useMemo(() => (latest?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => (a.leadHours ?? 9999) - (b.leadHours ?? 9999)), [latest]);
+  const forecast = useMemo(() => (latest?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid)), [latest]);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,14 +297,18 @@ export default function StormMapPage() {
       });
 
       const current = observed[observed.length - 1] ?? latest?.points.find(point => point.kind === "OBS") ?? null;
-      const fcPts = [...(current ? [[current.lat, unwrapLon(current.lon, refLon)] as [number, number]] : []), ...forecast.map(point => [point.lat, unwrapLon(point.lon, refLon)] as [number, number])];
+      const fcPts: [number, number][] = [];
+      let previousLon = current ? unwrapLon(current.lon, refLon) : (forecast[0] ? unwrapLon(forecast[0].lon, refLon) : refLon);
+      if (current) fcPts.push([current.lat, previousLon]);
+      for (const point of forecast) { previousLon = unwrapLon(point.lon, previousLon); fcPts.push([point.lat, previousLon]); }
       if (fcPts.length >= 2) add(L.polyline(fcPts, { color: "#38bdf8", weight: 4, opacity: 0.95, dashArray: "10 8" }));
 
-      forecast.forEach(point => {
-        const lon = unwrapLon(point.lon, refLon);
+      forecast.forEach((point, index) => {
+        const lon = fcPts[index + (current ? 1 : 0)]?.[1] ?? unwrapLon(point.lon, refLon);
         const marker = add(L.circleMarker([point.lat, lon], { radius: 7, color: "#7dd3fc", fillColor: "#071019", fillOpacity: 0.92, weight: 3 }));
         marker.bindTooltip(`<b>${selectedName} ${point.label}</b><br>${point.valid || "Valid time not parsed"}${point.windKt ? `<br>${point.windKt} KT` : ""}${point.radius34Nm ? `<br>34 KT radius up to ${point.radius34Nm} NM` : ""}`);
         if (point.radius34Nm) add(L.circle([point.lat, lon], { radius: point.radius34Nm * 1852, color: "#38bdf8", weight: 1, opacity: 0.65, fillColor: "#38bdf8", fillOpacity: 0.045 }));
+        if (point.uncertaintyNm) add(L.circle([point.lat, lon], { radius: point.uncertaintyNm * 1852, color: "#7dd3fc", dashArray: "4 5", weight: 1, opacity: 0.7, fillOpacity: 0 }));
         allBounds.push([point.lat, lon]);
       });
 
