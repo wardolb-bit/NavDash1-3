@@ -302,7 +302,6 @@ export default function StormMapPage() {
   const [ship, setShip] = useState<ShipPosition | null>(null);
   const [planningSpeed, setPlanningSpeed] = useState<string>("");
   const [showProjection, setShowProjection] = useState(true);
-  const [showPreviousForecast, setShowPreviousForecast] = useState(false);
 
   useEffect(() => {
     setRoute(readSavedRoute());
@@ -409,14 +408,7 @@ export default function StormMapPage() {
     return [...byTime.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, point]) => point);
   }, [selectedRecords, latest]);
   const carriedCount = forecast.filter(point => point.carriedForward).length;
-  const previousForecastSource = forecastSource
-    ? [...selectedRecords].reverse().find(record =>
-        record.message.id !== forecastSource.message.id &&
-        record.points.some(point => point.kind === "FCST")
-      ) ?? null : null;
-  const previousForecast = (previousForecastSource?.points ?? []).filter(point => point.kind === "FCST").sort((a, b) => a.valid.localeCompare(b.valid));
-
-    const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
+  const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
   const comparisons = useMemo(() => {
     if (!ship || !showProjection || !Number.isFinite(speedKt) || speedKt <= 0 || Date.now() - ship.at > 120000) return [] as Comparison[];
     const reference = storm.bulletinReceived || forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null;
@@ -493,23 +485,6 @@ export default function StormMapPage() {
         allBounds.push([point.lat, lon]);
       });
 
-      if (showPreviousForecast && previousForecastSource && previousForecast.length) {
-        const oldObs = previousForecastSource.points.find(point => point.kind === "OBS");
-        const oldTrack = [...(oldObs ? [oldObs] : []), ...previousForecast];
-        const oldPts: [number, number][] = [];
-        let oldLon = unwrapLon(oldTrack[0].lon, refLon);
-        for (const point of oldTrack) {
-          oldLon = unwrapLon(point.lon, oldLon);
-          oldPts.push([point.lat, oldLon]);
-        }
-        if (oldPts.length >= 2) add(L.polyline(oldPts, { color: "#94a3b8", weight: 2, opacity: 0.5, dashArray: "4 9" }));
-        previousForecast.forEach((point, index) => {
-          const oldPosition = oldPts[index + (oldObs ? 1 : 0)];
-          const marker = add(L.circleMarker(oldPosition, { radius: 4, color: "#94a3b8", fillColor: "#64748b", fillOpacity: 0.4, weight: 1, opacity: 0.6 }));
-          marker.bindTooltip(`PREVIOUS FORECAST · ${selectedName}<br>Valid ${point.valid || "not parsed"}<br>Received ${formatUtc(previousForecastSource.message.receivedAt || previousForecastSource.message.modifiedAt)}<br>HISTORICAL GUIDANCE, NOT CURRENT`);
-        });
-      }
-
       const current = observed[observed.length - 1] ?? latest?.points.find(point => point.kind === "OBS") ?? null;
       const fcPts: [number, number][] = [];
       let previousLon = current ? unwrapLon(current.lon, refLon) : (forecast[0] ? unwrapLon(forecast[0].lon, refLon) : refLon);
@@ -544,7 +519,7 @@ export default function StormMapPage() {
       else if (allBounds.length === 1) map.setView(allBounds[0], 6, { animate: false });
     };
     void draw();
-  }, [observed, forecast, route, selectedName, latest, selectedRecords, ship, comparisons, showProjection, showPreviousForecast, previousForecastSource, previousForecast]);
+  }, [observed, forecast, route, selectedName, latest, selectedRecords, ship, comparisons, showProjection]);
 
   return (
     <main className="min-h-screen bg-[#071019] text-slate-100">
@@ -604,21 +579,10 @@ export default function StormMapPage() {
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
-            <label className="flex items-center gap-2 text-sm font-bold">
-              <input type="checkbox" checked={showPreviousForecast} onChange={event => setShowPreviousForecast(event.target.checked)} />
-              Show previous storm forecast
-            </label>
-            <p className="mt-2 text-xs text-slate-400">{previousForecastSource
-              ? `Optional full prior-bulletin track received ${formatUtc(previousForecastSource.message.receivedAt || previousForecastSource.message.modifiedAt)}. Gray dashed track is historical; carried-forward future positions stay on cyan comparison track.`
-              : "No earlier forecast bulletin available for this storm."}</p>
-          </section>
-
-          <section className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
             <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">PLOT KEY</div>
             <div className="mt-3 space-y-2 text-sm font-bold">
               <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-rose-500" />Observed positions / solid track</div>
               <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full border-2 border-sky-300" />Forecast positions / dashed track</div>
-              <div><span className="mr-2 inline-block h-1 w-8 bg-slate-400 opacity-50 align-middle" />Previous forecast / gray dashed track</div>
               <div><span className="mr-2 inline-block h-1 w-8 bg-[#c9a227] align-middle" />NavDash vessel route</div>
               <div><span className="mr-2 inline-block h-2.5 w-2.5 rounded-full bg-yellow-500" />Live / projected vessel positions</div>
             </div>
@@ -646,7 +610,11 @@ export default function StormMapPage() {
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.045] p-4">
               <div className="text-xs font-black uppercase tracking-[0.15em] text-slate-500">FORECAST POSITIONS</div>
-              {carriedCount > 0 ? <p className="mt-2 text-xs font-bold text-amber-300">{carriedCount} future forecast point(s) carried forward from earlier EGC bulletins. Not reconfirmed by latest EGC.</p> : null}
+              {carriedCount > 0
+                ? <p className="mt-2 text-xs font-bold text-amber-300">{carriedCount} future forecast point(s) continued from earlier EGC bulletins and plotted in cyan. Source issue times are in marker details.</p>
+                : selectedRecords.length <= 1
+                  ? <p className="mt-2 text-xs font-bold text-amber-300">Only one storm bulletin is currently available in the received EGC feed. Longer-range positions cannot be recovered unless an earlier bulletin is available.</p>
+                  : null}
               {forecastIsOlder ? <p className="mt-2 text-xs font-bold text-amber-300">Previous warning forecast displayed. Latest EGC forecast positions were not parsed. Verify against the newest raw warning.</p> : null}
               <div className="mt-3 max-h-[390px] space-y-2 overflow-auto">
                 {forecast.map((point, index) => (
