@@ -411,8 +411,8 @@ export default function StormMapPage() {
   const speedKt = planningSpeed.trim() ? Number(planningSpeed) : ship?.sog ?? 0;
   const comparisons = useMemo(() => {
     if (!ship || !showProjection || !Number.isFinite(speedKt) || speedKt <= 0 || Date.now() - ship.at > 120000) return [] as Comparison[];
-    const reference = storm.bulletinReceived || forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null;
     return forecast.flatMap(storm => {
+      const reference = storm.bulletinReceived || forecastSource?.message.receivedAt || forecastSource?.message.modifiedAt || null;
       const time = forecastTimestamp(storm.valid, reference);
       if (time === null) return [];
       const position = projectRoute(route, ship, speedKt, time);
