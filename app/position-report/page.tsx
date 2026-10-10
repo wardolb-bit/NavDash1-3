@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useBridgeTheme } from '../../lib/useBridgeTheme';
 import { useOwnShipAis } from '../../lib/useOwnShipAis';
 import { normalizeLegGeometry, routeRemainingDistanceNm, type LegGeometry } from '../../lib/routeNavigation';
+import { logicalRouteLegIndex } from '../../lib/navigationSolution';
 
 type OwnShip = {
   lat?: number;
@@ -314,8 +315,11 @@ export default function PositionReportPage() {
 
   const distanceToGo = useMemo(() => {
     if (ownShip.lat === undefined || ownShip.lon === undefined || !route.waypoints?.length) return null;
-    const activeIndex = Math.min(Math.max(route.activeWaypointIndex ?? 1, 1), route.waypoints.length - 1);
-    return routeRemainingDistanceNm({ lat: ownShip.lat, lon: ownShip.lon }, route.waypoints, activeIndex);
+    if (route.waypoints.length < 2) return null;
+    const position = { lat: ownShip.lat, lon: ownShip.lon };
+    const savedIndex = Math.min(Math.max(route.activeWaypointIndex ?? 1, 1), route.waypoints.length - 1);
+    const activeIndex = logicalRouteLegIndex(route.waypoints, position, savedIndex) ?? savedIndex;
+    return routeRemainingDistanceNm(position, route.waypoints, activeIndex);
   }, [ownShip.lat, ownShip.lon, route.waypoints, route.activeWaypointIndex]);
 
   const destinationName = useMemo(() => {
