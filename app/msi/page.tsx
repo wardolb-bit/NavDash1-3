@@ -122,7 +122,10 @@ export default function MsiPage() {
       const ws = new WebSocket(getEgcWebSocketUrl());
       egcWsRef.current = ws;
 
-      ws.onopen = () => setEgcSocketStatus("LIVE");
+      ws.onopen = () => {
+        setEgcSocketStatus("LIVE");
+        ws.send(JSON.stringify({ type: "egc-refresh" }));
+      };
       ws.onerror = () => setEgcSocketStatus("ERROR");
       ws.onclose = () => {
         setEgcSocketStatus("OFFLINE");
