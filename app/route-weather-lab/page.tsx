@@ -847,7 +847,7 @@ export default function RouteWeatherLabPage() {
                   aria-pressed={selected}
                   className={`min-w-[132px] flex-none border p-2 text-left transition-colors ${selected ? "border-amber-300 bg-amber-300/10" : "border-slate-700 bg-[#08131b] hover:border-cyan-400/60"}`}>
                   <div className="flex items-center justify-between border-b border-slate-700/70 pb-2">
-                    <span className="text-[11px] font-black text-slate-100">+${hours.toFixed(0)}H</span>
+                    <span className="text-[11px] font-black text-slate-100">+{hours.toFixed(0)}H</span>
                     <span className="text-[9px] font-semibold text-slate-400">${point.distanceNm.toFixed(0)} NM</span>
                   </div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">SEAS</div>
