@@ -844,9 +844,12 @@ export default function RouteWeatherLabPage() {
             {timelinePoints.length > 0 && <div className="mb-2 text-[10px] font-bold text-slate-400">WIND COVERAGE · {timelinePoints.filter(({ point }) => point.windKt !== null).length}/{timelinePoints.length} route encounters in selected window · FORECAST FRAMES: {weather.frames.map((frame, index) => `${new Date(frame.validAt).toISOString().slice(11, 16)}Z ${weather.windCoverageByFrame?.[index] ?? frame.points.filter((point) => point.windKt !== null).length}/${frame.points.length}`).join(" · ")}</div>}
             {timelinePoints.length > 0 && timelinePoints.every(({ point }) => point.windKt === null) && <div className="mb-2 border border-amber-500/40 bg-amber-500/10 p-2 text-[10px] font-bold text-amber-200">NOAA WIND UNAVAILABLE FOR THESE FORECAST POINTS. Sea heights are from a separate forecast source; no wind values are being estimated.</div>}
             {timelinePoints.length > 0 ? <div className="flex gap-2 overflow-x-auto pb-2">
-              {timelinePoints.map(({ point, index }) => {
+              {timelinePoints.map(({ point, index }, cardIndex) => {
                 const selected = activeTimelineIndex === index;
                 const hours = (point.eta.getTime() - outlookReferenceMs) / 3600000;
+                const previousPoint = cardIndex > 0 ? timelinePoints[cardIndex - 1].point : null;
+                const seaDelta = previousPoint?.waveHeightFt != null && point.waveHeightFt != null ? point.waveHeightFt - previousPoint.waveHeightFt : null;
+                const windDelta = previousPoint?.windKt != null && point.windKt != null ? point.windKt - previousPoint.windKt : null;
                 return <button key={index} type="button" onClick={() => { setMode("encounter"); setTimelineIndex(index); }}
                   title={`ETA ${formatWhen(point.eta)} • ${point.distanceNm.toFixed(0)} NM along route`}
                   aria-pressed={selected}
@@ -857,8 +860,10 @@ export default function RouteWeatherLabPage() {
                   </div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">SEAS</div>
                   <div className="text-lg font-black text-amber-200">{point.waveHeightFt == null ? "--" : `${point.waveHeightFt.toFixed(1)} ft`}</div>
+                  {seaDelta != null && <div className={`text-[9px] font-bold ${seaDelta >= 0.5 ? "text-amber-300" : seaDelta <= -0.5 ? "text-emerald-300" : "text-slate-500"}`}>{seaDelta >= 0.5 ? `↑ BUILDING +${seaDelta.toFixed(1)} ft` : seaDelta <= -0.5 ? `↓ EASING ${seaDelta.toFixed(1)} ft` : "→ STEADY"}</div>}
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">WIND</div>
                   <div className="text-lg font-black text-cyan-200">{point.windKt == null ? "N/A" : `${point.windKt.toFixed(0)} kt`}</div>
+                  {windDelta != null && <div className={`text-[9px] font-bold ${windDelta >= 2 ? "text-amber-300" : windDelta <= -2 ? "text-emerald-300" : "text-slate-500"}`}>{windDelta >= 2 ? `↑ BUILDING +${windDelta.toFixed(0)} kt` : windDelta <= -2 ? `↓ EASING ${windDelta.toFixed(0)} kt` : "→ STEADY"}</div>}
                   <div className="text-[10px] font-bold text-slate-400">{point.windDirectionDeg == null ? "" : compass(point.windDirectionDeg)}</div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">GUSTS</div>
                   <div className="text-lg font-black text-slate-100">{point.gustKt == null ? "N/A" : `${point.gustKt.toFixed(0)} kt`}</div>
