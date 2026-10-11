@@ -238,3 +238,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA route weather failed." }, { status: 500 });
   }
 }
+
+// Temporary preview-only end-to-end route verification. Remove after test.
+export async function GET() {
+  try {
+    const routeResponse = await fetch("https://wx.wardlab.dev/api/route-state", { cache: "no-store" });
+    if (!routeResponse.ok) throw new Error(`Route HTTP ${routeResponse.status}`);
+    const route = await routeResponse.json();
+    const result = await POST(new Request("https://localhost/api/noaa-route-weather", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waypoints: route.waypoints }),
+    }));
+    const data = await result.json();
+    return NextResponse.json({
+      status: result.status,
+      routeWaypointCount: route.waypoints?.length,
+      modelRun: data.modelRun,
+      provider: data.provider,
+      windError: data.windError,
+      error: data.error,
+      coverageByFrame: data.frames?.map((f: MarkerFrame) => ({ validAt: f.validAt, wind: f.points.filter(p => p.windKt !== null).length, total: f.points.length })),
+    }, { headers: { "Cache-Control": "no-store" } });
+  } catch(error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 503 });
+  }
+}
