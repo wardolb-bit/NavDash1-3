@@ -302,7 +302,7 @@ export async function POST(request: Request) {
 export async function GET() {
   try {
     const run = await latestRun();
-    const points: Point[] = [{ lat: 30, lon: 175, distanceNm: 0 }, { lat: 30.5, lon: 175.5, distanceNm: 50 }];
+    const points: Point[] = [{ lat: 30, lon: 175, distanceNm: 0 }, { lat: 34, lon: -165, distanceNm: 1150 }];
     const bounds = routeBounds(points);
     const forecastHour = 6;
     const outcomes: Array<{ mode: string; windKt?: number | null; gustKt?: number | null; error?: string }> = [];
