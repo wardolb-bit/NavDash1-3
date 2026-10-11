@@ -61,34 +61,6 @@ function syncMeasureReadout(host: HTMLElement) {
   if (readout.textContent !== text) readout.textContent = text;
 }
 
-function findWxPanel(host: HTMLElement) {
-  return Array.from(host.children).find((element) => {
-    if (!(element instanceof HTMLElement)) return false;
-    return /z-index:\s*770/.test(element.getAttribute("style") || "");
-  }) as HTMLElement | undefined;
-}
-
-function ensureWxPanelOpen(panel: HTMLElement | undefined) {
-  if (!panel) return;
-  const toggle = Array.from(panel.querySelectorAll("button")).find((button) =>
-    (button.textContent || "").trim().toUpperCase() === "WX LAYERS",
-  );
-  if (toggle instanceof HTMLButtonElement && !panel.querySelector('input[type="checkbox"], input[type="range"]')) toggle.click();
-}
-
-function findNoaaCheckbox(panel: HTMLElement | undefined) {
-  if (!panel) return null;
-  const heading = Array.from(panel.querySelectorAll("strong, span, div")).find((element) =>
-    (element.textContent || "").trim().toUpperCase() === "NOAA ROUTE WX",
-  );
-  const direct = heading?.parentElement?.querySelector<HTMLInputElement>('input[type="checkbox"]');
-  if (direct) return direct;
-  return Array.from(panel.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((checkbox) => {
-    const text = (checkbox.closest("label")?.textContent || "").replace(/\s+/g, " ").trim().toUpperCase();
-    return text.includes("NOAA") || text.includes("ROUTE WX");
-  }) || null;
-}
-
 function menuTheme() {
   return document.documentElement.getAttribute("data-navdash-theme") === "day"
     ? { background: "rgba(255,255,255,.98)", text: "#17212b", muted: "#586773", hover: "#f3f6f8", active: "#006f78", border: "rgba(15,23,42,.22)" }
@@ -195,8 +167,6 @@ function categoryRow(menu: HTMLElement, label: string, build: (panel: HTMLElemen
 }
 
 function buildCategorizedMenu(host: HTMLElement, menu: HTMLElement) {
-  const wxPanel = findWxPanel(host);
-  ensureWxPanelOpen(wxPanel);
   const layerControls = document.getElementById("bc-map-layer-controls");
   const pan = originalButton(host, "PAN");
   const fromShip = originalButton(host, "FROM SHIP");
@@ -226,23 +196,9 @@ function buildCategorizedMenu(host: HTMLElement, menu: HTMLElement) {
 
   categoryRow(menu, "WEATHER", (panel) => {
     addAction(panel, `AMI WX${amiInput?.checked ? "  ✓" : ""}`, () => amiInput?.click(), !(amiInput instanceof HTMLInputElement) || amiInput.disabled, Boolean(amiInput?.checked));
-    const noaaCheckbox = findNoaaCheckbox(wxPanel);
-    if (noaaCheckbox) addAction(panel, `NOAA ROUTE WX ${noaaCheckbox.checked ? "ON" : "OFF"}`, () => noaaCheckbox.click(), noaaCheckbox.disabled, noaaCheckbox.checked);
-    else addAction(panel, "NOAA ROUTE WX UNAVAILABLE", () => {}, true);
     if (layerControls instanceof HTMLElement) {
       const clearAmi = Array.from(layerControls.querySelectorAll<HTMLButtonElement>("button")).find((button) => /CLEAR AMI ROUTE/i.test(button.textContent || ""));
       if (clearAmi) addAction(panel, "CLEAR AMI ROUTE", () => clearAmi.click(), clearAmi.disabled);
-    }
-    if (wxPanel) {
-      Array.from(wxPanel.querySelectorAll("label")).forEach((label) => {
-        const checkbox = label.querySelector<HTMLInputElement>('input[type="checkbox"]');
-        if (!checkbox || checkbox === noaaCheckbox) return;
-        const text = (label.textContent || "").replace(/\s+/g, " ").trim() || "WEATHER LAYER";
-        addAction(panel, `${text}${checkbox.checked ? "  ✓" : ""}`, () => checkbox.click(), checkbox.disabled, checkbox.checked);
-      });
-      Array.from(wxPanel.querySelectorAll<HTMLInputElement>('input[type="range"]')).forEach((range, index) => {
-        addRange(panel, range, (range.getAttribute("aria-label") || (index === 0 ? "FORECAST TIME" : `WEATHER RANGE ${index + 1}`)).toUpperCase());
-      });
     }
   });
 
@@ -257,11 +213,6 @@ function hideFloatingMenus(host: HTMLElement) {
   if (group) group.style.setProperty("display", "none", "important");
   const layerControls = document.getElementById("bc-map-layer-controls");
   if (layerControls instanceof HTMLElement) layerControls.style.setProperty("display", "none", "important");
-  const wxPanel = findWxPanel(host);
-  if (wxPanel) {
-    ensureWxPanelOpen(wxPanel);
-    wxPanel.style.setProperty("display", "none", "important");
-  }
 }
 
 function openRootMenu(host: HTMLElement, clientX: number, clientY: number) {
