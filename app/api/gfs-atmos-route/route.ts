@@ -296,3 +296,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA GFS atmospheric GRIB route sampling failed." }, { status: 500 });
   }
 }
+
+
+// Temporary preview-only GFS probe using synthetic ocean positions. Remove after diagnosis.
+export async function GET() {
+  try {
+    const run = await latestRun();
+    const points: Point[] = [{ lat: 30, lon: 175, distanceNm: 0 }, { lat: 30.5, lon: 175.5, distanceNm: 50 }];
+    const bounds = routeBounds(points);
+    const forecastHour = 6;
+    const outcomes: Array<{ mode: string; windKt?: number | null; gustKt?: number | null; error?: string }> = [];
+    for (const windOnly of [false, true]) {
+      try {
+        const fields = await fetchFields(run, forecastHour, bounds, windOnly);
+        const u = sample(fields.u10, points[0], v => Math.abs(v) <= 200);
+        const v = sample(fields.v10, points[0], v => Math.abs(v) <= 200);
+        const gust = sample(fields.gust, points[0], n => n >= 0 && n <= 200);
+        outcomes.push({ mode: windOnly ? "wind-only" : "full", windKt: u === null || v === null ? null : Math.round(Math.hypot(u,v)*MS_TO_KT), gustKt: gust === null ? null : Math.round(gust*MS_TO_KT) });
+      } catch (error) {
+        outcomes.push({ mode: windOnly ? "wind-only" : "full", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return NextResponse.json({ modelCycle: `${run.date} ${run.cycle}Z`, forecastHour, outcomes }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+}
