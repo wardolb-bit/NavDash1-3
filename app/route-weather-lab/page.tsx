@@ -36,6 +36,8 @@ type WeatherResponse = {
   generatedAt: string;
   sampleCount: number;
   coveredSampleCount: number;
+  windCoverageByFrame?: number[];
+  windError?: string | null;
   frames: Frame[];
   note?: string | null;
 };
@@ -796,7 +798,8 @@ export default function RouteWeatherLabPage() {
         } catch (waveError) { waveMessage = ` Wave model unavailable: ${waveError instanceof Error ? waveError.message : "request failed"}`; }
       }
       setWeather(merged); setFrameIndex(0); setFocusedIndex(null);
-      if (merged.frames.some((frame) => frame.points.some((point) => point.waveHeightFt !== null))) setStatus(`Route weather loaded. Waves: GFS-forced WaveWatch III. Winds: ${windJson.product}.`);
+      if (!merged.frames.some((frame) => frame.points.some((point) => point.windKt !== null))) setStatus(`Wave forecast loaded, but NOAA wind data is unavailable for this route. ${windJson.windError || windJson.note || "No wind samples returned."}`);
+      else if (merged.frames.some((frame) => frame.points.some((point) => point.waveHeightFt !== null))) setStatus(`Route weather loaded. Waves: GFS-forced WaveWatch III. Winds: ${windJson.product}.`);
       else setStatus((windJson.note || `Wind loaded from ${windJson.product}; no wave data returned.`) + waveMessage);
     } catch (error) { setStatus(error instanceof Error ? error.message : "Weather analysis failed."); }
   }
@@ -838,6 +841,7 @@ export default function RouteWeatherLabPage() {
               <div><div className="text-[9px] font-black tracking-[0.14em] text-slate-500">ROUTE WEATHER TIMELINE</div><div className="text-[10px] text-slate-300">Forecast conditions at predicted vessel positions • select a sample to locate it on the chart</div></div>
               <div className="flex gap-1">{([24, 48, 72, 0] as const).map((hours) => <button key={hours} type="button" onClick={() => { setTimelineHours(hours); setMode("encounter"); }} className={`border px-2 py-1 text-[10px] font-bold ${timelineHours === hours ? "border-amber-400/70 bg-amber-400/10 text-amber-200" : "border-slate-700 text-slate-400"}`}>{hours === 0 ? "ALL" : `${hours}H`}</button>)}</div>
             </div>
+            {timelinePoints.length > 0 && timelinePoints.every(({ point }) => point.windKt === null) && <div className="mb-2 border border-amber-500/40 bg-amber-500/10 p-2 text-[10px] font-bold text-amber-200">NOAA WIND UNAVAILABLE FOR THESE FORECAST POINTS. Sea heights are from a separate forecast source; no wind values are being estimated.</div>}
             {timelinePoints.length > 0 ? <div className="flex gap-2 overflow-x-auto pb-2">
               {timelinePoints.map(({ point, index }) => {
                 const selected = activeTimelineIndex === index;
@@ -848,15 +852,15 @@ export default function RouteWeatherLabPage() {
                   className={`min-w-[132px] flex-none border p-2 text-left transition-colors ${selected ? "border-amber-300 bg-amber-300/10" : "border-slate-700 bg-[#08131b] hover:border-cyan-400/60"}`}>
                   <div className="flex items-center justify-between border-b border-slate-700/70 pb-2">
                     <span className="text-[11px] font-black text-slate-100">+{hours.toFixed(0)}H</span>
-                    <span className="text-[9px] font-semibold text-slate-400">${point.distanceNm.toFixed(0)} NM</span>
+                    <span className="text-[9px] font-semibold text-slate-400">{point.distanceNm.toFixed(0)} NM</span>
                   </div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">SEAS</div>
                   <div className="text-lg font-black text-amber-200">{point.waveHeightFt == null ? "--" : `${point.waveHeightFt.toFixed(1)} ft`}</div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">WIND</div>
-                  <div className="text-lg font-black text-cyan-200">{point.windKt == null ? "--" : `${point.windKt.toFixed(0)} kt`}</div>
+                  <div className="text-lg font-black text-cyan-200">{point.windKt == null ? "N/A" : `${point.windKt.toFixed(0)} kt`}</div>
                   <div className="text-[10px] font-bold text-slate-400">{point.windDirectionDeg == null ? "" : compass(point.windDirectionDeg)}</div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">GUSTS</div>
-                  <div className="text-lg font-black text-slate-100">{point.gustKt == null ? "--" : `${point.gustKt.toFixed(0)} kt`}</div>
+                  <div className="text-lg font-black text-slate-100">{point.gustKt == null ? "N/A" : `${point.gustKt.toFixed(0)} kt`}</div>
                 </button>;
               })}
             </div> : <div className="text-xs text-slate-400">No forecast samples within this time window.</div>}
