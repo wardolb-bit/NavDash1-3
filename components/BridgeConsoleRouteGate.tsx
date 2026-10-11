@@ -13,7 +13,6 @@ import { MainMapDisplayControls } from "./MainMapDisplayControls";
 import { EncScaleAwareLayer } from "./EncScaleAwareLayer";
 import { BridgeEncBrightnessMenu } from "./BridgeEncBrightnessMenu";
 import { NavMapZoomLimit } from "./NavMapZoomLimit";
-import { NoaaLeafletPaneWeatherOverlay } from "./NoaaLeafletPaneWeatherOverlay";
 
 export function BridgeConsoleRouteGate() {
   const pathname = usePathname();
@@ -31,7 +30,6 @@ export function BridgeConsoleRouteGate() {
       <BridgeEncBrightnessMenu />
       <BridgeMapWakeup />
       <NavMapZoomLimit />
-      <NoaaLeafletPaneWeatherOverlay />
       <BridgeMapLayerControls />
       <BridgeQuickAccess />
       <BridgeNextWaypointDistance />
