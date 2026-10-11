@@ -2,10 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { geodesicDistanceNm } from "../lib/routeNavigation";
-import { logicalRouteLegIndex } from "../lib/navigationSolution";
 
-type Waypoint = { id?: string; name?: string; lat: number; lon: number; geometryType?: "Orthodrome" | "Loxodrome" };
+type Waypoint = { id?: string; name?: string; lat: number; lon: number };
 type NoaaPoint = {
   lat: number;
   lon: number;
@@ -44,7 +42,6 @@ function normalizeRoute(payload: any): Waypoint[] {
     .map((wp: any) => ({
       id: typeof wp?.id === "string" ? wp.id : undefined,
       name: typeof wp?.name === "string" ? wp.name : undefined,
-      geometryType: wp?.geometryType === "Loxodrome" ? "Loxodrome" : "Orthodrome",
       lat: Number(wp?.lat ?? wp?.latitude),
       lon: Number(wp?.lon ?? wp?.lng ?? wp?.longitude),
     }))
@@ -126,8 +123,6 @@ export function NoaaLeafletPaneWeatherOverlay() {
   const [amiVisible, setAmiVisible] = useState(true);
   const [amiSelectedIndex, setAmiSelectedIndex] = useState(0);
   const [vesselSog, setVesselSog] = useState<number | null>(null);
-  const [shipPosition, setShipPosition] = useState<{ lat: number; lon: number } | null>(null);
-  const [forecastAnchor, setForecastAnchor] = useState<{ lat: number; lon: number; at: number } | null>(null);
   const mapRef = useRef<any>(null);
   const layerRef = useRef<any>(null);
 
@@ -219,35 +214,10 @@ export function NoaaLeafletPaneWeatherOverlay() {
     return () => window.clearInterval(timer);
   }, [host]);
 
-  useEffect(() => {
-    const onPosition = (event: Event) => {
-      const pos = (event as CustomEvent<{ lat: number; lon: number }>).detail;
-      if (!pos || !Number.isFinite(pos.lat) || !Number.isFinite(pos.lon) || Math.abs(pos.lat) > 90 || Math.abs(pos.lon) > 180) return;
-      setShipPosition(pos);
-    };
-    window.addEventListener("navdash-main-ownship-position", onPosition);
-    return () => window.removeEventListener("navdash-main-ownship-position", onPosition);
-  }, []);
-
-  useEffect(() => {
-    if (!shipPosition || route.length < 2) { setForecastAnchor(null); return; }
-    const refreshAnchor = () => setForecastAnchor((anchor) => {
-      if (anchor && geodesicDistanceNm(anchor, shipPosition) < 25 && Date.now() - anchor.at < 3 * 3600000) return anchor;
-      return { ...shipPosition, at: Date.now() };
-    });
-    refreshAnchor();
-    const timer = window.setInterval(refreshAnchor, 5 * 60000);
-    return () => window.clearInterval(timer);
-  }, [shipPosition, route]);
-
-  const routeSignature = useMemo(() => route.map((wp) => `${wp.lat.toFixed(5)},${wp.lon.toFixed(5)},${wp.geometryType || ""}`).join(";"), [route]);
+  const routeSignature = useMemo(() => route.map((wp) => `${wp.lat.toFixed(5)},${wp.lon.toFixed(5)}`).join(";"), [route]);
 
   useEffect(() => {
     if (!routeSignature || route.length < 2) { setForecast(null); setVisible(false); return; }
-    if (!forecastAnchor) { setForecast(null); return; }
-    const nextIndex = logicalRouteLegIndex(route, forecastAnchor, 1) ?? 1;
-    const remainingRoute: Waypoint[] = [{ lat: forecastAnchor.lat, lon: forecastAnchor.lon, name: "Current vessel position" }, ...route.slice(nextIndex)];
-    if (remainingRoute.length < 2) return;
     let cancelled = false;
     const load = async () => {
       setLoading(true); setError("");
@@ -255,7 +225,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
         const response = await fetch("/api/noaa-route-weather", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ waypoints: remainingRoute }),
+          body: JSON.stringify({ waypoints: route }),
           cache: "no-store",
         });
         const data = await response.json();
@@ -269,7 +239,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
     };
     load();
     return () => { cancelled = true; };
-  }, [routeSignature, forecastAnchor]);
+  }, [routeSignature]);
 
   const frame = forecast?.frames?.[Math.min(selectedIndex, Math.max(0, (forecast?.frames?.length || 1) - 1))] || null;
   const amiPoints = amiOverlay?.forecastPoints || [];
@@ -384,7 +354,7 @@ export function NoaaLeafletPaneWeatherOverlay() {
                 <div style={{ fontSize: 9, color: "#94a3b8", lineHeight: 1.35 }}>{forecast.provider} · {forecast.coveredSampleCount}/{forecast.sampleCount} route samples</div>
                 {forecast.note ? <div style={{ marginTop: 4, fontSize: 9, color: "#f1d56b" }}>{forecast.note}</div> : null}
               </>
-            ) : loading ? <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Loading NOAA route forecast…</div> : error ? <div style={{ marginTop: 9, fontSize: 10, color: "#fca5a5" }}>{error}</div> : <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>{route.length >= 2 ? "Waiting for live vessel position." : "Load a route to enable NOAA weather."}</div>}
+            ) : loading ? <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Loading NOAA route forecast…</div> : error ? <div style={{ marginTop: 9, fontSize: 10, color: "#fca5a5" }}>{error}</div> : <div style={{ marginTop: 9, fontSize: 10, color: "#94a3b8" }}>Load a route to enable NOAA weather.</div>}
 
             <div style={{ marginTop: 10, paddingTop: 9, borderTop: "1px solid rgba(148,163,184,.22)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
