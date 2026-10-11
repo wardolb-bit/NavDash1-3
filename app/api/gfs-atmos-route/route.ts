@@ -297,31 +297,40 @@ export async function POST(request: Request) {
   }
 }
 
-// Temporary preview-only wide-area probe. No ship data or route content is returned.
-export async function GET(request: Request) {
+
+// Temporary read-only probe of the current production route weather response.
+// This executes the existing production endpoint; it does not modify production code or data.
+export async function GET() {
   const started = Date.now();
   try {
-    const internal = await fetch(new URL("/api/route-state", request.url), { cache: "no-store", redirect: "manual" }).catch(() => null);
-    const run = await latestRun();
-    const bounds = routeBounds([
-      { lat: 21.2, lon: -158, distanceNm: 0 },
-      { lat: 34, lon: 132, distanceNm: 1 },
-    ]);
-    // Reproduce the bounding rectangle covering the current Pacific crossing.
-    const outcome: Record<string, unknown> = { internalFetch: internal ? { status: internal.status, location: internal.headers.get("location"), contentType: internal.headers.get("content-type") } : { failed: true }, cycle: `${run.date} ${run.cycle}Z`, bounds };
-    try {
-      const fields = await fetchFields(run, 6, bounds, false);
-      const test = { lat: 30, lon: 175, distanceNm: 0 };
-      outcome.fullSubset = {
-        u: sample(fields.u10, test, value => Math.abs(value) <= 200),
-        v: sample(fields.v10, test, value => Math.abs(value) <= 200),
-        gust: sample(fields.gust, test, value => value >= 0 && value <= 200),
-      };
-    } catch (error) {
-      outcome.error = error instanceof Error ? error.message : String(error);
-    }
-    outcome.elapsedMs = Date.now() - started;
-    return NextResponse.json(outcome, { headers: { "Cache-Control": "no-store" } });
+    const routeResponse = await fetch("https://wx.wardlab.dev/api/route-state", { cache: "no-store" });
+    if (!routeResponse.ok) throw new Error(`Route state HTTP ${routeResponse.status}`);
+    const route = await routeResponse.json();
+    const waypoints = Array.isArray(route.waypoints) ? route.waypoints : [];
+    const wxResponse = await fetch("https://wx.wardlab.dev/api/noaa-route-weather", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      body: JSON.stringify({ waypoints }),
+    });
+    const data = await wxResponse.json();
+    return NextResponse.json({
+      productionHttpStatus: wxResponse.status,
+      routeWaypointCount: waypoints.length,
+      routeName: route.routeName,
+      elapsedMs: Date.now() - started,
+      provider: data.provider,
+      product: data.product,
+      note: data.note,
+      error: data.error,
+      modelRun: data.modelRun,
+      coverageByFrame: Array.isArray(data.frames) ? data.frames.map((frame: { validAt: string; points: Array<{ windKt: number | null; gustKt: number | null }> }) => ({
+        validAt: frame.validAt,
+        samples: frame.points.length,
+        wind: frame.points.filter(point => point.windKt !== null).length,
+        gust: frame.points.filter(point => point.gustKt !== null).length,
+      })) : [],
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error), elapsedMs: Date.now() - started }, { status: 503, headers: { "Cache-Control": "no-store" } });
   }
