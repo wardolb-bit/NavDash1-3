@@ -303,3 +303,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA GFS atmospheric GRIB route sampling failed." }, { status: 500 });
   }
 }
+
+// Temporary preview verification. Remove after full-horizon check.
+export async function GET() {
+  const now = new Date();
+  now.setUTCMinutes(0, 0, 0);
+  const validTimes = [0, 6, 12, 24, 48, 72, 96, 120].map(hour => new Date(now.getTime() + hour * 3600000).toISOString());
+  const request = new Request("https://localhost/api/gfs-atmos-route", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      points: [{lat: 30, lon: 175, distanceNm: 0}, {lat: 32, lon: -165, distanceNm: 1200}],
+      validTimes,
+    }),
+  });
+  const result = await POST(request);
+  const data = await result.json();
+  return NextResponse.json({ status: result.status, modelRun: data.modelRun, gribFailures: data.gribFailures, windOnlyRecoveries: data.windOnlyRecoveries, frameErrors: data.frameErrors, coverageByFrame: data.frames?.map((f: AtmosFrame) => ({ validAt: f.validAt, wind: f.points.filter(p=>p.windKt !== null).length, samples: f.points.length, source: f.points[0]?.source })), error: data.error }, { headers: { "Cache-Control": "no-store" } });
+}
