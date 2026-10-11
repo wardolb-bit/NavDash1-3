@@ -101,35 +101,6 @@ function addAction(panel: HTMLElement, text: string, action: () => void, disable
   panel.appendChild(row);
 }
 
-function addRange(panel: HTMLElement, source: HTMLInputElement, labelText: string) {
-  const theme = menuTheme();
-  const wrap = document.createElement("div");
-  wrap.style.cssText = "padding:8px 12px 10px;min-width:240px";
-  const label = document.createElement("div");
-  label.textContent = labelText;
-  label.style.cssText = "margin-bottom:6px;font:700 10px/1.2 system-ui,sans-serif;letter-spacing:.06em";
-  label.style.color = theme.text;
-  const range = document.createElement("input");
-  range.type = "range";
-  range.min = source.min;
-  range.max = source.max;
-  range.step = source.step;
-  range.value = source.value;
-  range.disabled = source.disabled;
-  range.style.cssText = "width:100%;accent-color:#22d3ee;touch-action:none";
-  const pushValue = () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
-    if (setter) setter.call(source, range.value);
-    else source.value = range.value;
-    source.dispatchEvent(new Event("input", { bubbles: true }));
-    source.dispatchEvent(new Event("change", { bubbles: true }));
-  };
-  range.addEventListener("input", pushValue);
-  range.addEventListener("change", pushValue);
-  wrap.append(label, range);
-  panel.appendChild(wrap);
-}
-
 function openSubmenu(anchor: HTMLElement, build: (panel: HTMLElement) => void) {
   document.getElementById(SUBMENU_ID)?.remove();
   const rootMenu = document.getElementById(ROOT_MENU_ID);
