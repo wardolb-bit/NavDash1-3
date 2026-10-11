@@ -298,40 +298,29 @@ export async function POST(request: Request) {
 }
 
 
-// Temporary read-only probe of the current production route weather response.
-// This executes the existing production endpoint; it does not modify production code or data.
+
+// Temporary preview-only late-frame diagnostic; remove after testing.
 export async function GET() {
-  const started = Date.now();
   try {
-    const routeResponse = await fetch("https://wx.wardlab.dev/api/route-state", { cache: "no-store" });
-    if (!routeResponse.ok) throw new Error(`Route state HTTP ${routeResponse.status}`);
-    const route = await routeResponse.json();
-    const waypoints = Array.isArray(route.waypoints) ? route.waypoints : [];
-    const wxResponse = await fetch("https://wx.wardlab.dev/api/noaa-route-weather", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      cache: "no-store",
-      body: JSON.stringify({ waypoints }),
-    });
-    const data = await wxResponse.json();
-    return NextResponse.json({
-      productionHttpStatus: wxResponse.status,
-      routeWaypointCount: waypoints.length,
-      routeName: route.routeName,
-      elapsedMs: Date.now() - started,
-      provider: data.provider,
-      product: data.product,
-      note: data.note,
-      error: data.error,
-      modelRun: data.modelRun,
-      coverageByFrame: Array.isArray(data.frames) ? data.frames.map((frame: { validAt: string; points: Array<{ windKt: number | null; gustKt: number | null }> }) => ({
-        validAt: frame.validAt,
-        samples: frame.points.length,
-        wind: frame.points.filter(point => point.windKt !== null).length,
-        gust: frame.points.filter(point => point.gustKt !== null).length,
-      })) : [],
-    }, { headers: { "Cache-Control": "no-store" } });
+    const run = await latestRun();
+    const bounds = routeBounds([
+      { lat: 21.2, lon: -158, distanceNm: 0 },
+      { lat: 34, lon: 132, distanceNm: 1 },
+    ]);
+    const checks = [];
+    for (const hour of [99, 120]) {
+      try {
+        const fields = await fetchFields(run, hour, bounds, true);
+        const point = { lat: 30, lon: 175, distanceNm: 0 };
+        const u = sample(fields.u10, point, value => Math.abs(value) <= 200);
+        const v = sample(fields.v10, point, value => Math.abs(value) <= 200);
+        checks.push({ hour, windKt: u === null || v === null ? null : Math.round(Math.hypot(u, v) * MS_TO_KT) });
+      } catch (error) {
+        checks.push({ hour, error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return NextResponse.json({ cycle: `${run.date} ${run.cycle}Z`, checks }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : String(error), elapsedMs: Date.now() - started }, { status: 503, headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 503 });
   }
 }
