@@ -296,3 +296,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA GFS atmospheric GRIB route sampling failed." }, { status: 500 });
   }
 }
+
+
+// Temporary diagnostic of cycle completeness. Remove after verification.
+export async function GET() {
+  const runs = candidateRuns().slice(0, 4);
+  const checks = await Promise.all(runs.flatMap(run => [0, 99, 120, 126, 132].map(async hour => {
+    try {
+      const res = await fetch(`${directUrl(run, hour)}.idx`, { cache: "no-store" });
+      return { cycle: `${run.date} ${run.cycle}Z`, hour, status: res.status };
+    } catch(error) {
+      return { cycle: `${run.date} ${run.cycle}Z`, hour, error: error instanceof Error ? error.message : String(error) };
+    }
+  })));
+  return NextResponse.json({ checks }, { headers: { "Cache-Control": "no-store" } });
+}
