@@ -303,7 +303,7 @@ export async function GET() {
   try {
     const run = await latestRun();
     const bounds = routeBounds([
-      { lat: 21.2, lon: -174.8, distanceNm: 0 },
+      { lat: 21.2, lon: -158, distanceNm: 0 },
       { lat: 34, lon: 132, distanceNm: 1 },
     ]);
     // Reproduce the bounding rectangle covering the current Pacific crossing.
