@@ -53,6 +53,11 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
           color: #075f68 !important;
         }
 
+        /* Day-only timeline sea heights: stronger contrast on light cards. */
+        html[data-navdash-theme="day"] main button[title^="ETA "] .text-amber-200 {
+          color: #8a480c !important;
+        }
+
         html[data-navdash-theme="day"] main [class~="lg:grid-cols-5"] > div:nth-child(5) [class*="text-emerald-200"] {
           color: var(--nd-text) !important;
         }
