@@ -74,21 +74,29 @@ function directUrl(run: ModelRun, forecastHour: number) {
   return `${NOMADS}/pub/data/nccf/com/gfs/prod${directory(run)}/${fileName(run, forecastHour)}`;
 }
 
-async function latestRun() {
+function forecastHourFor(validAt: Date, run: ModelRun) {
+  const rawHour = Math.max(0, Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000));
+  return rawHour <= 120 ? rawHour : 120 + Math.round((rawHour - 120) / 3) * 3;
+}
+
+async function latestRun(validTimes: Date[]) {
+  const latestValidAt = new Date(Math.max(...validTimes.map((date) => date.getTime())));
   for (const run of candidateRuns()) {
     try {
-      const response = await fetch(`${directUrl(run, 0)}.idx`, {
+      const forecastHour = forecastHourFor(latestValidAt, run);
+      if (forecastHour > 384) continue;
+      const response = await fetch(`${directUrl(run, forecastHour)}.idx`, {
         headers: { "User-Agent": USER_AGENT, Accept: "text/plain" },
         cache: "no-store",
       });
       if (!response.ok) continue;
-      const text = await response.text();
-      if (text.includes(":UGRD:10 m above ground:") && text.includes(":TMP:2 m above ground:")) return run;
+      const index = await response.text();
+      if (index.includes(":UGRD:10 m above ground:") && index.includes(":VGRD:10 m above ground:")) return run;
     } catch {
-      // Try the previous cycle.
+      // Check the preceding model cycle while the latest cycle is publishing.
     }
   }
-  throw new Error("No current NOAA GFS atmospheric model cycle is available from NOMADS.");
+  throw new Error("No NOAA GFS cycle has 10 m wind files through the requested forecast horizon.");
 }
 
 function routeBounds(points: Point[]): Bounds {
@@ -218,7 +226,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Atmospheric GRIB request requires route points and forecast valid times." }, { status: 400 });
     }
 
-    const run = await latestRun();
+    const run = await latestRun(validTimes);
     const bounds = routeBounds(points);
     const frames: AtmosFrame[] = [];
     let gribFailures = 0;
@@ -226,8 +234,7 @@ export async function POST(request: Request) {
     const frameErrors: Array<{ validAt: string; forecastHour: number; error: string }> = [];
 
     for (const validAt of validTimes) {
-      const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
-      const forecastHour = Math.max(0, Math.min(120, rawHour));
+      const forecastHour = forecastHourFor(validAt, run);
       let fields: AtmosFields | null = null;
       try {
         fields = await fetchFields(run, forecastHour, bounds);
@@ -295,19 +302,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA GFS atmospheric GRIB route sampling failed." }, { status: 500 });
   }
-}
-
-
-// Temporary diagnostic of cycle completeness. Remove after verification.
-export async function GET() {
-  const runs = candidateRuns().slice(0, 4);
-  const checks = await Promise.all(runs.flatMap(run => [0, 99, 120, 126, 132].map(async hour => {
-    try {
-      const res = await fetch(`${directUrl(run, hour)}.idx`, { cache: "no-store" });
-      return { cycle: `${run.date} ${run.cycle}Z`, hour, status: res.status };
-    } catch(error) {
-      return { cycle: `${run.date} ${run.cycle}Z`, hour, error: error instanceof Error ? error.message : String(error) };
-    }
-  })));
-  return NextResponse.json({ checks }, { headers: { "Cache-Control": "no-store" } });
 }
