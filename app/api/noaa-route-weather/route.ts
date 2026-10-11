@@ -181,11 +181,12 @@ export async function POST(request: Request) {
             headers: { "Content-Type": "application/json" },
             cache: "no-store",
             body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
-          }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch(() => ({ ok: false, json: null })),
+          }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch((error) => ({ ok: false, json: { error: error instanceof Error ? error.message : "Atmospheric request failed" } })),
     ]);
 
     const nwsBySampleIndex = new Map(nwsFallbackResults.map(({ sampleIndex, result }) => [sampleIndex, result]));
     const atmos = atmosResult.ok ? atmosResult.json as AtmosResponse : null;
+    const atmosError = !nwsOnly && !atmosResult.ok ? (atmosResult.json as { error?: string } | null)?.error || "Atmospheric forecast unavailable" : null;
     const atmosFrames = Array.isArray(atmos?.frames) ? atmos!.frames! : [];
 
     const frames: MarkerFrame[] = validTimes.map((validAt, frameIndex) => {
@@ -224,6 +225,8 @@ export async function POST(request: Request) {
       modelRun: atmos?.modelRun || null,
       sampleCount: samples.length,
       coveredSampleCount: covered,
+      windCoverageByFrame: frames.map((frame) => frame.points.filter((point) => point.windKt !== null).length),
+      windError: atmosError,
       frames,
       note: usingGrib
         ? "GFS atmospheric GRIB2 is the primary route weather source; NWS point grids remain available for marine-wave fallback."
