@@ -117,13 +117,15 @@ function routeBounds(points: Point[]): Bounds {
   };
 }
 
-function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds) {
+function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds, windOnly = false) {
   const params = new URLSearchParams();
   params.set("file", fileName(run, forecastHour));
-  for (const variable of ["UGRD", "VGRD", "GUST", "TMP", "RH", "PRMSL", "APCP", "TCDC"]) {
+  const variables = windOnly ? ["UGRD", "VGRD", "GUST"] : ["UGRD", "VGRD", "GUST", "TMP", "RH", "PRMSL", "APCP", "TCDC"];
+  const levels = windOnly ? ["10_m_above_ground", "surface"] : ["10_m_above_ground", "2_m_above_ground", "surface", "mean_sea_level", "entire_atmosphere"];
+  for (const variable of variables) {
     params.set(`var_${variable}`, "on");
   }
-  for (const level of ["10_m_above_ground", "2_m_above_ground", "surface", "mean_sea_level", "entire_atmosphere"]) {
+  for (const level of levels) {
     params.set(`lev_${level}`, "on");
   }
   params.set("subregion", "");
@@ -160,8 +162,8 @@ function classifyField(field: ReturnType<typeof parseFields>[number]): keyof Atm
   return null;
 }
 
-async function fetchFields(run: ModelRun, forecastHour: number, bounds: Bounds): Promise<AtmosFields> {
-  const response = await fetch(filterUrl(run, forecastHour, bounds), {
+async function fetchFields(run: ModelRun, forecastHour: number, bounds: Bounds, windOnly = false): Promise<AtmosFields> {
+  const response = await fetch(filterUrl(run, forecastHour, bounds, windOnly), {
     headers: { "User-Agent": USER_AGENT, Accept: "application/octet-stream" },
     cache: "no-store",
   });
@@ -220,6 +222,8 @@ export async function POST(request: Request) {
     const bounds = routeBounds(points);
     const frames: AtmosFrame[] = [];
     let gribFailures = 0;
+    let windOnlyRecoveries = 0;
+    const frameErrors: Array<{ validAt: string; forecastHour: number; error: string }> = [];
 
     for (const validAt of validTimes) {
       const rawHour = Math.round((validAt.getTime() - run.cycleTime.getTime()) / 3600000);
@@ -227,8 +231,20 @@ export async function POST(request: Request) {
       let fields: AtmosFields | null = null;
       try {
         fields = await fetchFields(run, forecastHour, bounds);
-      } catch {
-        gribFailures += 1;
+      } catch (fullError) {
+        // Keep the complete atmospheric product as the primary request.
+        // If a large subset fails, retry just the marine-relevant wind fields.
+        try {
+          fields = await fetchFields(run, forecastHour, bounds, true);
+          windOnlyRecoveries += 1;
+        } catch (windError) {
+          gribFailures += 1;
+          frameErrors.push({
+            validAt: validAt.toISOString(),
+            forecastHour,
+            error: windError instanceof Error ? windError.message : String(windError),
+          });
+        }
       }
 
       const framePoints = points.map((point): AtmosPoint => {
@@ -269,6 +285,8 @@ export async function POST(request: Request) {
       modelRun: run.cycleTime.toISOString(),
       modelCycle: `${run.date} ${run.cycle}Z`,
       gribFailures,
+      windOnlyRecoveries,
+      frameErrors,
       totalPointCount: total,
       coveredPointCount: windCovered,
       coveragePercent: total ? Math.round((windCovered / total) * 100) : 0,
