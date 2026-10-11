@@ -262,7 +262,6 @@ export default function RouteWeatherLabPage() {
   const [showWind, setShowWind] = useState(true);
   const [showSeas, setShowSeas] = useState(true);
   const [mode, setMode] = useState<"encounter" | "time">("encounter");
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [timelineIndex, setTimelineIndex] = useState<number | null>(null);
   const [timelineHours, setTimelineHours] = useState<24 | 48 | 72 | 0>(72);
   const ownShip = useOwnShipAis();
@@ -647,12 +646,11 @@ export default function RouteWeatherLabPage() {
   const activeTimelineIndex = timelineIndex !== null && timelineIndex >= 0 && timelineIndex < encounter.length ? timelineIndex : null;
   const selectedTimelinePoint = activeTimelineIndex === null ? null : encounter[activeTimelineIndex];
 
-  useEffect(() => {
-    if (timelineIndex === null || !mapRef.current || !encounter[timelineIndex]) return;
-    const point = encounter[timelineIndex];
-    const position = pointAtDistance(route, point.distanceNm, mapRef.current.getCenter().lng);
+  function locateTimelineEncounter() {
+    if (!selectedTimelinePoint || !mapRef.current) return;
+    const position = pointAtDistance(route, selectedTimelinePoint.distanceNm, mapRef.current.getCenter().lng);
     if (position) mapRef.current.panTo([position.lat, position.lon], { animate: true });
-  }, [timelineIndex, encounter, route]);
+  }
 
   const next24Encounter = useMemo(
     () => encounter.filter((point) => !point.beyondHorizon && point.eta.getTime() >= outlookReferenceMs && point.eta.getTime() <= outlookReferenceMs + 24 * 3600000),
@@ -732,14 +730,17 @@ export default function RouteWeatherLabPage() {
           `<b>Along route:</b> ${p.distanceNm.toFixed(0)} NM`,
         ].filter(Boolean).join("<br/>");
         L.circleMarker([routePoint.lat, routePoint.lon], {
-          radius: (focusedIndex === index || (mode === "encounter" && activeTimelineIndex === index)) ? 8 : 4,
-          color: (focusedIndex === index || (mode === "encounter" && activeTimelineIndex === index)) ? "#f8fafc" : pointColor,
-          weight: (focusedIndex === index || (mode === "encounter" && activeTimelineIndex === index)) ? 3 : 1,
+          radius: (mode === "encounter" && activeTimelineIndex === index) ? 8 : 4,
+          color: (mode === "encounter" && activeTimelineIndex === index) ? "#f8fafc" : pointColor,
+          weight: (mode === "encounter" && activeTimelineIndex === index) ? 3 : 1,
           fillColor: pointColor,
-          fillOpacity: (focusedIndex === index || (mode === "encounter" && activeTimelineIndex === index)) ? 0.95 : 0.7,
+          fillOpacity: (mode === "encounter" && activeTimelineIndex === index) ? 0.95 : 0.7,
         }).bindTooltip(details, { direction: "top", opacity: 0.96 }).bindPopup([
           details, `<b>Wind source:</b> ${p.source}`, p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).on("click", () => { if (mode === "encounter") setTimelineIndex(index); }).addTo(layer);
+        if (mode === "encounter" && activeTimelineIndex === index) {
+          L.circleMarker([routePoint.lat, routePoint.lon], { radius: 13, color: "#f1d56b", weight: 2, fillOpacity: 0, opacity: 0.95, interactive: false }).addTo(layer);
+        }
       });
 
       if (liveRouteAnchor && ownShip) {
@@ -766,14 +767,14 @@ export default function RouteWeatherLabPage() {
       }
     }
     drawWeather();
-  }, [displayedPoints, showWind, showSeas, mode, selectedFrame, route, focusedIndex, activeTimelineIndex, expectedVesselNm, liveRouteAnchor, ownShip]);
+  }, [displayedPoints, showWind, showSeas, mode, selectedFrame, route, activeTimelineIndex, expectedVesselNm, liveRouteAnchor, ownShip]);
 
   async function loadRouteFile(file: File) {
     try {
       const text = await file.text();
       const parsed = parseRtz(text);
       if (parsed.length < 2) throw new Error("No usable RTZ waypoints found.");
-      setRoute(parsed); setRouteName(file.name); setWeather(null); setFrameIndex(0); setFocusedIndex(null);
+      setRoute(parsed); setRouteName(file.name); setWeather(null); setTimelineIndex(null); setFrameIndex(0);
       setStatus(`${parsed.length} waypoints loaded. Ready to analyze route weather.`);
     } catch (error) { setStatus(error instanceof Error ? error.message : "Could not read route."); }
   }
@@ -797,7 +798,7 @@ export default function RouteWeatherLabPage() {
           else waveMessage = ` Wave model unavailable: ${waveJson?.error || "unknown error"}`;
         } catch (waveError) { waveMessage = ` Wave model unavailable: ${waveError instanceof Error ? waveError.message : "request failed"}`; }
       }
-      setWeather(merged); setFrameIndex(0); setFocusedIndex(null);
+      setWeather(merged); setTimelineIndex(null); setFrameIndex(0);
       if (!merged.frames.some((frame) => frame.points.some((point) => point.windKt !== null))) setStatus(`Wave forecast loaded, but NOAA wind data is unavailable for this route. ${windJson.windError || windJson.note || "No wind samples returned."}`);
       else if (merged.frames.some((frame) => frame.points.some((point) => point.waveHeightFt !== null))) setStatus(`Route weather loaded. Waves: GFS-forced WaveWatch III. Winds: ${windJson.product}.`);
       else setStatus((windJson.note || `Wind loaded from ${windJson.product}; no wave data returned.`) + waveMessage);
@@ -818,7 +819,7 @@ export default function RouteWeatherLabPage() {
         geometryType: waypoint.geometryType,
       }));
       if (parsed.length < 2) throw new Error("The current NavDash route does not contain enough usable waypoints.");
-      setRoute(parsed); setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route"); setWeather(null); setFrameIndex(0); setFocusedIndex(null);
+      setRoute(parsed); setRouteName(typeof json?.routeName === "string" && json.routeName.trim() ? json.routeName.trim() : "Current NavDash Route"); setWeather(null); setTimelineIndex(null); setFrameIndex(0);
       if (autoAnalyze) await analyzeWaypoints(parsed); else setStatus(`${parsed.length} waypoints loaded from the current NavDash route. Ready to analyze route weather.`);
     } catch (error) { setStatus(error instanceof Error ? error.message : "Could not load current NavDash route."); }
     finally { setLoadingCurrentRoute(false); }
@@ -838,7 +839,7 @@ export default function RouteWeatherLabPage() {
 
           {weather && encounter.length > 0 && <section className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <div><div className="text-[9px] font-black tracking-[0.14em] text-slate-500">ROUTE WEATHER TIMELINE</div><div className="text-[10px] text-slate-300">Forecast conditions at predicted vessel positions • select a sample to locate it on the chart</div></div>
+              <div><div className="text-[9px] font-black tracking-[0.14em] text-slate-500">ROUTE WEATHER TIMELINE</div><div className="text-[10px] text-slate-300">Forecast conditions at predicted vessel positions • select a card to highlight its chart marker</div></div>
               <div className="flex gap-1">{([24, 48, 72, 0] as const).map((hours) => <button key={hours} type="button" onClick={() => { setTimelineHours(hours); setMode("encounter"); }} className={`border px-2 py-1 text-[10px] font-bold ${timelineHours === hours ? "border-amber-400/70 bg-amber-400/10 text-amber-200" : "border-slate-700 text-slate-400"}`}>{hours === 0 ? "ALL" : `${hours}H`}</button>)}</div>
             </div>
             {timelinePoints.length > 0 && <div className="mb-2 text-[10px] font-bold text-slate-400">WIND COVERAGE · {timelinePoints.filter(({ point }) => point.windKt !== null).length}/{timelinePoints.length} route encounters in selected window · FORECAST FRAMES: {weather.frames.map((frame, index) => `${new Date(frame.validAt).toISOString().slice(11, 16)}Z ${weather.windCoverageByFrame?.[index] ?? frame.points.filter((point) => point.windKt !== null).length}/${frame.points.length}`).join(" · ")}</div>}
@@ -878,6 +879,7 @@ export default function RouteWeatherLabPage() {
               <span>SEAS {selectedTimelinePoint.waveHeightFt == null ? "--" : `${selectedTimelinePoint.waveHeightFt.toFixed(1)} ft`}</span>
               <span>PERIOD {selectedTimelinePoint.wavePeriodSec == null ? "--" : `${selectedTimelinePoint.wavePeriodSec.toFixed(0)} s`}</span>
               <span>VALID {formatWhen(selectedTimelinePoint.validAt)}</span>
+              <button type="button" onClick={locateTimelineEncounter} className="ml-auto border border-cyan-400/50 bg-[#08131b] px-3 py-1 text-[10px] font-black text-cyan-200 hover:border-cyan-300">LOCATE ON CHART</button>
             </div>}
           </section>}
           {weather && mode === "time" && <div className="mt-2 border border-slate-800 bg-[#050a0f] p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] font-black"><span className="text-slate-400">WEATHER TIME</span><span className="text-cyan-300">{selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</span></div><input className="w-full accent-amber-400" type="range" min={0} max={Math.max(0, weather.frames.length - 1)} value={frameIndex} onChange={(e) => setFrameIndex(Number(e.target.value))} /><div className="mt-2 flex justify-between text-[9px] text-slate-500"><span>EARLIEST</span><span>{liveRouteAnchor ? `AIS ANCHORED • ${liveRouteAnchor.distanceNm.toFixed(0)} NM ALONG ROUTE` : "GHOST VESSEL USES DEPARTURE + SPEED"}</span><span>LATEST</span></div></div>}
@@ -890,7 +892,6 @@ export default function RouteWeatherLabPage() {
           <section className="border border-slate-700/50 bg-[#071019] p-3"><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">STATUS</div><div className="mt-2 text-[11px] leading-relaxed text-slate-300">{status}</div></section>
         </aside>
       </div>
-      {weather && displayedPoints.length > 0 && <section className="border border-slate-700/50 bg-[#071019] p-3"><div className="mb-2 flex flex-wrap items-center justify-between gap-2"><div><div className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500">WEATHER ALONG ROUTE</div><div className="text-xs font-black text-slate-200">{mode === "encounter" ? "Conditions matched to vessel ETA at each sample" : `Snapshot valid ${selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}`}</div></div>{mode === "encounter" && <div className="text-[9px] text-slate-500">Forecast confidence and ETA match tolerance shown below</div>}</div><div className="overflow-x-auto"><table className="w-full min-w-[1000px] text-left text-[10px]"><thead className="border-b border-slate-800 text-slate-500"><tr><th className="p-2">NM</th><th className="p-2">ETA / VALID</th>{mode === "encounter" && <th className="p-2">CONFIDENCE</th>}<th className="p-2">WIND</th><th className="p-2">GUST</th><th className="p-2">SEAS</th><th className="p-2">PERIOD</th><th className="p-2">WAVE DIR</th><th className="p-2">SOURCE</th></tr></thead><tbody>{displayedPoints.map((p, i) => { const enc = mode === "encounter" ? (p as EncounterPoint) : null; return <tr key={i} className={`border-b border-slate-900 ${focusedIndex === i ? "bg-cyan-400/10" : ""}`} onClick={() => { if (mode === "encounter") setTimelineIndex(i); }} onMouseEnter={() => setFocusedIndex(i)} onMouseLeave={() => setFocusedIndex(null)}><td className="p-2 font-black text-slate-200">{p.distanceNm.toFixed(0)}</td><td className="p-2 text-slate-300">{enc ? <><div>{formatWhen(enc.eta)}</div><div className="text-[9px] font-bold text-slate-400">{enc.beyondHorizon ? `horizon ends ${formatWhen(enc.validAt)} • +${enc.deltaHours.toFixed(1)}h` : `valid ${formatWhen(enc.validAt)} • Δ ${enc.deltaHours.toFixed(1)}h`}</div></> : selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : "--"}</td>{enc && <td className={`p-2 text-[9px] font-black ${enc.beyondHorizon ? "text-slate-400" : enc.leadHours <= 72 ? "text-emerald-300" : enc.leadHours <= 168 ? "text-amber-200" : "text-amber-400"}`}>{enc.confidenceLabel}</td>}<td className="p-2 font-black text-cyan-200">{p.windKt == null ? "--" : `${compass(p.windDirectionDeg)} ${p.windKt.toFixed(0)} kt`}</td><td className="p-2">{p.gustKt == null ? "--" : `${p.gustKt.toFixed(0)} kt`}</td><td className="p-2 font-black" style={{ color: enc?.beyondHorizon ? "#94a3b8" : seaColor(p.waveHeightFt) }}>{p.waveHeightFt == null ? "--" : `${p.waveHeightFt.toFixed(1)} ft`}</td><td className="p-2">{p.wavePeriodSec == null ? "--" : `${p.wavePeriodSec.toFixed(0)} s`}</td><td className="p-2">{p.waveDirectionDeg == null ? "--" : `${compass(p.waveDirectionDeg)} ${p.waveDirectionDeg.toFixed(0)}°`}</td><td className="p-2 text-[8px] text-slate-500">{p.waveSource ? `${p.source} • ${p.waveSource}` : p.source}</td></tr>; })}</tbody></table></div></section>}
     </main>
   );
 }
