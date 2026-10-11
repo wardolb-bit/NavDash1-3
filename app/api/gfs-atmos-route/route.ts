@@ -298,16 +298,17 @@ export async function POST(request: Request) {
 }
 
 // Temporary preview-only wide-area probe. No ship data or route content is returned.
-export async function GET() {
+export async function GET(request: Request) {
   const started = Date.now();
   try {
+    const internal = await fetch(new URL("/api/route-state", request.url), { cache: "no-store", redirect: "manual" }).catch(() => null);
     const run = await latestRun();
     const bounds = routeBounds([
       { lat: 21.2, lon: -158, distanceNm: 0 },
       { lat: 34, lon: 132, distanceNm: 1 },
     ]);
     // Reproduce the bounding rectangle covering the current Pacific crossing.
-    const outcome: Record<string, unknown> = { cycle: `${run.date} ${run.cycle}Z`, bounds };
+    const outcome: Record<string, unknown> = { internalFetch: internal ? { status: internal.status, location: internal.headers.get("location"), contentType: internal.headers.get("content-type") } : { failed: true }, cycle: `${run.date} ${run.cycle}Z`, bounds };
     try {
       const fields = await fetchFields(run, 6, bounds, false);
       const test = { lat: 30, lon: 175, distanceNm: 0 };
