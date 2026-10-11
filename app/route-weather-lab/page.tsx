@@ -235,84 +235,6 @@ function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherRes
 }
 
 
-type TimelineSample = { point: EncounterPoint; index: number };
-function RouteWeatherProfile({
-  samples, referenceMs, selectedIndex, metric, onSelect,
-}: {
-  samples: TimelineSample[];
-  referenceMs: number;
-  selectedIndex: number | null;
-  metric: "wind" | "seas";
-  onSelect: (index: number) => void;
-}) {
-  const isWind = metric === "wind";
-  const series = isWind
-    ? [{ name: "Wind", color: "#67e8f9", value: (p: EncounterPoint) => p.windKt }, { name: "Gusts", color: "#fbbf24", value: (p: EncounterPoint) => p.gustKt }]
-    : [{ name: "Significant wave height", color: "#fbbf24", value: (p: EncounterPoint) => p.waveHeightFt }];
-  const observed = samples.flatMap(({ point }) => series.map((entry) => entry.value(point)).filter((value): value is number => value !== null && Number.isFinite(value)));
-  const step = isWind ? 10 : 5;
-  const ceiling = Math.max(step, Math.ceil((Math.max(0, ...observed) + 0.001) / step) * step);
-  const left = 42, right = 12, top = 12, bottom = 27, width = 900, height = 180;
-  const graphWidth = width - left - right, graphHeight = height - top - bottom;
-  const times = samples.map(({ point }) => point.eta.getTime());
-  const minTime = Math.min(...times), maxTime = Math.max(...times);
-  const xAt = (time: number) => left + (maxTime === minTime ? graphWidth / 2 : ((time - minTime) / (maxTime - minTime)) * graphWidth);
-  const yAt = (value: number) => top + graphHeight * (1 - value / ceiling);
-  const chosen = samples.find(({ index }) => index === selectedIndex);
-  return <div className="mt-3">
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-[10px] font-black tracking-wider text-slate-200">{isWind ? "WIND / GUSTS" : "SIGNIFICANT WAVE HEIGHT"}</span>
-      <span className="text-[10px] font-bold text-slate-400">{isWind ? "KNOTS" : "FEET"} · 0–{ceiling}</span>
-    </div>
-    <svg viewBox={`0 0 ${width} ${height}`} className="mt-1 w-full" role="img" aria-label={isWind ? "Route wind and gust forecast in knots" : "Route significant wave height forecast in feet"}>
-      {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-        const level = ceiling * fraction;
-        const y = yAt(level);
-        return <g key={fraction}><line x1={left} x2={width - right} y1={y} y2={y} stroke="#334155" strokeWidth="1" strokeDasharray="3 5" /><text x={left - 8} y={y + 4} textAnchor="end" fill="#94a3b8" fontSize="12">{Number.isInteger(level) ? level : level.toFixed(1)}</text></g>;
-      })}
-      {series.map((entry) => {
-        const segments: string[][] = [];
-        let current: string[] = [];
-        samples.forEach(({ point }) => {
-          const value = entry.value(point);
-          if (value === null || !Number.isFinite(value)) {
-            if (current.length) segments.push(current);
-            current = [];
-          } else current.push(`${xAt(point.eta.getTime())},${yAt(value)}`);
-        });
-        if (current.length) segments.push(current);
-        return <g key={entry.name}>
-          {segments.map((segment, i) => <polyline key={i} points={segment.join(" ")} fill="none" stroke={entry.color} strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />)}
-          {samples.map(({ point, index }) => {
-            const value = entry.value(point);
-            return value == null ? null : <circle key={index} cx={xAt(point.eta.getTime())} cy={yAt(value)} r={selectedIndex === index ? 5 : 2.5} fill={entry.color} stroke={selectedIndex === index ? "#f8fafc" : "none"} strokeWidth="2" />;
-          })}
-        </g>;
-      })}
-      {chosen && <line x1={xAt(chosen.point.eta.getTime())} x2={xAt(chosen.point.eta.getTime())} y1={top} y2={height - bottom} stroke="#f8fafc" strokeWidth="1.5" strokeDasharray="5 3" />}
-      {samples.map(({ point, index }, i) => {
-        const x = xAt(point.eta.getTime());
-        const prev = i > 0 ? xAt(samples[i - 1].point.eta.getTime()) : left;
-        const next = i + 1 < samples.length ? xAt(samples[i + 1].point.eta.getTime()) : width - right;
-        const start = i === 0 ? left : (prev + x) / 2;
-        const end = i === samples.length - 1 ? width - right : (x + next) / 2;
-        return <g key={index} onClick={() => onSelect(index)} className="cursor-pointer">
-          <rect x={start} y={top} width={Math.max(1, end - start)} height={graphHeight} fill="transparent" />
-          <title>{`+${((point.eta.getTime() - referenceMs) / 3600000).toFixed(1)}h • ${point.distanceNm.toFixed(0)} NM • ${isWind ? `Wind ${point.windKt ?? "--"} kt, gust ${point.gustKt ?? "--"} kt` : `Seas ${point.waveHeightFt?.toFixed(1) ?? "--"} ft`}`}</title>
-        </g>;
-      })}
-      {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-        const time = minTime + (maxTime - minTime) * fraction;
-        return <text key={fraction} x={xAt(time)} y={height - 7} textAnchor="middle" fill="#94a3b8" fontSize="12">+${Math.round((time - referenceMs) / 3600000)}h</text>;
-      })}
-    </svg>
-    <div className="mt-1 flex flex-wrap gap-4 text-[10px] text-slate-400">
-      {series.map((entry) => <span key={entry.name}><span style={{ color: entry.color }}>●</span> {entry.name}</span>)}
-      <span>Click a point to highlight its position on the chart</span>
-    </div>
-  </div>;
-}
-
 export default function RouteWeatherLabPage() {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<any>(null);
@@ -916,10 +838,28 @@ export default function RouteWeatherLabPage() {
               <div><div className="text-[9px] font-black tracking-[0.14em] text-slate-500">ROUTE WEATHER TIMELINE</div><div className="text-[10px] text-slate-300">Forecast conditions at predicted vessel positions • select a sample to locate it on the chart</div></div>
               <div className="flex gap-1">{([24, 48, 72, 0] as const).map((hours) => <button key={hours} type="button" onClick={() => { setTimelineHours(hours); setMode("encounter"); }} className={`border px-2 py-1 text-[10px] font-bold ${timelineHours === hours ? "border-amber-400/70 bg-amber-400/10 text-amber-200" : "border-slate-700 text-slate-400"}`}>{hours === 0 ? "ALL" : `${hours}H`}</button>)}</div>
             </div>
-            {timelinePoints.length > 0 ? <>
-              <RouteWeatherProfile samples={timelinePoints} referenceMs={outlookReferenceMs} selectedIndex={activeTimelineIndex} metric="wind" onSelect={(index) => { setMode("encounter"); setTimelineIndex(index); }} />
-              <RouteWeatherProfile samples={timelinePoints} referenceMs={outlookReferenceMs} selectedIndex={activeTimelineIndex} metric="seas" onSelect={(index) => { setMode("encounter"); setTimelineIndex(index); }} />
-            </> : <div className="text-xs text-slate-400">No forecast samples within this time window.</div>}
+            {timelinePoints.length > 0 ? <div className="flex gap-2 overflow-x-auto pb-2">
+              {timelinePoints.map(({ point, index }) => {
+                const selected = activeTimelineIndex === index;
+                const hours = (point.eta.getTime() - outlookReferenceMs) / 3600000;
+                return <button key={index} type="button" onClick={() => { setMode("encounter"); setTimelineIndex(index); }}
+                  title={`ETA ${formatWhen(point.eta)} • ${point.distanceNm.toFixed(0)} NM along route`}
+                  aria-pressed={selected}
+                  className={`min-w-[132px] flex-none border p-2 text-left transition-colors ${selected ? "border-amber-300 bg-amber-300/10" : "border-slate-700 bg-[#08131b] hover:border-cyan-400/60"}`}>
+                  <div className="flex items-center justify-between border-b border-slate-700/70 pb-2">
+                    <span className="text-[11px] font-black text-slate-100">+${hours.toFixed(0)}H</span>
+                    <span className="text-[9px] font-semibold text-slate-400">${point.distanceNm.toFixed(0)} NM</span>
+                  </div>
+                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">SEAS</div>
+                  <div className="text-lg font-black text-amber-200">{point.waveHeightFt == null ? "--" : `${point.waveHeightFt.toFixed(1)} ft`}</div>
+                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">WIND</div>
+                  <div className="text-lg font-black text-cyan-200">{point.windKt == null ? "--" : `${point.windKt.toFixed(0)} kt`}</div>
+                  <div className="text-[10px] font-bold text-slate-400">{point.windDirectionDeg == null ? "" : compass(point.windDirectionDeg)}</div>
+                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">GUSTS</div>
+                  <div className="text-lg font-black text-slate-100">{point.gustKt == null ? "--" : `${point.gustKt.toFixed(0)} kt`}</div>
+                </button>;
+              })}
+            </div> : <div className="text-xs text-slate-400">No forecast samples within this time window.</div>}
             {selectedTimelinePoint && <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 border-t border-slate-800 pt-2 text-[10px] text-slate-200">
               <span className="font-bold text-amber-200">SELECTED • ${selectedTimelinePoint.distanceNm.toFixed(0)} NM</span>
               <span>ETA {formatWhen(selectedTimelinePoint.eta)}</span>
