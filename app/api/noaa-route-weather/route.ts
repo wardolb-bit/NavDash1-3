@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { POST as sampleGfsAtmos } from "../gfs-atmos-route/route";
 import {
   normalizeRouteWaypoints,
   pointAtRouteDistanceNm,
@@ -176,12 +177,11 @@ export async function POST(request: Request) {
       }))),
       nwsOnly
         ? Promise.resolve({ ok: false, json: null })
-        : fetch(`${origin}/api/gfs-atmos-route`, {
+        : sampleGfsAtmos(new Request(`${origin}/api/gfs-atmos-route`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            cache: "no-store",
             body: JSON.stringify({ points: samples, validTimes: validTimes.map((date) => date.toISOString()) }),
-          }).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch((error) => ({ ok: false, json: { error: error instanceof Error ? error.message : "Atmospheric request failed" } })),
+          })).then(async (response) => ({ ok: response.ok, json: await response.json() })).catch((error) => ({ ok: false, json: { error: error instanceof Error ? error.message : "Atmospheric request failed" } })),
     ]);
 
     const nwsBySampleIndex = new Map(nwsFallbackResults.map(({ sampleIndex, result }) => [sampleIndex, result]));
