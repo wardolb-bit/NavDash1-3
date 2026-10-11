@@ -399,7 +399,10 @@ function IsolatedMainMap() {
 
   useEffect(() => { toolModeRef.current = toolMode; }, [toolMode]);
   useEffect(() => { measureModeRef.current = measureMode; }, [measureMode]);
-  useEffect(() => { ownShipRef.current = ownShip; }, [ownShip]);
+  useEffect(() => {
+    ownShipRef.current = ownShip;
+    if (ownShip) window.dispatchEvent(new CustomEvent("navdash-main-ownship-position", { detail: { lat: ownShip.lat, lon: ownShip.lon } }));
+  }, [ownShip]);
 
   useEffect(() => {
     const handleCenterOwnShip = (event: MouseEvent) => {
