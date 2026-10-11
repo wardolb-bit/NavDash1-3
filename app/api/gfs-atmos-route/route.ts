@@ -309,9 +309,9 @@ export async function GET() {
     // Reproduce the bounding rectangle covering the current Pacific crossing.
     const outcome: Record<string, unknown> = { cycle: `${run.date} ${run.cycle}Z`, bounds };
     try {
-      const fields = await fetchFields(run, 6, bounds, true);
+      const fields = await fetchFields(run, 6, bounds, false);
       const test = { lat: 30, lon: 175, distanceNm: 0 };
-      outcome.windOnly = {
+      outcome.fullSubset = {
         u: sample(fields.u10, test, value => Math.abs(value) <= 200),
         v: sample(fields.v10, test, value => Math.abs(value) <= 200),
         gust: sample(fields.gust, test, value => value >= 0 && value <= 200),
