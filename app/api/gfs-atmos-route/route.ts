@@ -296,3 +296,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "NOAA GFS atmospheric GRIB route sampling failed." }, { status: 500 });
   }
 }
+
+// Temporary preview-only wide-area probe. No ship data or route content is returned.
+export async function GET() {
+  const started = Date.now();
+  try {
+    const run = await latestRun();
+    const bounds = routeBounds([
+      { lat: 21.2, lon: -174.8, distanceNm: 0 },
+      { lat: 34, lon: 132, distanceNm: 1 },
+    ]);
+    // Reproduce the bounding rectangle covering the current Pacific crossing.
+    const outcome: Record<string, unknown> = { cycle: `${run.date} ${run.cycle}Z`, bounds };
+    try {
+      const fields = await fetchFields(run, 6, bounds, true);
+      const test = { lat: 30, lon: 175, distanceNm: 0 };
+      outcome.windOnly = {
+        u: sample(fields.u10, test, value => Math.abs(value) <= 200),
+        v: sample(fields.v10, test, value => Math.abs(value) <= 200),
+        gust: sample(fields.gust, test, value => value >= 0 && value <= 200),
+      };
+    } catch (error) {
+      outcome.error = error instanceof Error ? error.message : String(error);
+    }
+    outcome.elapsedMs = Date.now() - started;
+    return NextResponse.json(outcome, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : String(error), elapsedMs: Date.now() - started }, { status: 503, headers: { "Cache-Control": "no-store" } });
+  }
+}
