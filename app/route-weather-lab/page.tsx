@@ -787,6 +787,9 @@ export default function RouteWeatherLabPage() {
       const windJson = await windResponse.json();
       if (!windResponse.ok) throw new Error(windJson?.error || "Route weather request failed.");
       let merged = windJson as WeatherResponse;
+      // Display the atmospheric forecast immediately while the independent wave request completes.
+      setWeather(merged); setTimelineIndex(null); setFrameIndex(0);
+      setStatus("Wind forecast loaded. Loading wave forecast…");
       const basePoints = merged.frames?.[0]?.points || [];
       const validTimes = merged.frames?.map((frame) => frame.validAt) || [];
       let waveMessage = "";
