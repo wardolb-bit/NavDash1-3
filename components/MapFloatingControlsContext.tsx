@@ -145,8 +145,6 @@ function buildCategorizedMenu(host: HTMLElement, menu: HTMLElement) {
   const clearMeasure = originalButton(host, "CLEAR MEASURE");
   const sunLabel = originalToggle(host, "SUN EVENTS");
   const sunInput = sunLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || null;
-  const amiLabel = originalToggle(host, "AMI WX");
-  const amiInput = amiLabel?.querySelector<HTMLInputElement>('input[type="checkbox"]') || null;
 
   categoryRow(menu, "MEASURE", (panel) => {
     addAction(panel, "PAN", () => pan?.click(), !(pan instanceof HTMLButtonElement), Boolean(pan?.style.border.includes("34,211,238")));
@@ -157,20 +155,12 @@ function buildCategorizedMenu(host: HTMLElement, menu: HTMLElement) {
 
   categoryRow(menu, "CHART LAYERS", (panel) => {
     if (!(layerControls instanceof HTMLElement)) return addAction(panel, "NO LAYER CONTROLS", () => {}, true);
-    const buttons = Array.from(layerControls.querySelectorAll<HTMLButtonElement>("button")).filter((button) => !/CLEAR AMI ROUTE/i.test(button.textContent || ""));
+    const buttons = Array.from(layerControls.querySelectorAll<HTMLButtonElement>("button"));
     if (!buttons.length) addAction(panel, "NO LAYER CONTROLS", () => {}, true);
     buttons.forEach((source) => {
       const text = (source.textContent || "").trim();
       addAction(panel, text, () => source.click(), source.disabled, /\bON\b/i.test(text));
     });
-  });
-
-  categoryRow(menu, "WEATHER", (panel) => {
-    addAction(panel, `AMI WX${amiInput?.checked ? "  ✓" : ""}`, () => amiInput?.click(), !(amiInput instanceof HTMLInputElement) || amiInput.disabled, Boolean(amiInput?.checked));
-    if (layerControls instanceof HTMLElement) {
-      const clearAmi = Array.from(layerControls.querySelectorAll<HTMLButtonElement>("button")).find((button) => /CLEAR AMI ROUTE/i.test(button.textContent || ""));
-      if (clearAmi) addAction(panel, "CLEAR AMI ROUTE", () => clearAmi.click(), clearAmi.disabled);
-    }
   });
 
   categoryRow(menu, "DISPLAY", (panel) => {
