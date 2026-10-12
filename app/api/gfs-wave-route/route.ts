@@ -357,7 +357,6 @@ export async function POST(request: Request) {
             wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
             waveDirectionDeg: rounded(direction?.value ?? null, 0),
             ...swell,
-          ...windWaves,
             ...windWaves,
             source: `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} ${distanceLabel}`,
           };
@@ -385,7 +384,8 @@ export async function POST(request: Request) {
           wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
           waveDirectionDeg: rounded(direction?.value ?? null, 0),
           ...swell,
-            source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
+          ...windWaves,
+          source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
         };
       });
 
