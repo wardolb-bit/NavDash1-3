@@ -29,6 +29,9 @@ type ForecastPoint = {
   swellHeightFt?: number | null;
   swellPeriodSec?: number | null;
   swellDirectionDeg?: number | null;
+  windWaveHeightFt?: number | null;
+  windWavePeriodSec?: number | null;
+  windWaveDirectionDeg?: number | null;
   source: string;
   waveSource?: string;
 };
@@ -59,6 +62,9 @@ type WaveResponse = {
       swellHeightFt: number | null;
       swellPeriodSec: number | null;
       swellDirectionDeg: number | null;
+      windWaveHeightFt: number | null;
+      windWavePeriodSec: number | null;
+      windWaveDirectionDeg: number | null;
       source: string;
     }>;
   }>;
@@ -237,6 +243,9 @@ function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherRes
             swellHeightFt: nearest.swellHeightFt ?? null,
             swellPeriodSec: nearest.swellPeriodSec ?? null,
             swellDirectionDeg: nearest.swellDirectionDeg ?? null,
+            windWaveHeightFt: nearest.windWaveHeightFt ?? null,
+            windWavePeriodSec: nearest.windWavePeriodSec ?? null,
+            windWaveDirectionDeg: nearest.windWaveDirectionDeg ?? null,
             waveSource: nearest.source,
           };
         }),
@@ -862,23 +871,20 @@ export default function RouteWeatherLabPage() {
                 return <button key={index} type="button" onClick={() => { setMode("encounter"); setTimelineIndex(index); }}
                   title={`ETA ${formatWhen(point.eta)} • ${point.distanceNm.toFixed(0)} NM along route`}
                   aria-pressed={selected}
-                  className={`min-w-[132px] flex-none border p-2 text-left transition-colors ${selected ? "border-amber-300 bg-amber-300/10" : "border-slate-700 bg-[#08131b] hover:border-cyan-400/60"}`}>
+                  className={`min-w-[190px] flex-none border p-2 text-left transition-colors ${selected ? "border-amber-300 bg-amber-300/10" : "border-slate-700 bg-[#08131b] hover:border-cyan-400/60"}`}>
                   <div className="flex items-center justify-between border-b border-slate-700/70 pb-2">
                     <span className="text-[11px] font-black text-slate-100">+{hours.toFixed(0)}H</span>
                     <span className="text-[9px] font-semibold text-slate-400">{point.distanceNm.toFixed(0)} NM</span>
                   </div>
-                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">SEAS</div>
-                  <div className="text-lg font-black text-amber-200">{point.waveHeightFt == null ? "--" : `${point.waveHeightFt.toFixed(1)} ft`}</div>
-                  {seaDelta != null && <div className={`text-[9px] font-bold ${seaDelta >= 0.5 ? "text-amber-300" : seaDelta <= -0.5 ? "text-emerald-300" : "text-slate-500"}`}>{seaDelta >= 0.5 ? `↑ BUILDING +${seaDelta.toFixed(1)} ft` : seaDelta <= -0.5 ? `↓ EASING ${seaDelta.toFixed(1)} ft` : "→ STEADY"}</div>}
-                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">WIND</div>
-                  <div className="text-lg font-black text-cyan-200">{point.windKt == null ? "N/A" : `${point.windKt.toFixed(0)} kt`}</div>
-                  {windDelta != null && <div className={`text-[9px] font-bold ${windDelta >= 2 ? "text-amber-300" : windDelta <= -2 ? "text-emerald-300" : "text-slate-500"}`}>{windDelta >= 2 ? `↑ BUILDING +${windDelta.toFixed(0)} kt` : windDelta <= -2 ? `↓ EASING ${windDelta.toFixed(0)} kt` : "→ STEADY"}</div>}
-                  <div className="text-[10px] font-bold text-slate-400">{point.windDirectionDeg == null ? "" : compass(point.windDirectionDeg)}</div>
-                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">GUSTS</div>
-                  <div className="text-lg font-black text-slate-100">{point.gustKt == null ? "N/A" : `${point.gustKt.toFixed(0)} kt`}</div>
-                  <div className="mt-2 border-t border-slate-700/70 pt-2 text-[9px] font-bold tracking-wide text-slate-400">SWELL 1</div>
-                  <div className="text-lg font-black text-indigo-200">{point.swellHeightFt == null ? "--" : `${point.swellHeightFt.toFixed(1)} ft`}</div>
-                  <div className="text-[10px] font-bold text-slate-400">{point.swellDirectionDeg == null ? "--" : compass(point.swellDirectionDeg)} · {point.swellPeriodSec == null ? "--" : `${point.swellPeriodSec.toFixed(0)} s`}</div>
+                  <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">TOTAL SEAS</div>
+                  <div className="text-xl font-black text-amber-200">{point.waveHeightFt == null ? "--" : `${point.waveHeightFt.toFixed(1)} ft`}</div>
+                  <div className="text-[10px] font-bold text-slate-400">{point.waveDirectionDeg == null ? "--" : compass(point.waveDirectionDeg)} · {point.wavePeriodSec == null ? "--" : `${point.wavePeriodSec.toFixed(0)} s`}</div>
+                  <div className="mt-2 grid grid-cols-2 gap-x-2 gap-y-2 border-t border-slate-700/70 pt-2">
+                    <div><div className="text-[9px] font-bold tracking-wide text-slate-400">WIND</div><div className="text-base font-black text-cyan-200">{point.windKt == null ? "N/A" : `${point.windKt.toFixed(0)} kt`}</div><div className="text-[10px] text-slate-400">{point.windDirectionDeg == null ? "--" : compass(point.windDirectionDeg)}</div></div>
+                    <div><div className="text-[9px] font-bold tracking-wide text-slate-400">GUSTS</div><div className="text-base font-black text-slate-100">{point.gustKt == null ? "N/A" : `${point.gustKt.toFixed(0)} kt`}</div></div>
+                    <div><div className="text-[9px] font-bold tracking-wide text-slate-400">WIND WAVES</div><div className="text-base font-black text-slate-100">{point.windWaveHeightFt == null ? "--" : `${point.windWaveHeightFt.toFixed(1)} ft`}</div><div className="text-[10px] text-slate-400">{point.windWaveDirectionDeg == null ? "--" : compass(point.windWaveDirectionDeg)} · {point.windWavePeriodSec == null ? "--" : `${point.windWavePeriodSec.toFixed(0)} s`}</div></div>
+                    <div><div className="text-[9px] font-bold tracking-wide text-slate-400">SWELL 1</div><div className="text-base font-black text-indigo-200">{point.swellHeightFt == null ? "--" : `${point.swellHeightFt.toFixed(1)} ft`}</div><div className="text-[10px] text-slate-400">{point.swellDirectionDeg == null ? "--" : compass(point.swellDirectionDeg)} · {point.swellPeriodSec == null ? "--" : `${point.swellPeriodSec.toFixed(0)} s`}</div></div>
+                  </div>
                 </button>;
               })}
             </div> : <div className="text-xs text-slate-400">No forecast samples within this time window.</div>}
@@ -889,6 +895,7 @@ export default function RouteWeatherLabPage() {
               <span>GUST {selectedTimelinePoint.gustKt == null ? "--" : `${selectedTimelinePoint.gustKt.toFixed(0)} kt`}</span>
               <span>SEAS {selectedTimelinePoint.waveHeightFt == null ? "--" : `${selectedTimelinePoint.waveHeightFt.toFixed(1)} ft`}</span>
               <span>PERIOD {selectedTimelinePoint.wavePeriodSec == null ? "--" : `${selectedTimelinePoint.wavePeriodSec.toFixed(0)} s`}</span>
+              <span>WIND WAVES {selectedTimelinePoint.windWaveHeightFt == null ? "--" : `${selectedTimelinePoint.windWaveHeightFt.toFixed(1)} ft`} · {selectedTimelinePoint.windWaveDirectionDeg == null ? "--" : compass(selectedTimelinePoint.windWaveDirectionDeg)} · {selectedTimelinePoint.windWavePeriodSec == null ? "--" : `${selectedTimelinePoint.windWavePeriodSec.toFixed(0)} s`}</span>
               <span>SWELL 1 {selectedTimelinePoint.swellHeightFt == null ? "--" : `${selectedTimelinePoint.swellHeightFt.toFixed(1)} ft`} · {selectedTimelinePoint.swellDirectionDeg == null ? "--" : compass(selectedTimelinePoint.swellDirectionDeg)} · {selectedTimelinePoint.swellPeriodSec == null ? "--" : `${selectedTimelinePoint.swellPeriodSec.toFixed(0)} s`}</span>
               <span>VALID {formatWhen(selectedTimelinePoint.validAt)}</span>
               <button type="button" onClick={locateTimelineEncounter} className="ml-auto border border-cyan-400/50 bg-[#08131b] px-3 py-1 text-[10px] font-black text-cyan-200 hover:border-cyan-300">LOCATE ON CHART</button>
