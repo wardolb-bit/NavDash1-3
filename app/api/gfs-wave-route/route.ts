@@ -19,6 +19,9 @@ type WavePoint = {
   waveHeightFt: number | null;
   wavePeriodSec: number | null;
   waveDirectionDeg: number | null;
+  swellHeightFt: number | null;
+  swellPeriodSec: number | null;
+  swellDirectionDeg: number | null;
   source: string;
 };
 type WaveFrame = { validAt: string; points: WavePoint[] };
@@ -42,6 +45,9 @@ type WaveFields = {
   height: DecodedField | null;
   period: DecodedField | null;
   direction: DecodedField | null;
+  swellHeight: DecodedField | null;
+  swellPeriod: DecodedField | null;
+  swellDirection: DecodedField | null;
 };
 
 const NOMADS = "https://nomads.ncep.noaa.gov";
@@ -157,6 +163,10 @@ function filterUrl(run: ModelRun, forecastHour: number, bounds: Bounds) {
   params.set("var_HTSGW", "on");
   params.set("var_PERPW", "on");
   params.set("var_DIRPW", "on");
+  params.set("var_SWELL", "on");
+  params.set("var_SWPER", "on");
+  params.set("var_SWDIR", "on");
+  params.set("lev_1_in_sequence", "on");
   params.set("lev_surface", "on");
   params.set("subregion", "");
   params.set("leftlon", String(bounds.left));
@@ -178,7 +188,7 @@ async function fetchWaveFields(run: ModelRun, forecastHour: number, bounds: Boun
     throw new Error(`NOMADS returned a non-GRIB response for f${String(forecastHour).padStart(3, "0")}.`);
   }
 
-  const result: WaveFields = { height: null, period: null, direction: null };
+  const result: WaveFields = { height: null, period: null, direction: null, swellHeight: null, swellPeriod: null, swellDirection: null };
   for (const message of splitMessages(bytes)) {
     for (const field of parseFields(message)) {
       if (field.discipline !== 10) continue;
@@ -188,6 +198,9 @@ async function fetchWaveFields(run: ModelRun, forecastHour: number, bounds: Boun
       if (product.parameterNumber === 3) target = "height";
       else if (product.parameterNumber === 11) target = "period";
       else if (product.parameterNumber === 10) target = "direction";
+      else if (product.parameterNumber === 8) target = "swellHeight";
+      else if (product.parameterNumber === 9) target = "swellPeriod";
+      else if (product.parameterNumber === 7) target = "swellDirection";
       if (!target || result[target]) continue;
       const grid = parseGrid(field.section3);
       const { values } = decodeFieldValues(field);
@@ -311,6 +324,10 @@ export async function POST(request: Request) {
         const height = sampleField(waveFields?.height ?? null, point, (value) => value >= 0 && value <= MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M);
         const period = sampleField(waveFields?.period ?? null, point, (value) => value > 0 && value <= MAX_VALID_WAVE_PERIOD_SEC);
         const direction = sampleField(waveFields?.direction ?? null, point, (value) => value >= 0 && value <= 360);
+        const swellHeight = sampleField(waveFields?.swellHeight ?? null, point, (value) => value >= 0 && value <= MAX_VALID_SIGNIFICANT_WAVE_HEIGHT_M);
+        const swellPeriod = sampleField(waveFields?.swellPeriod ?? null, point, (value) => value > 0 && value <= MAX_VALID_WAVE_PERIOD_SEC);
+        const swellDirection = sampleField(waveFields?.swellDirection ?? null, point, (value) => value >= 0 && value <= 360);
+        const swell = { swellHeightFt: rounded(swellHeight?.value == null ? null : swellHeight.value * M_TO_FT, 1), swellPeriodSec: rounded(swellPeriod?.value ?? null, 0), swellDirectionDeg: rounded(swellDirection?.value ?? null, 0) };
 
         if (height) {
           const distanceLabel = height.distanceNm <= 1
@@ -323,6 +340,7 @@ export async function POST(request: Request) {
             waveHeightFt: rounded(height.value * M_TO_FT, 1),
             wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
             waveDirectionDeg: rounded(direction?.value ?? null, 0),
+            ...swell,
             source: `NOAA GFS Wave GRIB2 f${String(forecastHour).padStart(3, "0")} ${distanceLabel}`,
           };
         }
@@ -335,6 +353,7 @@ export async function POST(request: Request) {
             waveHeightFt: local.point.waveHeightFt,
             wavePeriodSec: local.point.wavePeriodSec,
             waveDirectionDeg: rounded(direction?.value ?? null, 0),
+            ...swell,
             source: `NOAA/NWS marine grid fallback (${local.distanceNm.toFixed(1)} nm source distance)`,
           };
         }
@@ -346,7 +365,8 @@ export async function POST(request: Request) {
           waveHeightFt: null,
           wavePeriodSec: rounded(period?.value ?? local?.point.wavePeriodSec ?? null, 0),
           waveDirectionDeg: rounded(direction?.value ?? null, 0),
-          source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
+          ...swell,
+            source: "NOAA GFS Wave GRIB2 and local NWS wave guidance unavailable",
         };
       });
 
