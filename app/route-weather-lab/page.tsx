@@ -26,6 +26,9 @@ type ForecastPoint = {
   waveHeightFt: number | null;
   wavePeriodSec: number | null;
   waveDirectionDeg?: number | null;
+  swellHeightFt?: number | null;
+  swellPeriodSec?: number | null;
+  swellDirectionDeg?: number | null;
   source: string;
   waveSource?: string;
 };
@@ -53,6 +56,9 @@ type WaveResponse = {
       waveHeightFt: number | null;
       wavePeriodSec: number | null;
       waveDirectionDeg: number | null;
+      swellHeightFt: number | null;
+      swellPeriodSec: number | null;
+      swellDirectionDeg: number | null;
       source: string;
     }>;
   }>;
@@ -228,6 +234,9 @@ function mergeWave(base: WeatherResponse, wave: WaveResponse | null): WeatherRes
             waveHeightFt: nearest.waveHeightFt,
             wavePeriodSec: nearest.wavePeriodSec,
             waveDirectionDeg: nearest.waveDirectionDeg,
+            swellHeightFt: nearest.swellHeightFt ?? null,
+            swellPeriodSec: nearest.swellPeriodSec ?? null,
+            swellDirectionDeg: nearest.swellDirectionDeg ?? null,
             waveSource: nearest.source,
           };
         }),
@@ -867,6 +876,9 @@ export default function RouteWeatherLabPage() {
                   <div className="text-[10px] font-bold text-slate-400">{point.windDirectionDeg == null ? "" : compass(point.windDirectionDeg)}</div>
                   <div className="mt-2 text-[9px] font-bold tracking-wide text-slate-400">GUSTS</div>
                   <div className="text-lg font-black text-slate-100">{point.gustKt == null ? "N/A" : `${point.gustKt.toFixed(0)} kt`}</div>
+                  <div className="mt-2 border-t border-slate-700/70 pt-2 text-[9px] font-bold tracking-wide text-slate-400">SWELL 1</div>
+                  <div className="text-lg font-black text-indigo-200">{point.swellHeightFt == null ? "--" : `${point.swellHeightFt.toFixed(1)} ft`}</div>
+                  <div className="text-[10px] font-bold text-slate-400">{point.swellDirectionDeg == null ? "--" : compass(point.swellDirectionDeg)} · {point.swellPeriodSec == null ? "--" : `${point.swellPeriodSec.toFixed(0)} s`}</div>
                 </button>;
               })}
             </div> : <div className="text-xs text-slate-400">No forecast samples within this time window.</div>}
@@ -877,6 +889,7 @@ export default function RouteWeatherLabPage() {
               <span>GUST {selectedTimelinePoint.gustKt == null ? "--" : `${selectedTimelinePoint.gustKt.toFixed(0)} kt`}</span>
               <span>SEAS {selectedTimelinePoint.waveHeightFt == null ? "--" : `${selectedTimelinePoint.waveHeightFt.toFixed(1)} ft`}</span>
               <span>PERIOD {selectedTimelinePoint.wavePeriodSec == null ? "--" : `${selectedTimelinePoint.wavePeriodSec.toFixed(0)} s`}</span>
+              <span>SWELL 1 {selectedTimelinePoint.swellHeightFt == null ? "--" : `${selectedTimelinePoint.swellHeightFt.toFixed(1)} ft`} · {selectedTimelinePoint.swellDirectionDeg == null ? "--" : compass(selectedTimelinePoint.swellDirectionDeg)} · {selectedTimelinePoint.swellPeriodSec == null ? "--" : `${selectedTimelinePoint.swellPeriodSec.toFixed(0)} s`}</span>
               <span>VALID {formatWhen(selectedTimelinePoint.validAt)}</span>
               <button type="button" onClick={locateTimelineEncounter} className="ml-auto border border-cyan-400/50 bg-[#08131b] px-3 py-1 text-[10px] font-black text-cyan-200 hover:border-cyan-300">LOCATE ON CHART</button>
             </div>}
