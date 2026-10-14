@@ -80,7 +80,7 @@ export function BridgeWaypointEtaList(){
   const passed=index<route.active;
   let nm=NaN;
   if(!passed&&fix){
-   nm=routeLegDistanceNm(fix,wp);
+   nm=routeLegDistanceNm(fix,route.waypoints[route.active]);
    for(let leg=route.active+1;leg<=index;leg++)nm+=geodesicDistanceNm(route.waypoints[leg-1],route.waypoints[leg]);
   }
   const zone=zd(wp.lon);
