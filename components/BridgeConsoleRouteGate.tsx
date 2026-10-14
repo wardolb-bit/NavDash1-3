@@ -5,6 +5,7 @@ import { BridgeQuickAccess } from "./BridgeQuickAccess";
 import { BridgeMapWakeup } from "./BridgeMapWakeup";
 import { BridgeMapLayerControls } from "./BridgeMapLayerControls";
 import { BridgeNextWaypointDistance } from "./BridgeNextWaypointDistance";
+import { BridgeWaypointEtaList } from "./BridgeWaypointEtaList";
 import { BridgeLegSequenceDisplay } from "./BridgeLegSequenceDisplay";
 import { NavMapMainOverlayV2 } from "./NavMapMainOverlayV2";
 import { BridgeGreatCircleRoute } from "./BridgeGreatCircleRoute";
@@ -33,6 +34,7 @@ export function BridgeConsoleRouteGate() {
       <BridgeMapLayerControls />
       <BridgeQuickAccess />
       <BridgeNextWaypointDistance />
+      <BridgeWaypointEtaList />
       <BridgeLegSequenceDisplay />
     </>
   );
