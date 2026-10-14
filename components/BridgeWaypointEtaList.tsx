@@ -88,10 +88,10 @@ export function BridgeWaypointEtaList(){
   return {wp,index,passed,nm,zone,eta};
  })||[];
  return <>
-  <button type="button" onClick={()=>setOpen(v=>!v)} style={{position:"fixed",right:18,top:74,zIndex:1150,border:"1px solid #4b8799",borderRadius:7,background:day?"#e6f1f5":"#102b3c",color:day?"#15354b":"#d6eef3",fontSize:11,fontWeight:700,letterSpacing:".08em",padding:"9px 12px"}}>
-   WAYPOINT ETAS {open?"▴":"▾"}
+  <button type="button" onClick={()=>setOpen(v=>!v)} style={{position:"fixed",right:0,top:"44%",zIndex:1150,border:"1px solid #4b8799",borderRadius:"7px 0 0 7px",background:day?"#e6f1f5":"#102b3c",color:day?"#15354b":"#d6eef3",fontSize:11,fontWeight:700,letterSpacing:".08em",padding:"12px 9px",writingMode:"vertical-rl"}}>
+   WP ETAS {open?"◂":"▸"}
   </button>
-  {open&&<section style={{position:"fixed",right:18,top:113,zIndex:1150,width:"min(490px,calc(100vw - 36px))",maxHeight:"min(66vh,600px)",overflow:"auto",background:day?"#f5fafc":"#0b2332",color:day?"#183747":"#d8edf5",border:"1px solid #48768a",borderRadius:9,boxShadow:"0 12px 35px #0007",padding:12,fontSize:12}}>
+  {open&&<section style={{position:"fixed",right:38,top:"34%",zIndex:1150,width:"min(490px,calc(100vw - 36px))",maxHeight:"min(66vh,600px)",overflow:"auto",background:day?"#f5fafc":"#0b2332",color:day?"#183747":"#d8edf5",border:"1px solid #48768a",borderRadius:9,boxShadow:"0 12px 35px #0007",padding:12,fontSize:12}}>
    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,marginBottom:10}}>
     <strong>ACTIVE ROUTE · WAYPOINT ARRIVALS</strong><button onClick={()=>setOpen(false)} aria-label="Close waypoint ETAs">✕</button>
    </div>
