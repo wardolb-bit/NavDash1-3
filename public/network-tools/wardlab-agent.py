@@ -133,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
                 # Public-domain tools use WardLab; local scan results never leave this process.
                 if body.get('tool') not in ('dns', 'headers', 'tls'):
                     raise ValueError('Unknown public tool.')
-                request = urllib.request.Request('https://wardlab.dev/api/network', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'}, method='POST')
+                request = urllib.request.Request('https://www.wardlab.dev/api/network', data=json.dumps(body).encode(), headers={'Content-Type': 'application/json'}, method='POST')
                 try:
                     with urllib.request.urlopen(request, timeout=22) as response:
                         self.send_data(response.status, response.read(262144))

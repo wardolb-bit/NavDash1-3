@@ -19,6 +19,6 @@ may not appear. Service labels are common port names, not identified software.
 
 Subnet calculations run locally. Local scan results stay in this process and the
 browser unless you export them. Public-domain checks are sent to
-https://wardlab.dev/api/network and need internet access.
+https://www.wardlab.dev/api/network and need internet access.
 
 No third-party Python packages are required. Do not run this as administrator.
