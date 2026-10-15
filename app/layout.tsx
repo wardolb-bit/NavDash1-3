@@ -3,10 +3,7 @@ import './bridge-console.css';
 import './global-theme.css';
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { SharedAmiForecastSync } from '../components/SharedAmiForecastSync';
-import { SharedRouteSync } from '../components/SharedRouteSync';
-import { SharedAisConnection } from '../components/SharedAisConnection';
-import { NavDashMainLinkGuard } from '../components/NavDashMainLinkGuard';
+import { NavDashBackgroundServices } from '../components/NavDashBackgroundServices';
 
 export const metadata: Metadata = {
   title: 'M/V MB480 NavDash 1.3',
@@ -82,11 +79,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `}
         </Script>
 
-        <SharedAisConnection />
+        <NavDashBackgroundServices />
         {children}
-        <SharedRouteSync />
-        <SharedAmiForecastSync />
-        <NavDashMainLinkGuard />
       </body>
     </html>
   );
