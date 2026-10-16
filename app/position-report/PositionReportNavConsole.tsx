@@ -32,8 +32,8 @@ export default function PositionReportNavConsole() {
   if (!target) return null;
 
   return createPortal(
-    <Link href="/bridge" aria-label="Return to Nav Console" className="position-report-nav-console">
-      NAV CONSOLE
+    <Link href="/" aria-label="Return to Nav Console" className="position-report-nav-console">
+      NAV INFO
     </Link>,
     target,
   );
