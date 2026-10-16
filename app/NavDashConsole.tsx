@@ -330,7 +330,7 @@ export default function NavDashConsole() {
         <div id="bc-v2-topbar" className={`grid h-[46px] grid-cols-[260px_1fr_180px] items-center border px-3 ${day ? "border-amber-800/30 bg-white" : "border-wardGold/30 bg-[#071019]"}`}>
           <div className="bc2-brand flex items-center gap-2.5">
             <span className="bc2-logo grid h-7 w-7 place-items-center border border-wardGold text-[15px] font-black text-wardGold">N</span>
-            <span className="flex flex-col leading-none"><b className="tracking-[.08em]">NAVDASH</b><small className="mt-1 text-[8px] tracking-[.14em] text-slate-500">M/V MB480 · BRIDGE CONSOLE</small></span>
+            <span className="flex flex-col leading-none"><b className="tracking-[.08em]">MB480 BRIDGE</b><small className="mt-1 text-[8px] tracking-[.14em] text-slate-500">M/V MB480 · BRIDGE CONSOLE</small></span>
           </div>
           <div className="bc2-center flex justify-center gap-2 text-[9px] font-bold tracking-[.08em]">
             <span className={`live border px-2 py-1 ${control}`}><i className={`mr-1.5 inline-block h-1.5 w-1.5 rounded-full ${aisStatus === "GPS LIVE" ? "bg-emerald-400" : "bg-amber-400"}`} />{aisStatus}</span>
@@ -345,10 +345,10 @@ export default function NavDashConsole() {
           <div className="flex items-center justify-between gap-2">
             <div className="sr-only">NavDash bridge controls</div>
             <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <label className="inline-flex h-[30px] min-w-[108px] cursor-pointer items-center justify-center border border-wardGold/60 bg-wardGold px-2 text-[10px] font-black text-black">LOAD RTZ<input type="file" accept=".rtz,.xml" onChange={loadRtz} className="hidden" /></label>
+              <label className="inline-flex h-[30px] min-w-[108px] cursor-pointer items-center justify-center border border-wardGold/60 bg-wardGold px-2 text-[10px] font-black text-black">LOAD ROUTE<input type="file" accept=".rtz,.xml" onChange={loadRtz} className="hidden" /></label>
               <button onClick={clearRoute} disabled={!routeLoaded} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${routeLoaded ? "border-red-400/50 text-red-400" : "border-slate-400/20 text-slate-500"}`}>CLEAR ROUTE</button>
-              <button onClick={toggleFullscreen} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>{isFullscreen ? "EXIT FULLSCREEN" : "FULLSCREEN"}</button>
-              <button onClick={() => { window.location.href = "/storm-map"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>STORM MAP</button>
+              <button onClick={() => { window.location.href = "/position-report"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>POSITION REPORT</button>
+              <button onClick={() => { window.location.href = "https://weather.wardlab.dev"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>WEATHER</button>
               <button onClick={toggleTheme} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>{day ? "NIGHT MODE" : "DAY MODE"}</button>
             </div>
           </div>
