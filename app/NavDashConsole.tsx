@@ -159,6 +159,44 @@ function etaText(hours: number | null, destination: Waypoint | undefined) {
   return `${local.toLocaleString("en-US", { timeZone: "UTC", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false })} UTC${sign}${offset}`;
 }
 
+
+// Approximate nautical time-zone boundaries are 7.5 degrees from each 15-degree meridian.
+// This measures straight-line great-circle distance to the first boundary crossed along
+// the remaining route segments. Political/country time zones can differ.
+function distanceToNextZoneNm(ship: { lat: number; lon: number }, points: Waypoint[]): number | null {
+  if (!points.length || !Number.isFinite(ship.lat) || !Number.isFinite(ship.lon)) return null;
+  const nm = (a: {lat:number;lon:number}, b: {lat:number;lon:number}) => {
+    const rad = Math.PI / 180;
+    const p1 = a.lat * rad, p2 = b.lat * rad, dp = (b.lat - a.lat) * rad;
+    const dl = (b.lon - a.lon) * rad;
+    const h = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+    return 3440.065 * 2 * Math.asin(Math.min(1,Math.sqrt(h)));
+  };
+  let total = 0;
+  let from = { lat: ship.lat, lon: ship.lon };
+  for (const target of points) {
+    // Resolve shortest longitude leg across the date line.
+    const delta = ((target.lon - from.lon + 540) % 360) - 180;
+    const endLon = from.lon + delta;
+    if (Math.abs(delta) > 1e-8) {
+      const low = Math.min(from.lon,endLon), high = Math.max(from.lon,endLon);
+      const first = Math.ceil((low-7.5)/15);
+      const last = Math.floor((high-7.5)/15);
+      if (first <= last) {
+        const boundary = delta > 0 ? 7.5 + first*15 : 7.5 + last*15;
+        const fraction = (boundary - from.lon)/delta;
+        if (fraction >= 0 && fraction <= 1) {
+          const crossing = {lat:from.lat+(target.lat-from.lat)*fraction,lon:boundary};
+          return total + nm(from,crossing);
+        }
+      }
+    }
+    total += nm(from,target);
+    from = target;
+  }
+  return null;
+}
+
 function mapInstance() {
   const host = document.getElementById("v12-map");
   if (!host) return null;
@@ -281,6 +319,7 @@ export default function NavDashConsole() {
   const brg = navigation?.bearing ?? null;
   const legText = start && next ? `${start.id} → ${next.id}` : "--";
   const routeLoaded = route.length >= 2;
+  const nextZoneNm = useMemo(() => ownShip && routeLoaded ? distanceToNextZoneNm(ownShip, route.slice(activeIndex)) : null, [ownShip, route, activeIndex, routeLoaded]);
 
   async function loadRtz(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -337,6 +376,7 @@ export default function NavDashConsole() {
             <span id="bc2-top-route" className={`border px-2 py-1 ${control}`}>{routeLoaded ? routeName : "NO ROUTE"}</span>
             <span id="bc2-top-leg" className={`border px-2 py-1 ${control}`}>{legText === "--" ? "LEG --" : `LEG ${legText}`}</span>
             <span id="bc2-top-dtg" className={`border px-2 py-1 ${control}`}>{dtg === null ? "DTG --" : `DTG ${dtg.toFixed(0)} NM`}</span>
+            <span title="Approximate distance along route to next 15-degree nautical zone boundary" className={`border px-2 py-1 ${control}`}>{nextZoneNm === null ? "NEXT ZD --" : `NEXT ZD ~${nextZoneNm.toFixed(0)} NM`}</span>
           </div>
           <div className="bc2-clock text-right text-[9px] font-black tracking-[.16em] text-wardGold">NAVIGATION</div>
         </div>
