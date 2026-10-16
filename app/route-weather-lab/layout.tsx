@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { ReactNode } from "react";
 import SpeedSourceSelector from "./SpeedSourceSelector";
 
@@ -79,9 +78,6 @@ export default function RouteWeatherLabLayout({ children }: { children: ReactNod
       `}</style>
       {children}
       <SpeedSourceSelector />
-      <Link href="/route-weather-lab/grib" className="fixed bottom-4 right-4 z-[1600] border border-cyan-400/50 bg-[#071019]/95 px-4 py-3 text-[10px] font-black tracking-[0.08em] text-cyan-200 shadow-xl backdrop-blur hover:border-cyan-300 hover:text-white">
-        GRIB VIEWER
-      </Link>
     </>
   );
 }
