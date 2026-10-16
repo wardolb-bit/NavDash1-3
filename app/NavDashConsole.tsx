@@ -348,7 +348,7 @@ export default function NavDashConsole() {
               <label className="inline-flex h-[30px] min-w-[108px] cursor-pointer items-center justify-center border border-wardGold/60 bg-wardGold px-2 text-[10px] font-black text-black">LOAD ROUTE<input type="file" accept=".rtz,.xml" onChange={loadRtz} className="hidden" /></label>
               <button onClick={clearRoute} disabled={!routeLoaded} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${routeLoaded ? "border-red-400/50 text-red-400" : "border-slate-400/20 text-slate-500"}`}>CLEAR ROUTE</button>
               <button onClick={() => { window.location.href = "/position-report"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>POSITION REPORT</button>
-              <button onClick={() => { window.location.href = "https://weather.wardlab.dev"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>WEATHER</button>
+              <button onClick={() => { window.location.href = "/route-weather-lab"; }} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>WEATHER</button>
               <button onClick={toggleTheme} className={`h-[30px] min-w-[108px] border px-2 text-[10px] font-black ${control}`}>{day ? "NIGHT MODE" : "DAY MODE"}</button>
             </div>
           </div>
