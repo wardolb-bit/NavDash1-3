@@ -5,7 +5,6 @@ import { BridgeTrackedAisTargets } from "../../components/BridgeTrackedAisTarget
 import { MobileBridgeRedirect } from "../../components/MobileBridgeRedirect";
 import { AisMapReadyRetry } from "../../components/AisMapReadyRetry";
 import { EncObjectInfo } from "../../components/EncObjectInfo";
-import { ArrivalPlannerBridgeButton } from "../../components/ArrivalPlannerBridgeButton";
 import { MapCursorReadout } from "../../components/MapCursorReadout";
 import { MapFloatingControlsContext } from "../../components/MapFloatingControlsContext";
 import { RouteLegInspector } from "../../components/RouteLegInspector";
@@ -15,7 +14,6 @@ export default function BridgePage() {
     <>
       <MobileBridgeRedirect />
       <NavDashConsole />
-      <ArrivalPlannerBridgeButton />
       <MainMapAisTargets />
       <MainMapAisAtons />
       <BridgeTrackedAisTargets />
