@@ -354,19 +354,8 @@ export default function NavDashConsole() {
           </div>
         </header>
 
-        <div className="mt-[5px] grid grid-cols-[minmax(0,1fr)_330px] gap-[5px] max-[900px]:grid-cols-1">
-          <section id="v12-section-chart" className={`relative min-w-0 border ${panel}`}>
-            <div id="bc-chart-tools" className={`absolute left-2 top-2 z-[1100] flex gap-1 border p-1 ${day ? "border-slate-300 bg-white/95" : "border-white/20 bg-[#04080c]/90"}`}>
-              <button onClick={centerOwnShip} className={`h-7 border px-2.5 text-[9px] font-black tracking-[.08em] ${control}`}>OWN SHIP</button>
-              <button onClick={fitRoute} className={`h-7 border px-2.5 text-[9px] font-black tracking-[.08em] ${control}`}>ROUTE FIT</button>
-              <button onClick={() => setVectorOn((v) => !v)} className={`h-7 border px-2.5 text-[9px] font-black tracking-[.08em] ${vectorOn ? "border-wardGold/60 text-wardGold" : control}`}>VECTOR {vectorOn ? "ON" : "OFF"}</button>
-              <button onClick={() => setAisOn((v) => !v)} className={`h-7 border px-2.5 text-[9px] font-black tracking-[.08em] ${aisOn ? "border-cyan-400/60 text-cyan-400" : control}`}>AIS {aisOn ? "ON" : "OFF"}</button>
-            </div>
-            <div id="v12-map" className="relative h-[calc(100vh-122px)] min-h-[650px] w-full overflow-hidden bg-[#0a141d] max-[900px]:min-h-[420px]" />
-          </section>
-
-          <aside className="min-w-[330px] max-[900px]:min-w-0">
-            <section id="bc-v2-instruments" className={`flex min-h-[650px] h-full flex-col border ${panel}`}>
+        <div className="mx-auto mt-[10px] w-full max-w-[960px]">\n          <aside className="min-w-0">
+            <section id="bc-v2-instruments" className={`flex min-h-[650px] w-full flex-col border ${panel}`}>
               <div className="bc2-rail-title border-b border-white/10 p-3.5"><span className={`block text-[8px] font-black tracking-[.16em] ${day ? "text-[#52606d]" : "text-wardGold"}`}>VOYAGE</span><b id="bc2-route" className={`mt-2 block truncate text-lg font-black ${day ? "text-[#1f3a56]" : "text-wardGold"}`}>{routeName}</b><small id="bc2-dest" className="mt-1.5 block truncate text-[11px] text-slate-400">{destination?.name || "--"}</small></div>
               <div className="bc2-pos border-b border-white/10 p-3.5"><label className="block text-[8px] font-black tracking-[.16em] text-slate-500">OWN SHIP</label><strong id="bc2-lat" className="mt-1 block whitespace-nowrap text-[23px] font-black text-cyan-400">{ownShip ? `LAT ${ddm(ownShip.lat, true)}` : "--"}</strong><strong id="bc2-lon" className="block whitespace-nowrap text-[23px] font-black text-cyan-400">{ownShip ? `LON ${ddm(ownShip.lon, false)}` : "--"}</strong></div>
               <div className="bc2-big-grid grid grid-cols-2 border-b border-white/10">
