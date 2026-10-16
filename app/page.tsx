@@ -1,5 +1,1 @@
-import CrewViewPage from "./phone/page";
-
-export default function CrewRootPage() {
-  return <CrewViewPage />;
-}
+export { default } from "./bridge/page";
