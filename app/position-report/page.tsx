@@ -333,10 +333,28 @@ export default function PositionReportPage() {
     const cutoff = latest.timestamp - 24 * 60 * 60 * 1000;
     const recent = positionLog.filter(entry => entry.timestamp >= cutoff && entry.timestamp <= latest.timestamp);
     if (recent.length < 2) return null;
+    // Reject isolated position spikes (out-and-back jumps) before calculating SMG.
+    // A plausible direct track between the surrounding fixes must exist.
+    const maxPlausibleSpeedKt = 20;
+    const cleaned = recent.filter((point, i) => {
+      if (i === 0 || i === recent.length - 1) return true;
+      const prev = recent[i - 1];
+      const next = recent[i + 1];
+      const prevHours = (point.timestamp - prev.timestamp) / 3600000;
+      const nextHours = (next.timestamp - point.timestamp) / 3600000;
+      const directHours = (next.timestamp - prev.timestamp) / 3600000;
+      if (prevHours <= 0 || nextHours <= 0 || directHours <= 0) return false;
+      const inboundKt = distanceNm(prev.lat, prev.lon, point.lat, point.lon) / prevHours;
+      const outboundKt = distanceNm(point.lat, point.lon, next.lat, next.lon) / nextHours;
+      const directKt = distanceNm(prev.lat, prev.lon, next.lat, next.lon) / directHours;
+      return !(inboundKt > maxPlausibleSpeedKt && outboundKt > maxPlausibleSpeedKt && directKt <= maxPlausibleSpeedKt);
+    });
+    const elapsedHours = (cleaned[cleaned.length - 1].timestamp - cleaned[0].timestamp) / 3600000;
+    // Do not report a partial history as a full 24-hour SMG.
+    if (elapsedHours < 23) return null;
     let distance = 0;
-    for (let i = 0; i < recent.length - 1; i++) distance += distanceNm(recent[i].lat, recent[i].lon, recent[i + 1].lat, recent[i + 1].lon);
-    const elapsedHours = (recent[recent.length - 1].timestamp - recent[0].timestamp) / (60 * 60 * 1000);
-    return elapsedHours > 0 ? distance / elapsedHours : null;
+    for (let i = 0; i < cleaned.length - 1; i++) distance += distanceNm(cleaned[i].lat, cleaned[i].lon, cleaned[i + 1].lat, cleaned[i + 1].lon);
+    return distance / elapsedHours;
   }, [positionLog]);
 
   const livePositionActive = liveOwnShip !== null;
