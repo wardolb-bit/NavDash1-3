@@ -1,0 +1,26 @@
+{
+  "name": "navdash-shipboard-bridge",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Standalone NavDash shipboard bridge for AIS, routes, EGC and persistent vessel state",
+  "bin": "NavDash-Shipboard-Bridge.js",
+  "scripts": {
+    "check": "node --check NavDash-Shipboard-Bridge.js",
+    "build:exe": "pkg . --targets node22-win-x64 --output dist/NavDash-Shipboard-Bridge-v1.exe"
+  },
+  "dependencies": {
+    "@serialport/parser-readline": "13.0.0",
+    "serialport": "13.0.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "6.22.0"
+  },
+  "pkg": {
+    "assets": [
+      "cloudflared.exe",
+      "node_modules/@serialport/bindings-cpp/prebuilds/**/*"
+    ],
+    "outputPath": "dist"
+  }
+}
