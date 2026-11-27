@@ -706,9 +706,9 @@ export default function RouteWeatherLabPage() {
       if (!mapRef.current || !layer) return;
       const L = await import("leaflet");
       // Keep a user-opened forecast popup across weather-layer redraws.
-      let openPoint: import("leaflet").LatLng | undefined;
-      layer.eachLayer((item) => {
-        if (item instanceof L.CircleMarker && item.isPopupOpen()) openPoint = item.getLatLng();
+      const openPoints: import("leaflet").LatLng[] = [];
+      layer.eachLayer((item: import("leaflet").Layer) => {
+        if (item instanceof L.CircleMarker && item.isPopupOpen()) openPoints.push(item.getLatLng());
       });
       layer.clearLayers();
       if (!displayedPoints.length) return;
@@ -761,7 +761,7 @@ export default function RouteWeatherLabPage() {
         }).bindTooltip(details, { direction: "top", opacity: 0.96 }).bindPopup([
           details, `<b>Wind source:</b> ${p.source}`, p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).on("click", () => { if (mode === "encounter") setTimelineIndex(index); }).addTo(layer);
-        if (openPoint?.equals(marker.getLatLng())) marker.openPopup();
+        if (openPoints.some((point) => point.equals(marker.getLatLng()))) marker.openPopup();
         if (mode === "encounter" && activeTimelineIndex === index) {
           L.circleMarker([routePoint.lat, routePoint.lon], { radius: 13, color: "#f1d56b", weight: 2, fillOpacity: 0, opacity: 0.95, interactive: false }).addTo(layer);
         }
