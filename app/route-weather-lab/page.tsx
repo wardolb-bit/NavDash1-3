@@ -260,6 +260,7 @@ export default function RouteWeatherLabPage() {
   const mapRef = useRef<any>(null);
   const routeLayerRef = useRef<any>(null);
   const weatherLayerRef = useRef<any>(null);
+  const weatherPopupRef = useRef<{ popup: import("leaflet").Popup; distanceNm: number; mode: string; route: Waypoint[] } | null>(null);
   const autoLoadStartedRef = useRef(false);
   const [route, setRoute] = useState<Waypoint[]>([]);
   const [routeName, setRouteName] = useState("No route loaded");
@@ -705,11 +706,15 @@ export default function RouteWeatherLabPage() {
       const layer = weatherLayerRef.current;
       if (!mapRef.current || !layer) return;
       const L = await import("leaflet");
-      // Keep a user-opened forecast popup across weather-layer redraws.
-      const openPoints: import("leaflet").LatLng[] = [];
-      layer.eachLayer((item: import("leaflet").Layer) => {
-        if (item instanceof L.CircleMarker && item.isPopupOpen()) openPoints.push(item.getLatLng());
-      });
+      // The popup belongs to the map, not the disposable forecast layer.
+      const map = mapRef.current;
+      const previous = weatherPopupRef.current;
+      const activePopup = previous && map.hasLayer(previous.popup) ? previous : null;
+      if (activePopup && (activePopup.route !== route || activePopup.mode !== mode || !displayedPoints.length)) {
+        activePopup.popup.remove();
+        weatherPopupRef.current = null;
+      }
+      let popupMatched = false;
       layer.clearLayers();
       if (!displayedPoints.length) return;
       const displayReferenceLon = mapRef.current.getCenter().lng;
@@ -752,20 +757,41 @@ export default function RouteWeatherLabPage() {
           p.gustKt !== null && showWind ? `<b>Gust:</b> ${p.gustKt.toFixed(0)} kt` : "",
           `<b>Along route:</b> ${p.distanceNm.toFixed(0)} NM`,
         ].filter(Boolean).join("<br/>");
+        const popupContent = [
+          details, `<b>Wind source:</b> ${p.source}`, p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
+        ].filter(Boolean).join("<br/>");
         const marker = L.circleMarker([routePoint.lat, routePoint.lon], {
+          bubblingMouseEvents: false,
           radius: (mode === "encounter" && activeTimelineIndex === index) ? 8 : 4,
           color: (mode === "encounter" && activeTimelineIndex === index) ? "#f8fafc" : pointColor,
           weight: (mode === "encounter" && activeTimelineIndex === index) ? 3 : 1,
           fillColor: pointColor,
           fillOpacity: (mode === "encounter" && activeTimelineIndex === index) ? 0.95 : 0.7,
-        }).bindTooltip(details, { direction: "top", opacity: 0.96 }).bindPopup([
-          details, `<b>Wind source:</b> ${p.source}`, p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
-        ].filter(Boolean).join("<br/>")).on("click", () => { if (mode === "encounter") setTimelineIndex(index); }).addTo(layer);
-        if (openPoints.some((point) => point.equals(marker.getLatLng()))) marker.openPopup();
+        }).bindTooltip(details, { direction: "top", opacity: 0.96 }).on("click", () => {
+          const current = weatherPopupRef.current;
+          if (current && map.hasLayer(current.popup) && current.distanceNm === p.distanceNm && current.mode === mode && current.route === route) {
+            current.popup.remove();
+            weatherPopupRef.current = null;
+          } else {
+            const popup = L.popup().setLatLng(marker.getLatLng()).setContent(popupContent).openOn(map);
+            weatherPopupRef.current = { popup, distanceNm: p.distanceNm, mode, route };
+          }
+          if (mode === "encounter") setTimelineIndex(index);
+        }).addTo(layer);
+        if (activePopup && activePopup.route === route && activePopup.mode === mode && activePopup.distanceNm === p.distanceNm && map.hasLayer(activePopup.popup)) {
+          popupMatched = true;
+          if (activePopup.popup.getContent() !== popupContent) activePopup.popup.setContent(popupContent);
+          if (!activePopup.popup.getLatLng()?.equals(marker.getLatLng())) activePopup.popup.setLatLng(marker.getLatLng());
+        }
         if (mode === "encounter" && activeTimelineIndex === index) {
           L.circleMarker([routePoint.lat, routePoint.lon], { radius: 13, color: "#f1d56b", weight: 2, fillOpacity: 0, opacity: 0.95, interactive: false }).addTo(layer);
         }
       });
+
+      if (activePopup && !popupMatched && map.hasLayer(activePopup.popup)) {
+        activePopup.popup.remove();
+        weatherPopupRef.current = null;
+      }
 
       if (liveRouteAnchor && ownShip) {
         L.circleMarker([ownShip.lat, longitudeNearReference(ownShip.lon, displayReferenceLon)], {
