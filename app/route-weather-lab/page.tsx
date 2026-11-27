@@ -705,6 +705,11 @@ export default function RouteWeatherLabPage() {
       const layer = weatherLayerRef.current;
       if (!mapRef.current || !layer) return;
       const L = await import("leaflet");
+      // Keep a user-opened forecast popup across weather-layer redraws.
+      let openPoint: import("leaflet").LatLng | undefined;
+      layer.eachLayer((item) => {
+        if (item instanceof L.CircleMarker && item.isPopupOpen()) openPoint = item.getLatLng();
+      });
       layer.clearLayers();
       if (!displayedPoints.length) return;
       const displayReferenceLon = mapRef.current.getCenter().lng;
@@ -747,7 +752,7 @@ export default function RouteWeatherLabPage() {
           p.gustKt !== null && showWind ? `<b>Gust:</b> ${p.gustKt.toFixed(0)} kt` : "",
           `<b>Along route:</b> ${p.distanceNm.toFixed(0)} NM`,
         ].filter(Boolean).join("<br/>");
-        L.circleMarker([routePoint.lat, routePoint.lon], {
+        const marker = L.circleMarker([routePoint.lat, routePoint.lon], {
           radius: (mode === "encounter" && activeTimelineIndex === index) ? 8 : 4,
           color: (mode === "encounter" && activeTimelineIndex === index) ? "#f8fafc" : pointColor,
           weight: (mode === "encounter" && activeTimelineIndex === index) ? 3 : 1,
@@ -756,6 +761,7 @@ export default function RouteWeatherLabPage() {
         }).bindTooltip(details, { direction: "top", opacity: 0.96 }).bindPopup([
           details, `<b>Wind source:</b> ${p.source}`, p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>")).on("click", () => { if (mode === "encounter") setTimelineIndex(index); }).addTo(layer);
+        if (openPoint?.equals(marker.getLatLng())) marker.openPopup();
         if (mode === "encounter" && activeTimelineIndex === index) {
           L.circleMarker([routePoint.lat, routePoint.lon], { radius: 13, color: "#f1d56b", weight: 2, fillOpacity: 0, opacity: 0.95, interactive: false }).addTo(layer);
         }
