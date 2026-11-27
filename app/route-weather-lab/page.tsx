@@ -719,36 +719,12 @@ export default function RouteWeatherLabPage() {
       if (!displayedPoints.length) return;
       const displayReferenceLon = mapRef.current.getCenter().lng;
 
-      if (showSeas) {
-        for (let i = 0; i < displayedPoints.length - 1; i += 1) {
-          const a = displayedPoints[i];
-          const b = displayedPoints[i + 1];
-          const routeSlice = routeSliceBetweenDistances(route, a.distanceNm, b.distanceNm, displayReferenceLon);
-          if (routeSlice.length < 2) continue;
-          const enc = mode === "encounter" ? (a as EncounterPoint) : null;
-          const wave = a.waveHeightFt;
-          const color = enc?.beyondHorizon ? "#64748b" : seaColor(wave);
-          const details = [
-            `<b>${mode === "encounter" ? "Route encounter" : "Weather time"}</b>`,
-            enc ? `<b>Confidence:</b> ${enc.confidenceLabel}` : "",
-            `<b>Seas:</b> ${wave === null ? "--" : `${wave.toFixed(1)} ft`}`,
-            a.wavePeriodSec !== null ? `<b>Period:</b> ${a.wavePeriodSec.toFixed(0)} s` : "",
-            a.waveDirectionDeg !== null && a.waveDirectionDeg !== undefined ? `<b>Wave dir:</b> ${compass(a.waveDirectionDeg)} ${a.waveDirectionDeg.toFixed(0)}°` : "",
-            a.windKt !== null ? `<b>Wind:</b> ${compass(a.windDirectionDeg)} ${a.windKt.toFixed(0)} kt` : "",
-            `<b>Along route:</b> ${a.distanceNm.toFixed(0)} NM`,
-          ].filter(Boolean).join("<br/>");
-          L.polyline(routeSlice, { color, weight: 9, opacity: enc?.beyondHorizon ? 0.4 : 0.7, lineCap: "round", lineJoin: "round" }).bindTooltip(details, { sticky: true, opacity: 0.97 }).addTo(layer);
-          L.polyline(routeSlice, { color: "#e2e8f0", weight: 1, opacity: 0.35, interactive: false }).addTo(layer);
-        }
-      }
-
-      displayedPoints.forEach((p, index) => {
+      function forecastContent(p: ForecastPoint) {
         const enc = mode === "encounter" ? (p as EncounterPoint) : null;
         const wave = p.waveHeightFt;
         const wind = p.windKt;
-        const routePoint = pointAtDistance(route, p.distanceNm, displayReferenceLon) || { ...p, lon: longitudeNearReference(p.lon, displayReferenceLon) };
-        const pointColor = enc?.beyondHorizon ? "#64748b" : seaColor(wave);
         const details = [
+          `<b>${mode === "encounter" ? "Route encounter" : "Weather time"}</b>`,
           enc ? `<b>Confidence:</b> ${enc.confidenceLabel}` : "",
           showSeas ? `<b>Seas:</b> ${wave === null ? "--" : `${wave.toFixed(1)} ft`}` : "",
           p.wavePeriodSec !== null && showSeas ? `<b>Period:</b> ${p.wavePeriodSec.toFixed(0)} s` : "",
@@ -757,9 +733,51 @@ export default function RouteWeatherLabPage() {
           p.gustKt !== null && showWind ? `<b>Gust:</b> ${p.gustKt.toFixed(0)} kt` : "",
           `<b>Along route:</b> ${p.distanceNm.toFixed(0)} NM`,
         ].filter(Boolean).join("<br/>");
-        const popupContent = [
+        return [
           details, `<b>Wind source:</b> ${p.source}`, p.waveSource ? `<b>Wave source:</b> ${p.waveSource}` : "",
         ].filter(Boolean).join("<br/>");
+      }
+
+      function openForecast(index: number) {
+        const p = displayedPoints[index];
+        if (!p) return;
+        const pos = pointAtDistance(route, p.distanceNm, displayReferenceLon) || { ...p, lon: longitudeNearReference(p.lon, displayReferenceLon) };
+        const latLng = L.latLng(pos.lat, pos.lon);
+        const content = forecastContent(p);
+        const current = weatherPopupRef.current;
+        if (current && map.hasLayer(current.popup)) {
+          current.popup.setLatLng(latLng);
+          if (current.popup.getContent() !== content) current.popup.setContent(content);
+          weatherPopupRef.current = { popup: current.popup, distanceNm: p.distanceNm, mode, route };
+        } else {
+          const popup = L.popup({ className: "navdash-route-forecast-popup", maxWidth: 280, minWidth: 150, closeButton: true }).setLatLng(latLng).setContent(content).openOn(map);
+          weatherPopupRef.current = { popup, distanceNm: p.distanceNm, mode, route };
+        }
+        if (mode === "encounter") setTimelineIndex(index);
+      }
+
+      if (showSeas) {
+        for (let i = 0; i < displayedPoints.length - 1; i += 1) {
+          const a = displayedPoints[i];
+          const b = displayedPoints[i + 1];
+          const routeSlice = routeSliceBetweenDistances(route, a.distanceNm, b.distanceNm, displayReferenceLon);
+          if (routeSlice.length < 2) continue;
+          const enc = mode === "encounter" ? (a as EncounterPoint) : null;
+          const color = enc?.beyondHorizon ? "#64748b" : seaColor(a.waveHeightFt);
+          L.polyline(routeSlice, { color, weight: 9, opacity: enc?.beyondHorizon ? 0.4 : 0.7, lineCap: "round", lineJoin: "round", bubblingMouseEvents: false }).on("click", (event: import("leaflet").LeafletMouseEvent) => {
+            const first = routeSlice[0];
+            const last = routeSlice[routeSlice.length - 1];
+            openForecast(map.distance(event.latlng, first) <= map.distance(event.latlng, last) ? i : i + 1);
+          }).addTo(layer);
+          L.polyline(routeSlice, { color: "#e2e8f0", weight: 1, opacity: 0.35, interactive: false }).addTo(layer);
+        }
+      }
+
+      displayedPoints.forEach((p, index) => {
+        const enc = mode === "encounter" ? (p as EncounterPoint) : null;
+        const routePoint = pointAtDistance(route, p.distanceNm, displayReferenceLon) || { ...p, lon: longitudeNearReference(p.lon, displayReferenceLon) };
+        const pointColor = enc?.beyondHorizon ? "#64748b" : seaColor(p.waveHeightFt);
+        const popupContent = forecastContent(p);
         const marker = L.circleMarker([routePoint.lat, routePoint.lon], {
           bubblingMouseEvents: false,
           radius: (mode === "encounter" && activeTimelineIndex === index) ? 8 : 4,
@@ -767,17 +785,7 @@ export default function RouteWeatherLabPage() {
           weight: (mode === "encounter" && activeTimelineIndex === index) ? 3 : 1,
           fillColor: pointColor,
           fillOpacity: (mode === "encounter" && activeTimelineIndex === index) ? 0.95 : 0.7,
-        }).bindTooltip(details, { direction: "top", opacity: 0.96 }).on("click", () => {
-          const current = weatherPopupRef.current;
-          if (current && map.hasLayer(current.popup) && current.distanceNm === p.distanceNm && current.mode === mode && current.route === route) {
-            current.popup.remove();
-            weatherPopupRef.current = null;
-          } else {
-            const popup = L.popup().setLatLng(marker.getLatLng()).setContent(popupContent).openOn(map);
-            weatherPopupRef.current = { popup, distanceNm: p.distanceNm, mode, route };
-          }
-          if (mode === "encounter") setTimelineIndex(index);
-        }).addTo(layer);
+        }).on("click", () => openForecast(index)).addTo(layer);
         if (activePopup && activePopup.route === route && activePopup.mode === mode && activePopup.distanceNm === p.distanceNm && map.hasLayer(activePopup.popup)) {
           popupMatched = true;
           if (activePopup.popup.getContent() !== popupContent) activePopup.popup.setContent(popupContent);
@@ -880,12 +888,36 @@ export default function RouteWeatherLabPage() {
 
   return (
     <main className="min-h-screen bg-[#04080c] p-2 text-slate-100">
+      <style>{`
+        .navdash-route-forecast-popup .leaflet-popup-content-wrapper,
+        .navdash-route-forecast-popup .leaflet-popup-tip {
+          background: #071019 !important;
+          color: #e2e8f0 !important;
+          border: 1px solid #475569;
+          border-radius: 3px;
+        }
+        .navdash-route-forecast-popup .leaflet-popup-content {
+          margin: 10px 24px 10px 12px;
+          font-size: 12px;
+          line-height: 1.5;
+        }
+        .navdash-route-forecast-popup .leaflet-popup-content b { color: #a5f3fc; }
+        .navdash-route-forecast-popup a.leaflet-popup-close-button { color: #e2e8f0 !important; }
+        html[data-navdash-theme="day"] .navdash-route-forecast-popup .leaflet-popup-content-wrapper,
+        html[data-navdash-theme="day"] .navdash-route-forecast-popup .leaflet-popup-tip {
+          background: #fff !important;
+          color: #17252f !important;
+          border-color: #94a3b8;
+        }
+        html[data-navdash-theme="day"] .navdash-route-forecast-popup .leaflet-popup-content b { color: #115e67; }
+        html[data-navdash-theme="day"] .navdash-route-forecast-popup a.leaflet-popup-close-button { color: #334155 !important; }
+      `}</style>
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border border-amber-500/25 bg-[#071019] px-3 py-2"><div><div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#c9a227]">NAVDASH ROUTE WEATHER</div><div className="text-sm font-black">Route encounter and Weather Time</div></div><Link href="/bridge" className="border border-[#c9a227]/50 bg-[#101820] px-3 py-2 text-[10px] font-black text-[#f1d56b]">MAIN</Link></div>
       <div className="mb-2 grid gap-2 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section className="border border-slate-700/50 bg-[#071019] p-2">
           <div className="mb-2 flex flex-wrap items-center gap-2"><label className="cursor-pointer border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200">LOAD RTZ<input type="file" accept=".rtz,.xml,text/xml" className="hidden" onChange={(e) => e.target.files?.[0] && loadRouteFile(e.target.files[0])} /></label><button type="button" onClick={() => loadCurrentRoute(false)} disabled={loadingCurrentRoute} className="border border-cyan-400/40 bg-[#08131b] px-3 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{loadingCurrentRoute ? "LOADING CURRENT ROUTE…" : "LOAD CURRENT ROUTE"}</button><button type="button" disabled={route.length < 2} onClick={analyze} className="border border-emerald-400/40 bg-[#08130f] px-3 py-2 text-[10px] font-black text-emerald-200 disabled:opacity-40">ANALYZE ROUTE</button><button type="button" onClick={() => setMode("encounter")} className={`border px-3 py-2 text-[10px] font-black ${mode === "encounter" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>ROUTE ENCOUNTER</button><button type="button" disabled={!weather} onClick={() => setMode("time")} className={`border px-3 py-2 text-[10px] font-black disabled:opacity-40 ${mode === "time" ? "border-[#c9a227] bg-[#17130a] text-[#f1d56b]" : "border-slate-700 text-slate-400"}`}>WEATHER TIME</button></div>
           {weather && <div className="mb-2 grid grid-cols-2 gap-2 lg:grid-cols-5"><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MODE</div><div className="mt-1 text-xs font-black text-cyan-200">{mode === "encounter" ? "ROUTE ENCOUNTER" : "WEATHER TIME"}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX SEAS · 24H</div><div className="mt-1 text-lg font-black text-[#f1d56b]">{maxSeas?.waveHeightFt == null ? "--" : `${maxSeas.waveHeightFt.toFixed(1)} ft`}</div><div className="mt-1 text-[8px] font-bold text-slate-500">48h {maxSeas48?.waveHeightFt == null ? "--" : `${maxSeas48.waveHeightFt.toFixed(1)} ft`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">MAX WIND · 24H</div><div className="mt-1 text-lg font-black text-cyan-300">{maxWind?.windKt == null ? "--" : `${compass(maxWind.windDirectionDeg)} ${maxWind.windKt.toFixed(0)} kt`}</div><div className="mt-1 text-[8px] font-bold text-slate-500">48h {maxWind48?.windKt == null ? "--" : `${maxWind48.windKt.toFixed(0)} kt`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">{mode === "time" ? "FORECAST VALID" : "ROUTE LENGTH"}</div><div className="mt-1 text-xs font-black text-slate-200">{mode === "time" && selectedFrame ? formatWhen(new Date(selectedFrame.validAt)) : `${totalNm.toFixed(0)} NM`}</div></div><div className="border border-slate-800 bg-[#050a0f] px-3 py-2"><div className="text-[8px] font-black tracking-widest text-slate-500">ROUTE WX COVERAGE</div><div className="mt-1 text-xs font-black text-emerald-200">{formatHours(routeWxCoverage.coveredHours)} of {formatHours(routeWxCoverage.voyageHours)}</div><div className="mt-1 text-[9px] font-bold text-slate-500">{routeWxCoverage.percent.toFixed(0)}% of {liveRouteAnchor ? "remaining voyage" : "voyage"}</div></div></div>}
-          <div className="relative overflow-hidden border border-slate-800"><div id="route-weather-lab-map" ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />{weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • arrows = wind flow • hover for details</div>}</div>
+          <div className="relative overflow-hidden border border-slate-800"><div id="route-weather-lab-map" ref={mapEl} style={{ width: "100%", height: "58vh", minHeight: 480, background: "#0a141d" }} />{weather && <div className="pointer-events-none absolute bottom-2 left-2 border border-slate-700/70 bg-[#050a0f]/90 px-2 py-1 text-[9px] font-bold text-slate-300">Sea-state ribbon follows loaded route • arrows = wind flow • tap for details</div>}</div>
 
           {weather && encounter.length > 0 && <section className="mt-2 border border-slate-800 bg-[#050a0f] p-3">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
